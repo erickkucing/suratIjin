@@ -9,6 +9,7 @@ import { revalidatePath } from "next/cache";
 
 const updateParentAccessSchema = z.object({
   classId: z.coerce.number().positive(),
+  requirePassword: z.boolean().optional(),
   newPassword: z.string().optional().or(z.literal("")),
   parentShowLetterFile: z.boolean(),
   periodTitle: z.string().min(1, "Judul periode harus diisi."),
@@ -29,7 +30,7 @@ export async function updateParentAccessAction(inputData: unknown) {
     };
   }
 
-  const { classId, newPassword, parentShowLetterFile, periodTitle, academicYear } = parse.data;
+  const { classId, requirePassword, newPassword, parentShowLetterFile, periodTitle, academicYear } = parse.data;
 
   const cls = await db.query.classes.findFirst({
     where: eq(classes.id, classId),
@@ -47,15 +48,22 @@ export async function updateParentAccessAction(inputData: unknown) {
     parentShowLetterFile: boolean;
     periodTitle: string;
     academicYear: string;
-    parentPasswordHash?: string;
+    parentPasswordHash?: string | null;
   } = {
     parentShowLetterFile,
     periodTitle,
     academicYear,
   };
 
-  if (newPassword && newPassword.trim().length > 0) {
+  if (requirePassword === false) {
+    updateFields.parentPasswordHash = null;
+  } else if (newPassword && newPassword.trim().length > 0) {
     updateFields.parentPasswordHash = await hashPassword(newPassword.trim());
+  } else if (requirePassword === true && !cls.parentPasswordHash) {
+    return {
+      success: false,
+      error: "Silakan masukkan kata sandi baru untuk proteksi akses wali murid.",
+    };
   }
 
   await db.update(classes).set(updateFields).where(eq(classes.id, classId));

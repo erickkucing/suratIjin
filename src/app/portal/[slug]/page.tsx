@@ -32,7 +32,8 @@ export default async function PortalPage({ params }: PortalPageProps) {
     }
   }
 
-  const isUnlocked = await checkParentAccess(slug);
+  const hasPassword = Boolean(classItem.parentPasswordHash);
+  const isUnlocked = !hasPassword || (await checkParentAccess(slug));
 
   let dashboardData = null;
   if (isUnlocked) {

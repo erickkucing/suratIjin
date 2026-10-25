@@ -122,10 +122,7 @@ export async function parentUnlockAction(classSlug: string, passwordPlain: strin
   }
 
   if (!cls.parentPasswordHash) {
-    return {
-      success: false,
-      error: "Wali Kelas belum mengatur password akses untuk portal ini.",
-    };
+    return { success: true };
   }
 
   const isValid = await verifyPassword(passwordPlain, cls.parentPasswordHash);

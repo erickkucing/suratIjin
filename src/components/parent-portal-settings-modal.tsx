@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, Lock, Share2, Eye, EyeOff, QrCode, Copy, Check, MessageSquare, Loader2 } from "lucide-react";
+import { X, Lock, Unlock, Share2, Eye, EyeOff, Copy, Check, MessageSquare, Loader2 } from "lucide-react";
 import QRCode from "qrcode";
 import { ClassItem } from "@/db/schema";
 import { updateParentAccessAction } from "@/actions/class-settings";
@@ -14,6 +14,33 @@ interface ParentPortalSettingsModalProps {
   onSuccess: () => void;
 }
 
+// Universal clipboard function supporting non-secure origins (HTTP/LAN IP)
+async function copyToClipboard(text: string): Promise<boolean> {
+  if (typeof navigator !== "undefined" && navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {}
+  }
+
+  if (typeof document !== "undefined") {
+    try {
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      textArea.setAttribute("readonly", "");
+      textArea.style.position = "fixed";
+      textArea.style.left = "-9999px";
+      textArea.style.top = "-9999px";
+      document.body.appendChild(textArea);
+      textArea.select();
+      const success = document.execCommand("copy");
+      document.body.removeChild(textArea);
+      if (success) return true;
+    } catch {}
+  }
+  return false;
+}
+
 export function ParentPortalSettingsModal({
   isOpen,
   onClose,
@@ -21,6 +48,7 @@ export function ParentPortalSettingsModal({
   teacherName = "Wali Kelas",
   onSuccess,
 }: ParentPortalSettingsModalProps) {
+  const [requirePassword, setRequirePassword] = useState(Boolean(classInfo.parentPasswordHash));
   const [newPassword, setNewPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [allowViewPhoto, setAllowViewPhoto] = useState(classInfo.parentShowLetterFile);
@@ -39,6 +67,7 @@ export function ParentPortalSettingsModal({
 
   useEffect(() => {
     if (isOpen) {
+      setRequirePassword(Boolean(classInfo.parentPasswordHash));
       setAllowViewPhoto(classInfo.parentShowLetterFile);
       setPeriodTitle(classInfo.periodTitle);
       setAcademicYear(classInfo.academicYear);
@@ -75,23 +104,35 @@ export function ParentPortalSettingsModal({
   if (!isOpen) return null;
 
   const handleCopyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(portalUrl);
+    const ok = await copyToClipboard(portalUrl);
+    if (ok) {
       setCopiedLink(true);
       setTimeout(() => setCopiedLink(false), 2000);
-    } catch {
-      // Fallback
+    } else {
+      const input = document.getElementById("portal-url-field") as HTMLInputElement;
+      if (input) {
+        input.focus();
+        input.select();
+        try {
+          document.execCommand("copy");
+          setCopiedLink(true);
+          setTimeout(() => setCopiedLink(false), 2000);
+        } catch {}
+      }
     }
   };
 
   const handleCopyWhatsApp = async () => {
-    const waText = `Yth. Bapak/Ibu Wali Murid Kelas ${classInfo.name},\n\nBerikut adalah tautan Portal Papan Informasi Surat Izin & Ketidakhadiran Siswa:\n🔗 ${portalUrl}\n\nSilakan masukkan kata sandi akses yang telah dibagikan untuk melihat rekap kehadiran.\n\nTerima kasih,\n${teacherName}`;
-    try {
-      await navigator.clipboard.writeText(waText);
+    const accessNotice = requirePassword
+      ? "Silakan masukkan kata sandi akses yang telah dibagikan untuk melihat rekap kehadiran."
+      : "Tautan ini dapat langsung dibuka oleh wali murid tanpa perlu memasukkan kata sandi.";
+
+    const waText = `Yth. Bapak/Ibu Wali Murid Kelas ${classInfo.name},\n\nBerikut adalah tautan Portal Papan Informasi Surat Izin & Ketidakhadiran Siswa:\n🔗 ${portalUrl}\n\n${accessNotice}\n\nTerima kasih,\n${teacherName}`;
+
+    const ok = await copyToClipboard(waText);
+    if (ok) {
       setCopiedWa(true);
       setTimeout(() => setCopiedWa(false), 2000);
-    } catch {
-      // Fallback
     }
   };
 
@@ -103,6 +144,7 @@ export function ParentPortalSettingsModal({
     try {
       const res = await updateParentAccessAction({
         classId: classInfo.id,
+        requirePassword,
         newPassword: newPassword.trim(),
         parentShowLetterFile: allowViewPhoto,
         periodTitle: periodTitle.trim(),
@@ -142,7 +184,7 @@ export function ParentPortalSettingsModal({
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] bg-[var(--canvas-subtle)]">
           <div className="flex items-center gap-2">
-            <div className="p-2 rounded-lg bg-[var(--board)] text-white">
+            <div className="p-2 rounded-lg bg-[var(--board)] text-white shadow-xs">
               <Share2 className="w-5 h-5" />
             </div>
             <div>
@@ -180,34 +222,48 @@ export function ParentPortalSettingsModal({
 
           {/* Share Links & WhatsApp */}
           <div className="p-4 rounded-xl border border-[var(--border)] bg-[var(--canvas-subtle)] space-y-3">
-            <span className="block text-xs font-bold uppercase tracking-wider text-[var(--ink-muted)]">
-              Tautan Portal Siap Dibagikan
-            </span>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-[var(--ink-muted)]">
+                Tautan Portal Siap Dibagikan
+              </span>
+              <span
+                className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
+                  requirePassword
+                    ? "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
+                    : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                }`}
+              >
+                {requirePassword ? "Proteksi Password" : "Akses Bebas Password"}
+              </span>
+            </div>
 
             <div className="flex items-center gap-2">
               <input
+                id="portal-url-field"
                 type="text"
                 readOnly
                 value={portalUrl}
-                className="flex-1 px-3 py-2 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] font-mono select-all"
+                onClick={(e) => (e.target as HTMLInputElement).select()}
+                className="flex-1 px-3 py-2 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] font-mono select-all focus:outline-none"
               />
               <button
                 type="button"
                 onClick={handleCopyLink}
-                className="touch-target flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[var(--surface)] border border-[var(--border)] hover:bg-[var(--canvas)] text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--board)]"
+                className="touch-target flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[var(--surface)] border border-[var(--border)] hover:bg-[var(--canvas)] text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--board)] shadow-xs"
+                title="Salin tautan ke clipboard"
               >
                 {copiedLink ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-                <span>{copiedLink ? "Tersalin" : "Salin"}</span>
+                <span>{copiedLink ? "Tersalin!" : "Salin Link"}</span>
               </button>
             </div>
 
             <div className="flex flex-col sm:flex-row items-center gap-4 pt-2">
               {qrCodeDataUrl && (
-                <div className="p-2 bg-white rounded-lg border border-[var(--border)] shadow-xs">
+                <div className="p-2 bg-white rounded-lg border border-[var(--border)] shadow-xs shrink-0">
                   <img src={qrCodeDataUrl} alt="QR Code Portal Wali Murid" className="w-28 h-28" />
                 </div>
               )}
-              <div className="flex-1 space-y-2">
+              <div className="flex-1 space-y-2 w-full">
                 <button
                   type="button"
                   onClick={handleCopyWhatsApp}
@@ -217,7 +273,9 @@ export function ParentPortalSettingsModal({
                   <span>{copiedWa ? "Format WA Tersalin!" : "Salin Pesan WhatsApp"}</span>
                 </button>
                 <p className="text-[11px] text-[var(--ink-muted)]">
-                  Klik tombol di atas untuk menyalin draf pesan siap kirim ke grup WhatsApp wali murid.
+                  {requirePassword
+                    ? "Menyalin pesan lengkap dengan instruksi memasukkan kata sandi."
+                    : "Menyalin pesan siap kirim (wali murid langsung klik tanpa perlu password)."}
                 </p>
               </div>
             </div>
@@ -229,33 +287,75 @@ export function ParentPortalSettingsModal({
               Keamanan &amp; Hak Akses Wali Murid
             </span>
 
-            {/* Password input */}
-            <div>
-              <label htmlFor="parent-pass" className="block text-xs font-semibold text-[var(--ink)] mb-1">
-                Atur Kata Sandi Akses Baru
-              </label>
-              <div className="relative">
-                <input
-                  id="parent-pass"
-                  type={showPassword ? "text" : "password"}
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Kosongkan jika tidak ingin mengubah password"
-                  className="w-full pl-3.5 pr-10 py-2.5 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--board)]"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="touch-target absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-[var(--ink-muted)] hover:text-[var(--ink)]"
-                  title={showPassword ? "Sembunyikan password" : "Lihat password"}
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
+            {/* Toggle: Require Password or Open Access */}
+            <div className="flex items-start justify-between p-3.5 rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+              <div className="pr-4">
+                <div className="flex items-center gap-2">
+                  {requirePassword ? (
+                    <Lock className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                  ) : (
+                    <Unlock className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  )}
+                  <span className="text-sm font-semibold text-[var(--ink)] block">
+                    Proteksi Kata Sandi Wali Murid
+                  </span>
+                </div>
+                <p className="text-xs text-[var(--ink-muted)] mt-1">
+                  {requirePassword
+                    ? "Aktif: Wali murid wajib memasukkan password kelas sebelum melihat rekap ketidakhadiran."
+                    : "Nonaktif: Siapa saja yang memiliki link dapat langsung melihat rekap tanpa perlu kata sandi."}
+                </p>
               </div>
-              <p className="mt-1 text-[11px] text-[var(--ink-subtle)]">
-                Password digunakan oleh wali murid untuk membuka halaman portal kelas.
-              </p>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={requirePassword}
+                onClick={() => setRequirePassword(!requirePassword)}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--board)] ${
+                  requirePassword ? "bg-[var(--board)]" : "bg-gray-300 dark:bg-gray-700"
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                    requirePassword ? "translate-x-5" : "translate-x-0"
+                  }`}
+                />
+              </button>
             </div>
+
+            {/* Password input when enabled */}
+            {requirePassword && (
+              <div className="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--canvas-subtle)] space-y-2">
+                <label htmlFor="parent-pass" className="block text-xs font-semibold text-[var(--ink)]">
+                  {classInfo.parentPasswordHash ? "Ganti Kata Sandi Akses (Opsional)" : "Tentukan Kata Sandi Baru (Wajib)"}
+                </label>
+                <div className="relative">
+                  <input
+                    id="parent-pass"
+                    type={showPassword ? "text" : "password"}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder={
+                      classInfo.parentPasswordHash
+                        ? "Kosongkan jika tetap memakai password sebelumnya"
+                        : "Ketik kata sandi akses baru..."
+                    }
+                    className="w-full pl-3.5 pr-10 py-2.5 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--board)]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="touch-target absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-[var(--ink-muted)] hover:text-[var(--ink)]"
+                    title={showPassword ? "Sembunyikan password" : "Lihat password"}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                <p className="text-[11px] text-[var(--ink-subtle)]">
+                  Bagikan kata sandi ini kepada wali murid saat membagikan tautan portal.
+                </p>
+              </div>
+            )}
 
             {/* Privacy Toggle: Show Letter Photo */}
             <div className="flex items-start justify-between p-3.5 rounded-xl border border-[var(--border)] bg-[var(--surface)]">

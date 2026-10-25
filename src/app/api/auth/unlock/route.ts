@@ -40,10 +40,7 @@ export async function POST(request: Request) {
     }
 
     if (!cls.parentPasswordHash) {
-      return NextResponse.json(
-        { success: false, error: "Wali Kelas belum mengatur password akses untuk portal ini." },
-        { status: 403 }
-      );
+      return NextResponse.json({ success: true, message: "Akses terbuka tanpa password." });
     }
 
     const isValid = await verifyPassword(password, cls.parentPasswordHash);
