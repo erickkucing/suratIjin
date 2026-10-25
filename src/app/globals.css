@@ -1,0 +1,100 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --canvas: #FDF8EE;
+    --canvas-subtle: #F6F0E2;
+    --surface: #FFFFFF;
+    --surface-elevated: #FFFFFF;
+    --border: #E5DDCB;
+    --border-strong: #C4BAA3;
+    --ink: #1E2A26;
+    --ink-muted: #4A5651;
+    --ink-subtle: #73807A;
+    --board: #1F6F54;
+    --board-hover: #175742;
+    --board-light: #EBF5F1;
+    --terracotta: #B83B14;
+    --terracotta-hover: #9E3210;
+
+    --status-izin-fg: #164E87;
+    --status-izin-bg: #E7F2FD;
+    --status-izin-border: #BAE3FF;
+
+    --status-sakit-fg: #145A3A;
+    --status-sakit-bg: #E6F6EE;
+    --status-sakit-border: #B7E8D0;
+
+    --status-alpa-fg: #982613;
+    --status-alpa-bg: #FCEBE7;
+    --status-alpa-border: #F7C5BC;
+  }
+
+  .dark {
+    --canvas: #111916;
+    --canvas-subtle: #15201C;
+    --surface: #192420;
+    --surface-elevated: #202E29;
+    --border: #2C3E37;
+    --border-strong: #3F574E;
+    --ink: #F3EFE6;
+    --ink-muted: #A6B5AE;
+    --ink-subtle: #778881;
+    --board: #2B8A6B;
+    --board-hover: #349E7C;
+    --board-light: #1A342B;
+    --terracotta: #E8633F;
+    --terracotta-hover: #F27B5B;
+
+    --status-izin-fg: #90CDF4;
+    --status-izin-bg: #152A40;
+    --status-izin-border: #234E78;
+
+    --status-sakit-fg: #9AE6B4;
+    --status-sakit-bg: #143324;
+    --status-sakit-border: #225C40;
+
+    --status-alpa-fg: #FEB2B2;
+    --status-alpa-bg: #401818;
+    --status-alpa-border: #7A2727;
+  }
+
+  body {
+    background-color: var(--canvas);
+    color: var(--ink);
+    font-family: var(--font-jakarta), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4, h5, h6, .font-heading {
+    font-family: var(--font-sora), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    letter-spacing: -0.015em;
+  }
+
+  /* Clear accessibility focus ring meeting WCAG 2.2 AA non-text contrast (>= 3:1) */
+  :focus-visible {
+    outline: 2px solid var(--board);
+    outline-offset: 2px;
+  }
+}
+
+/* Touch targets and mobile safety */
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Paper card styling */
+.card-paper {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.card-paper-elevated {
+  background-color: var(--surface-elevated);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.07);
+}

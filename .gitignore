@@ -1,0 +1,21 @@
+# Next.js
+.next/
+out/
+
+# Dependencies
+node_modules/
+
+# Environment files
+.env*.local
+
+# Storage uploads (preserve directory structure)
+storage/uploads/*
+!storage/uploads/legacy/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
