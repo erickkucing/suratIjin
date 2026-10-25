@@ -5,12 +5,14 @@ import { db } from "@/db";
 import { users, classes } from "@/db/schema";
 import { eq, and, ne } from "drizzle-orm";
 import { getCurrentUser, hashPassword } from "@/lib/auth";
+import { getAutoAcademicPeriod } from "@/lib/academic-year";
 import { revalidatePath } from "next/cache";
 
 const createTeacherSchema = z.object({
   username: z.string().min(3, "Username minimal 3 karakter."),
   displayName: z.string().min(2, "Nama lengkap harus diisi."),
   password: z.string().min(6, "Password minimal 6 karakter."),
+  classId: z.coerce.number().optional().nullable(),
 });
 
 export async function createTeacherAction(inputData: unknown) {
@@ -27,7 +29,7 @@ export async function createTeacherAction(inputData: unknown) {
     };
   }
 
-  const { username, displayName, password } = parse.data;
+  const { username, displayName, password, classId } = parse.data;
 
   const existing = await db.query.users.findFirst({
     where: eq(users.username, username.trim()),
@@ -39,13 +41,22 @@ export async function createTeacherAction(inputData: unknown) {
 
   const passwordHash = await hashPassword(password);
 
-  await db.insert(users).values({
+  const [res] = await db.insert(users).values({
     username: username.trim(),
     displayName: displayName.trim(),
     passwordHash,
     role: "wali_kelas",
     isActive: true,
   });
+
+  const newTeacherId = res.insertId;
+
+  if (classId) {
+    await db
+      .update(classes)
+      .set({ waliKelasId: newTeacherId })
+      .where(eq(classes.id, classId));
+  }
 
   revalidatePath("/admin");
   return { success: true, message: "Akun Wali Kelas berhasil dibuat." };
@@ -55,7 +66,8 @@ export async function updateTeacherAction(
   userId: number,
   displayName: string,
   newPassword?: string,
-  isActive: boolean = true
+  isActive: boolean = true,
+  classId?: number | null
 ) {
   const user = await getCurrentUser();
   if (!user || user.role !== "superadmin") {
@@ -85,6 +97,22 @@ export async function updateTeacherAction(
 
   await db.update(users).set(updateFields).where(eq(users.id, userId));
 
+  if (classId !== undefined) {
+    // Unassign old class if any
+    await db
+      .update(classes)
+      .set({ waliKelasId: null })
+      .where(eq(classes.waliKelasId, userId));
+
+    // Assign new class
+    if (classId) {
+      await db
+        .update(classes)
+        .set({ waliKelasId: userId })
+        .where(eq(classes.id, classId));
+    }
+  }
+
   revalidatePath("/admin");
   return { success: true, message: "Data Wali Kelas berhasil diperbarui." };
 }
@@ -92,8 +120,8 @@ export async function updateTeacherAction(
 const createClassSchema = z.object({
   name: z.string().min(2, "Nama kelas minimal 2 karakter."),
   slug: z.string().min(2, "Slug minimal 2 karakter.").regex(/^[a-z0-9-]+$/, "Slug hanya huruf kecil, angka, dan strip."),
-  academicYear: z.string().default("2026/2027"),
-  periodTitle: z.string().default("Semester Genap"),
+  academicYear: z.string().default(() => getAutoAcademicPeriod().academicYear),
+  periodTitle: z.string().default(() => getAutoAcademicPeriod().periodTitle),
   waliKelasId: z.coerce.number().optional().nullable(),
 });
 

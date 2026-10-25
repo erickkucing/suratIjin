@@ -19,36 +19,39 @@ export function StatCard({
   isActive = false,
   onClick,
 }: StatCardProps) {
-  const borderStyles = {
-    alpa: "border-t-[var(--status-alpa-fg)] hover:border-red-500",
-    izin: "border-t-[var(--status-izin-fg)] hover:border-blue-500",
-    sakit: "border-t-[var(--board)] hover:border-emerald-500",
-    warning: "border-t-[var(--terracotta)] hover:border-amber-600",
+  const dotStyles = {
+    alpa: "bg-[var(--status-alpa-fg)]",
+    izin: "bg-[var(--status-izin-fg)]",
+    sakit: "bg-[var(--status-sakit-fg)]",
+    warning: "bg-[var(--status-sakit-fg)]",
   };
 
   const badgeStyles = {
     alpa: "bg-[var(--status-alpa-bg)] text-[var(--status-alpa-fg)] border-[var(--status-alpa-border)]",
     izin: "bg-[var(--status-izin-bg)] text-[var(--status-izin-fg)] border-[var(--status-izin-border)]",
     sakit: "bg-[var(--status-sakit-bg)] text-[var(--status-sakit-fg)] border-[var(--status-sakit-border)]",
-    warning: "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-800",
+    warning: "bg-[var(--status-sakit-bg)] text-[var(--status-sakit-fg)] border-[var(--status-sakit-border)]",
   };
 
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`touch-target text-left w-full p-4 rounded-xl card-paper border-t-4 ${borderStyles[accentColor]} transition-all duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--board)] ${
+      className={`touch-target text-left w-full p-4 sm:p-5 rounded-2xl card-paper transition-all duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] ${
         isActive
-          ? "ring-2 ring-[var(--board)] shadow-md bg-[var(--canvas-subtle)]"
-          : "hover:shadow-md hover:bg-[var(--canvas-subtle)]"
+          ? "ring-2 ring-[var(--primary)] shadow-sm bg-[var(--canvas-subtle)]"
+          : "hover:shadow-sm hover:bg-[var(--canvas-subtle)]"
       }`}
     >
-      <div className="flex items-center justify-between mb-1.5">
-        <span className="text-xs font-semibold uppercase tracking-wider text-[var(--ink-muted)]">
-          {title}
-        </span>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5">
+          <span className={`w-2 h-2 rounded-full ${dotStyles[accentColor]}`} />
+          <span className="text-xs font-semibold text-[var(--ink-muted)]">
+            {title}
+          </span>
+        </div>
         <span
-          className={`text-xs px-2 py-0.5 rounded-full border font-semibold ${badgeStyles[accentColor]}`}
+          className={`text-[11px] px-2 py-0.5 rounded-full border font-semibold ${badgeStyles[accentColor]}`}
         >
           {isActive ? "Aktif" : "Filter"}
         </span>

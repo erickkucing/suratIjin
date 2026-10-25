@@ -2,6 +2,7 @@ import { db } from "./index";
 import { users, classes, students, attendanceRecords } from "./schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
+import { getAutoAcademicPeriod } from "../lib/academic-year";
 import fs from "fs";
 import path from "path";
 import sharp from "sharp";
@@ -21,7 +22,7 @@ async function createSampleLetterImage(filePath: string) {
     <text x="400" y="100" font-family="sans-serif" font-size="22" font-weight="bold" text-anchor="middle" fill="#1F2937">
       SURAT KETERANGAN DOKTER / IZIN ORANG TUA
     </text>
-    <line x1="100" y1="120" x2="700" y2="120" stroke="#1F6F54" stroke-width="3"/>
+    <line x1="100" y1="120" x2="700" y2="120" stroke="#B54826" stroke-width="3"/>
     
     <text x="80" y="180" font-family="sans-serif" font-size="16" fill="#374151">Yang bertanda tangan di bawah ini menerangkan bahwa:</text>
     <text x="80" y="230" font-family="sans-serif" font-size="16" font-weight="bold" fill="#111827">Nama Siswa: Siswa Terkait</text>
@@ -75,6 +76,23 @@ export async function seedLegacyData() {
     console.log("   Superadmin wildwina already exists");
   }
 
+  const existingAdmin = await db.query.users.findFirst({
+    where: eq(users.username, "admin"),
+  });
+  if (!existingAdmin) {
+    const adminHash = await bcrypt.hash("feelgood6969", 10);
+    await db.insert(users).values({
+      username: "admin",
+      displayName: "Administrator",
+      passwordHash: adminHash,
+      role: "superadmin",
+      isActive: true,
+    });
+    console.log("   Created Superadmin: admin");
+  } else {
+    console.log("   Superadmin admin already exists");
+  }
+
   const existingErick = await db.query.users.findFirst({
     where: eq(users.username, "erick"),
   });
@@ -100,11 +118,12 @@ export async function seedLegacyData() {
   });
   if (!targetClass) {
     const defaultParentPass = await bcrypt.hash("123456", 10);
+    const autoPeriod = getAutoAcademicPeriod();
     const [res] = await db.insert(classes).values({
       slug: "xii-tkj-2",
       name: "XII TKJ 2",
-      academicYear: "2026/2027",
-      periodTitle: "Semester Genap",
+      academicYear: autoPeriod.academicYear,
+      periodTitle: autoPeriod.periodTitle,
       waliKelasId: erickId,
       parentPasswordHash: defaultParentPass,
       parentShowLetterFile: false,

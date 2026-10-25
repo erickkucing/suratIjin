@@ -88,4 +88,12 @@ describe("Database Queries and Data Integrity", () => {
     expect(tkj?.totalStudents).toBe(34);
     expect(tkj?.totalAbsences).toBe(12);
   });
+
+  it("should include allStudentsList (active + archived) in getClassDashboardData so archived students can be restored", async () => {
+    const data = await getClassDashboardData(classId);
+    expect(Array.isArray((data as unknown as { allStudentsList?: unknown[] }).allStudentsList)).toBe(true);
+    expect((data as unknown as { allStudentsList: unknown[] }).allStudentsList.length).toBeGreaterThanOrEqual(
+      data.studentsList.length
+    );
+  });
 });

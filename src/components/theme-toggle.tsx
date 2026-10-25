@@ -35,7 +35,7 @@ export function ThemeToggle() {
     <button
       type="button"
       onClick={toggleTheme}
-      className="touch-target inline-flex items-center justify-center w-10 h-10 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] hover:bg-[var(--canvas-subtle)] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--board)]"
+      className="touch-target inline-flex items-center justify-center w-10 h-10 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] hover:bg-[var(--canvas-subtle)] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
       aria-label={isDark ? "Beralih ke mode terang" : "Beralih ke mode gelap"}
       title={isDark ? "Mode Terang" : "Mode Gelap"}
     >

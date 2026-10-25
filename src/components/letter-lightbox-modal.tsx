@@ -121,7 +121,7 @@ export function LetterLightboxModal({
             <button
               type="button"
               onClick={onClose}
-              className="touch-target inline-flex items-center justify-center p-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--board)]"
+              className="touch-target inline-flex items-center justify-center p-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
               aria-label="Tutup pratinjau"
             >
               <X className="w-5 h-5" />
@@ -145,7 +145,7 @@ export function LetterLightboxModal({
                     href={fileUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--board)] text-white text-sm font-medium"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--primary)] text-white text-sm font-semibold hover:bg-[var(--primary-hover)] transition-colors"
                   >
                     Buka File PDF
                   </a>

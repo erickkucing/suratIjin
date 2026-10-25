@@ -30,6 +30,27 @@ export async function GET(
       return new NextResponse("File tidak ditemukan", { status: 404 });
     }
 
+    // Public assets like system logo/favicon
+    if (relativePath.startsWith("system/")) {
+      const ext = path.extname(fullPath).toLowerCase();
+      const contentTypes: Record<string, string> = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".webp": "image/webp",
+        ".svg": "image/svg+xml",
+        ".ico": "image/x-icon",
+      };
+      const contentType = contentTypes[ext] || "application/octet-stream";
+      const fileBuffer = fs.readFileSync(fullPath);
+      return new NextResponse(fileBuffer, {
+        headers: {
+          "Content-Type": contentType,
+          "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
+        },
+      });
+    }
+
     // Authorization logic
     const user = await getCurrentUser();
     let isAuthorized = false;

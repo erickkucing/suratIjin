@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { classes } from "@/db/schema";
 import { eq, asc } from "drizzle-orm";
 import { getClassDashboardData } from "@/db/queries";
+import { getSystemSettings } from "@/lib/system-settings";
 import { DashboardClient } from "./dashboard-client";
 
 interface DashboardPageProps {
@@ -50,7 +51,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           </p>
           <a
             href="/login"
-            className="inline-block px-4 py-2 rounded-xl bg-[var(--board)] text-white text-sm font-semibold"
+            className="inline-block px-4 py-2 rounded-xl bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white text-sm font-semibold transition-colors"
           >
             Kembali ke Login
           </a>
@@ -68,6 +69,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   }
 
   const dashboardData = await getClassDashboardData(selectedClassId);
+  const settings = await getSystemSettings();
 
   return (
     <DashboardClient
@@ -75,6 +77,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       user={user}
       classesList={userClasses}
       currentClassId={selectedClassId}
+      logoUrl={settings.logoUrl}
     />
   );
 }

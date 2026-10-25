@@ -26,7 +26,7 @@ import {
   bulkImportStudentsAction,
 } from "@/actions/class-settings";
 import { exportStudentRosterExcel, downloadStudentImportTemplate } from "@/lib/export-excel";
-import ExcelJS from "exceljs";
+import { toTitleCase } from "@/lib/string-utils";
 
 interface StudentRosterModalProps {
   isOpen: boolean;
@@ -34,6 +34,7 @@ interface StudentRosterModalProps {
   classId: number;
   classNameTitle: string;
   studentsList: Student[];
+  logoUrl?: string | null;
   onSuccess: () => void;
 }
 
@@ -43,6 +44,7 @@ export function StudentRosterModal({
   classId,
   classNameTitle,
   studentsList,
+  logoUrl,
   onSuccess,
 }: StudentRosterModalProps) {
   const [activeTab, setActiveTab] = useState<"list" | "add" | "bulk">("list");
@@ -125,7 +127,7 @@ export function StudentRosterModal({
     e.preventDefault();
     const names = bulkText
       .split(/[\r\n,]+/)
-      .map((n) => n.trim())
+      .map((n) => toTitleCase(n.trim()))
       .filter((n) => n.length > 0);
 
     if (names.length === 0) {
@@ -161,6 +163,7 @@ export function StudentRosterModal({
     setExcelFileName(file.name);
 
     try {
+      const ExcelJS = (await import("exceljs")).default;
       const buffer = await file.arrayBuffer();
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.load(buffer);
@@ -194,7 +197,7 @@ export function StudentRosterModal({
 
       worksheet.eachRow((row, rowNumber) => {
         if (headerRowIdx !== -1 && rowNumber <= headerRowIdx) {
-          return; // Skip header
+          return;
         }
 
         let name = "";
@@ -206,7 +209,6 @@ export function StudentRosterModal({
             nis = String(row.getCell(nisColIdx).value || "").trim();
           }
         } else {
-          // If no recognized header, inspect first non-empty text cells
           const cells: string[] = [];
           row.eachCell((cell) => {
             const v = String(cell.value || "").trim();
@@ -216,7 +218,6 @@ export function StudentRosterModal({
           if (cells.length === 1) {
             name = cells[0];
           } else if (cells.length >= 2) {
-            // If first cell looks like a number/NIS and second looks like name
             if (/^\d+$/.test(cells[0]) && cells[0].length >= 3 && isNaN(Number(cells[1]))) {
               nis = cells[0];
               name = cells[1];
@@ -224,17 +225,15 @@ export function StudentRosterModal({
               name = cells[0];
               if (/^\d+$/.test(cells[1])) nis = cells[1];
             } else if (cells.length >= 3 && isNaN(Number(cells[2]))) {
-              // Col 1 = No, Col 2 = NIS, Col 3 = Nama
               nis = cells[1];
               name = cells[2];
             }
           }
         }
 
-        // Clean name
         name = name.replace(/^(\d+[\.\)]\s*)+/, "").trim();
         if (name.length >= 2 && !name.toLowerCase().startsWith("no") && !name.toLowerCase().startsWith("nama")) {
-          extracted.push({ name, nis: nis || undefined });
+          extracted.push({ name: toTitleCase(name), nis: nis || undefined });
         }
       });
 
@@ -244,7 +243,7 @@ export function StudentRosterModal({
 
       setExcelStudents(extracted);
       setMessage({
-        text: `Berhasil memindai ${extracted.length} siswa dari "${file.name}". Klik "Impor Siswa Sekarang" untuk menyimpan.`,
+        text: `Berhasil memindai ${extracted.length} siswa dari "${file.name}". Klik "Simpan Siswa ke Kelas" untuk menyimpan.`,
         isError: false,
       });
     } catch (err: unknown) {
@@ -339,6 +338,7 @@ export function StudentRosterModal({
       await exportStudentRosterExcel({
         classNameTitle,
         studentsList,
+        logoUrl,
       });
     } catch (err: unknown) {
       setMessage({
@@ -367,7 +367,7 @@ export function StudentRosterModal({
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] bg-[var(--canvas-subtle)]">
           <div className="flex items-center gap-2">
-            <div className="p-2 rounded-lg bg-[var(--board)] text-white">
+            <div className="p-2 rounded-xl bg-[var(--primary-light)] text-[var(--primary)] shadow-xs">
               <Users className="w-5 h-5" />
             </div>
             <div>
@@ -375,14 +375,17 @@ export function StudentRosterModal({
                 Kelola Daftar Siswa: {classNameTitle}
               </h2>
               <p className="text-xs text-[var(--ink-muted)]">
-                Total {studentsList.length} siswa terdaftar
+                Total {studentsList.filter((s) => s.isActive).length} aktif
+                {studentsList.some((s) => !s.isActive)
+                  ? `, ${studentsList.filter((s) => !s.isActive).length} diarsipkan`
+                  : ""}
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="touch-target inline-flex items-center justify-center p-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-[var(--ink-muted)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--board)]"
+            className="touch-target inline-flex items-center justify-center p-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-[var(--ink-muted)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
             aria-label="Tutup dialog"
           >
             <X className="w-5 h-5" />
@@ -394,9 +397,9 @@ export function StudentRosterModal({
           <button
             type="button"
             onClick={() => setActiveTab("list")}
-            className={`pb-2.5 text-xs font-bold uppercase tracking-wider transition-colors border-b-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--board)] ${
+            className={`pb-2.5 text-xs font-semibold transition-colors border-b-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] ${
               activeTab === "list"
-                ? "border-[var(--board)] text-[var(--board)]"
+                ? "border-[var(--primary)] text-[var(--primary)]"
                 : "border-transparent text-[var(--ink-muted)] hover:text-[var(--ink)]"
             }`}
           >
@@ -405,9 +408,9 @@ export function StudentRosterModal({
           <button
             type="button"
             onClick={() => setActiveTab("add")}
-            className={`pb-2.5 text-xs font-bold uppercase tracking-wider transition-colors border-b-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--board)] ${
+            className={`pb-2.5 text-xs font-semibold transition-colors border-b-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] ${
               activeTab === "add"
-                ? "border-[var(--board)] text-[var(--board)]"
+                ? "border-[var(--primary)] text-[var(--primary)]"
                 : "border-transparent text-[var(--ink-muted)] hover:text-[var(--ink)]"
             }`}
           >
@@ -416,9 +419,9 @@ export function StudentRosterModal({
           <button
             type="button"
             onClick={() => setActiveTab("bulk")}
-            className={`pb-2.5 text-xs font-bold uppercase tracking-wider transition-colors border-b-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--board)] ${
+            className={`pb-2.5 text-xs font-semibold transition-colors border-b-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] ${
               activeTab === "bulk"
-                ? "border-[var(--board)] text-[var(--board)]"
+                ? "border-[var(--primary)] text-[var(--primary)]"
                 : "border-transparent text-[var(--ink-muted)] hover:text-[var(--ink)]"
             }`}
           >
@@ -432,8 +435,8 @@ export function StudentRosterModal({
             <div
               className={`p-3 rounded-xl border text-sm font-medium ${
                 message.isError
-                  ? "bg-red-50 text-red-800 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900"
-                  : "bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900"
+                  ? "bg-[var(--status-alpa-bg)] text-[var(--status-alpa-fg)] border-[var(--status-alpa-border)]"
+                  : "bg-[var(--status-success-bg)] text-[var(--status-success-fg)] border-[var(--status-success-border)]"
               }`}
             >
               {message.text}
@@ -449,15 +452,15 @@ export function StudentRosterModal({
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Cari nama atau NIS siswa..."
-                  className="flex-1 px-3.5 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] placeholder:text-[var(--ink-subtle)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--board)]"
+                  className="flex-1 px-3.5 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] placeholder:text-[var(--ink-subtle)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
                 />
                 <button
                   type="button"
                   onClick={handleExportRoster}
-                  className="touch-target inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-xs font-semibold text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--board)] shrink-0"
+                  className="touch-target inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-xs font-semibold text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] shrink-0"
                   title="Unduh Daftar Siswa ke Excel (.xlsx)"
                 >
-                  <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                  <FileSpreadsheet className="w-4 h-4 text-[var(--status-success-fg)]" />
                   <span className="hidden sm:inline">Export Excel</span>
                 </button>
               </div>
@@ -484,21 +487,21 @@ export function StudentRosterModal({
                             <input
                               type="text"
                               value={editName}
-                              onChange={(e) => setEditName(e.target.value)}
-                              className="flex-1 px-2.5 py-1.5 text-xs rounded border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)]"
+                              onChange={(e) => setEditName(toTitleCase(e.target.value))}
+                              className="flex-1 px-2.5 py-1.5 text-xs rounded border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
                             />
                             <input
                               type="text"
                               value={editNis}
                               onChange={(e) => setEditNis(e.target.value)}
                               placeholder="NIS"
-                              className="w-24 px-2.5 py-1.5 text-xs rounded border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)]"
+                              className="w-24 px-2.5 py-1.5 text-xs rounded border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
                             />
                             <button
                               type="button"
                               onClick={() => handleSaveEdit(st.id)}
                               disabled={loading}
-                              className="p-1.5 rounded bg-emerald-600 text-white"
+                              className="p-1.5 rounded bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)]"
                               title="Simpan"
                             >
                               <Check className="w-4 h-4" />
@@ -506,7 +509,7 @@ export function StudentRosterModal({
                             <button
                               type="button"
                               onClick={() => setEditingStudentId(null)}
-                              className="p-1.5 rounded border border-[var(--border)] text-[var(--ink-muted)]"
+                              className="p-1.5 rounded border border-[var(--border)] text-[var(--ink-muted)] hover:text-[var(--ink)]"
                               title="Batal"
                             >
                               <X className="w-4 h-4" />
@@ -542,7 +545,7 @@ export function StudentRosterModal({
                                 setEditName(st.name);
                                 setEditNis(st.nis || "");
                               }}
-                              className="touch-target p-1.5 text-[var(--ink-muted)] hover:text-[var(--board)] rounded"
+                              className="touch-target p-1.5 text-[var(--ink-muted)] hover:text-[var(--primary)] rounded"
                               title="Edit Nama/NIS"
                               aria-label={`Edit ${st.name}`}
                             >
@@ -576,33 +579,34 @@ export function StudentRosterModal({
             </div>
           )}
 
-          {/* TAB 2: ADD SINGLE */}
           {activeTab === "add" && (
             <form onSubmit={handleAddSingle} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-[var(--ink-muted)] mb-1">
+                <label htmlFor="new-student-name" className="block text-xs font-semibold text-[var(--ink-muted)] mb-1">
                   Nama Lengkap Siswa <span className="text-red-500">*</span>
                 </label>
                 <input
+                  id="new-student-name"
                   type="text"
                   value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
+                  onChange={(e) => setNewName(toTitleCase(e.target.value))}
                   placeholder="Contoh: Ahmad Dahlan"
-                  className="w-full px-3.5 py-2.5 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--board)]"
+                  className="w-full px-3.5 py-2.5 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-[var(--ink-muted)] mb-1">
+                <label htmlFor="new-student-nis" className="block text-xs font-semibold text-[var(--ink-muted)] mb-1">
                   NIS (Nomor Induk Siswa) - Opsional
                 </label>
                 <input
+                  id="new-student-nis"
                   type="text"
                   value={newNis}
                   onChange={(e) => setNewNis(e.target.value)}
                   placeholder="Contoh: 102938"
-                  className="w-full px-3.5 py-2.5 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--board)]"
+                  className="w-full px-3.5 py-2.5 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
                 />
               </div>
 
@@ -610,7 +614,7 @@ export function StudentRosterModal({
                 <button
                   type="submit"
                   disabled={loading}
-                  className="touch-target flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--board)] text-white hover:bg-[var(--board-hover)] text-sm font-semibold shadow-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--board)] disabled:opacity-50"
+                  className="touch-target flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] text-sm font-semibold shadow-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] disabled:opacity-50 transition-colors"
                 >
                   {loading && <Loader2 className="w-4 h-4 animate-spin" />}
                   <span>Tambahkan Siswa</span>
@@ -628,9 +632,9 @@ export function StudentRosterModal({
                   <button
                     type="button"
                     onClick={() => setBulkMode("file")}
-                    className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors ${
+                    className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${
                       bulkMode === "file"
-                        ? "bg-[var(--board)] text-white shadow-xs"
+                        ? "bg-[var(--primary)] text-white shadow-xs"
                         : "bg-[var(--canvas-subtle)] text-[var(--ink-muted)] hover:text-[var(--ink)]"
                     }`}
                   >
@@ -639,9 +643,9 @@ export function StudentRosterModal({
                   <button
                     type="button"
                     onClick={() => setBulkMode("text")}
-                    className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors ${
+                    className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${
                       bulkMode === "text"
-                        ? "bg-[var(--board)] text-white shadow-xs"
+                        ? "bg-[var(--primary)] text-white shadow-xs"
                         : "bg-[var(--canvas-subtle)] text-[var(--ink-muted)] hover:text-[var(--ink)]"
                     }`}
                   >
@@ -653,7 +657,7 @@ export function StudentRosterModal({
                   <button
                     type="button"
                     onClick={() => downloadStudentImportTemplate(classNameTitle)}
-                    className="touch-target inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-[var(--board)] hover:border-[var(--board)] transition-all shadow-xs"
+                    className="touch-target inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-[var(--accent-slate)] hover:border-[var(--accent-slate)] transition-all shadow-xs"
                     title="Unduh format file Excel (.xlsx) kosong untuk impor massal siswa"
                   >
                     <Download className="w-3.5 h-3.5" />
@@ -666,7 +670,7 @@ export function StudentRosterModal({
                 <div className="space-y-3">
                   <div
                     onClick={() => fileInputRef.current?.click()}
-                    className="border-2 border-dashed border-[var(--border)] hover:border-[var(--board)] rounded-xl p-6 text-center cursor-pointer bg-[var(--canvas-subtle)] hover:bg-[var(--surface)] transition-all group"
+                    className="border-2 border-dashed border-[var(--border)] hover:border-[var(--primary)] rounded-xl p-6 text-center cursor-pointer bg-[var(--canvas-subtle)] hover:bg-[var(--surface)] transition-all group"
                   >
                     <input
                       ref={fileInputRef}
@@ -675,7 +679,7 @@ export function StudentRosterModal({
                       onChange={handleExcelFileChange}
                       className="hidden"
                     />
-                    <FileUp className="w-10 h-10 mx-auto text-[var(--board)] mb-2 group-hover:scale-105 transition-transform" />
+                    <FileUp className="w-10 h-10 mx-auto text-[var(--primary)] mb-2 group-hover:scale-105 transition-transform" />
                     <p className="text-sm font-bold text-[var(--ink)]">
                       {excelFileName ? excelFileName : "Pilih File Excel Siswa (.xlsx)"}
                     </p>
@@ -692,7 +696,7 @@ export function StudentRosterModal({
                     <button
                       type="button"
                       onClick={() => downloadStudentImportTemplate(classNameTitle)}
-                      className="inline-flex items-center gap-1 text-[var(--board)] hover:underline font-semibold shrink-0"
+                      className="inline-flex items-center gap-1 text-[var(--accent-slate)] hover:underline font-semibold shrink-0"
                     >
                       <Download className="w-3.5 h-3.5" />
                       <span>Unduh File Format</span>
@@ -702,7 +706,7 @@ export function StudentRosterModal({
                   {excelStudents.length > 0 && (
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold uppercase tracking-wider text-[var(--board)]">
+                        <span className="text-xs font-semibold text-[var(--primary)]">
                           Pratinjau: {excelStudents.length} Siswa Siap Diimpor
                         </span>
                       </div>
@@ -729,7 +733,7 @@ export function StudentRosterModal({
                           type="button"
                           onClick={handleConfirmExcelImport}
                           disabled={loading}
-                          className="touch-target flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--board)] text-white hover:bg-[var(--board-hover)] text-sm font-semibold shadow-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--board)] disabled:opacity-50"
+                          className="touch-target flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] text-sm font-semibold shadow-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] disabled:opacity-50 transition-colors"
                         >
                           {loading && <Loader2 className="w-4 h-4 animate-spin" />}
                           <FileSpreadsheet className="w-4 h-4" />
@@ -742,15 +746,16 @@ export function StudentRosterModal({
               ) : (
                 <form onSubmit={handleBulkTextAdd} className="space-y-4">
                   <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-[var(--ink-muted)] mb-1">
+                    <label htmlFor="bulk-student-text" className="block text-xs font-semibold text-[var(--ink-muted)] mb-1">
                       Tempel Daftar Nama Siswa (1 Nama per Baris)
                     </label>
                     <textarea
+                      id="bulk-student-text"
                       rows={8}
                       value={bulkText}
                       onChange={(e) => setBulkText(e.target.value)}
                       placeholder="Ahmad Dahlan&#10;Budi Santoso&#10;Citra Lestari&#10;Dedi Kurniawan"
-                      className="w-full px-3.5 py-2.5 text-sm font-mono rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--board)]"
+                      className="w-full px-3.5 py-2.5 text-sm font-mono rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
                       required
                     />
                     <p className="mt-1 text-xs text-[var(--ink-muted)]">
@@ -762,7 +767,7 @@ export function StudentRosterModal({
                     <button
                       type="submit"
                       disabled={loading}
-                      className="touch-target flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--board)] text-white hover:bg-[var(--board-hover)] text-sm font-semibold shadow-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--board)] disabled:opacity-50"
+                      className="touch-target flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] text-sm font-semibold shadow-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] disabled:opacity-50 transition-colors"
                     >
                       {loading && <Loader2 className="w-4 h-4 animate-spin" />}
                       <span>Impor Semua Siswa</span>

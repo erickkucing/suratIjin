@@ -4,6 +4,12 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { verifyPassword, createSessionToken, SESSION_COOKIE_NAME } from "@/lib/auth";
+import {
+  getClientIp,
+  checkRateLimit,
+  recordFailedAttempt,
+  resetRateLimit,
+} from "@/lib/rate-limiter";
 
 const loginSchema = z.object({
   username: z.string().min(1, "Username harus diisi."),
@@ -52,30 +58,67 @@ export async function POST(request: Request) {
 
     const { username, password } = parse.data;
 
+    // Rate limiting check
+    const clientIp = await getClientIp(request);
+    const rateLimitKey = `login:${clientIp}:${username.toLowerCase().trim()}`;
+
+    const limitCheck = checkRateLimit(rateLimitKey);
+    if (limitCheck.isBlocked) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: limitCheck.errorMessage,
+        },
+        {
+          status: 429,
+          headers: { "Retry-After": String(limitCheck.retryAfterSeconds) },
+        }
+      );
+    }
+
     const user = await db.query.users.findFirst({
       where: eq(users.username, username.trim()),
     });
 
     if (!user || !user.isActive) {
+      const failStatus = recordFailedAttempt(rateLimitKey);
       return NextResponse.json(
         {
           success: false,
-          error: "Username atau password salah.",
+          error: failStatus.isBlocked
+            ? failStatus.errorMessage
+            : "Username atau password salah.",
         },
-        { status: 401 }
+        {
+          status: failStatus.isBlocked ? 429 : 401,
+          headers: failStatus.isBlocked
+            ? { "Retry-After": String(failStatus.retryAfterSeconds) }
+            : undefined,
+        }
       );
     }
 
     const isValid = await verifyPassword(password, user.passwordHash);
     if (!isValid) {
+      const failStatus = recordFailedAttempt(rateLimitKey);
       return NextResponse.json(
         {
           success: false,
-          error: "Username atau password salah.",
+          error: failStatus.isBlocked
+            ? failStatus.errorMessage
+            : "Username atau password salah.",
         },
-        { status: 401 }
+        {
+          status: failStatus.isBlocked ? 429 : 401,
+          headers: failStatus.isBlocked
+            ? { "Retry-After": String(failStatus.retryAfterSeconds) }
+            : undefined,
+        }
       );
     }
+
+    // Reset rate limit counter upon successful credentials
+    resetRateLimit(rateLimitKey);
 
     const token = await createSessionToken({
       id: user.id,

@@ -54,8 +54,8 @@ export function MonthlyBarChart({ data }: MonthlyBarChartProps) {
     );
   }
 
-  const textColor = isDark ? "#A6B5AE" : "#4A5651";
-  const gridColor = isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.06)";
+  const textColor = isDark ? "#B8ACA3" : "#574F4A";
+  const gridColor = isDark ? "rgba(245, 239, 234, 0.08)" : "rgba(35, 31, 30, 0.06)";
 
   const chartData = {
     labels: data.map((d) => d.label),
@@ -63,19 +63,19 @@ export function MonthlyBarChart({ data }: MonthlyBarChartProps) {
       {
         label: "Izin",
         data: data.map((d) => d.izin),
-        backgroundColor: "#3B82F6",
+        backgroundColor: "#264663",
         borderRadius: 4,
       },
       {
         label: "Sakit",
         data: data.map((d) => d.sakit),
-        backgroundColor: "#1F6F54",
+        backgroundColor: "#D97706",
         borderRadius: 4,
       },
       {
         label: "Alpa",
         data: data.map((d) => d.alpa),
-        backgroundColor: "#EF4444",
+        backgroundColor: "#C83E3B",
         borderRadius: 4,
       },
     ],
@@ -95,10 +95,10 @@ export function MonthlyBarChart({ data }: MonthlyBarChartProps) {
         },
       },
       tooltip: {
-        backgroundColor: isDark ? "#192420" : "#FFFFFF",
-        titleColor: isDark ? "#F3EFE6" : "#1E2A26",
-        bodyColor: isDark ? "#A6B5AE" : "#4A5651",
-        borderColor: isDark ? "#2C3E37" : "#E5DDCB",
+        backgroundColor: isDark ? "#26211F" : "#FFFFFF",
+        titleColor: isDark ? "#F5EFEA" : "#231F1E",
+        bodyColor: isDark ? "#B8ACA3" : "#574F4A",
+        borderColor: isDark ? "#3D3531" : "#E6DDD2",
         borderWidth: 1,
         padding: 10,
       },

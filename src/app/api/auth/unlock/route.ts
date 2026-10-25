@@ -4,6 +4,12 @@ import { db } from "@/db";
 import { classes } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { verifyPassword, createParentToken, PARENT_COOKIE_PREFIX } from "@/lib/auth";
+import {
+  getClientIp,
+  checkRateLimit,
+  recordFailedAttempt,
+  resetRateLimit,
+} from "@/lib/rate-limiter";
 
 const unlockSchema = z.object({
   classSlug: z.string().min(1, "Slug kelas harus diisi."),
@@ -28,6 +34,24 @@ export async function POST(request: Request) {
 
     const { classSlug, password } = parse.data;
 
+    // Rate limiting check
+    const clientIp = await getClientIp(request);
+    const rateLimitKey = `unlock:${clientIp}:${classSlug.toLowerCase().trim()}`;
+
+    const limitCheck = checkRateLimit(rateLimitKey);
+    if (limitCheck.isBlocked) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: limitCheck.errorMessage,
+        },
+        {
+          status: 429,
+          headers: { "Retry-After": String(limitCheck.retryAfterSeconds) },
+        }
+      );
+    }
+
     const cls = await db.query.classes.findFirst({
       where: eq(classes.slug, classSlug),
     });
@@ -45,11 +69,25 @@ export async function POST(request: Request) {
 
     const isValid = await verifyPassword(password, cls.parentPasswordHash);
     if (!isValid) {
+      const failStatus = recordFailedAttempt(rateLimitKey);
       return NextResponse.json(
-        { success: false, error: "Password akses salah. Silakan tanyakan ke Wali Kelas." },
-        { status: 401 }
+        {
+          success: false,
+          error: failStatus.isBlocked
+            ? failStatus.errorMessage
+            : "Password akses salah. Silakan tanyakan ke Wali Kelas.",
+        },
+        {
+          status: failStatus.isBlocked ? 429 : 401,
+          headers: failStatus.isBlocked
+            ? { "Retry-After": String(failStatus.retryAfterSeconds) }
+            : undefined,
+        }
       );
     }
+
+    // Reset rate limit counter upon successful password
+    resetRateLimit(rateLimitKey);
 
     const token = await createParentToken({
       classSlug: cls.slug,

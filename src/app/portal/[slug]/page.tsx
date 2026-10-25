@@ -4,6 +4,7 @@ import { classes, users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { checkParentAccess } from "@/lib/auth";
 import { getClassDashboardData } from "@/db/queries";
+import { getSystemSettings } from "@/lib/system-settings";
 import { PortalClient } from "./portal-client";
 
 interface PortalPageProps {
@@ -40,6 +41,8 @@ export default async function PortalPage({ params }: PortalPageProps) {
     dashboardData = await getClassDashboardData(classItem.id);
   }
 
+  const settings = await getSystemSettings();
+
   return (
     <PortalClient
       isUnlocked={isUnlocked}
@@ -48,6 +51,7 @@ export default async function PortalPage({ params }: PortalPageProps) {
       teacherName={teacherName}
       classNameTitle={classItem.name}
       academicYear={classItem.academicYear}
+      logoUrl={settings.logoUrl}
     />
   );
 }

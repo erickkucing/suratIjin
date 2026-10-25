@@ -2,61 +2,153 @@
 
 @layer base {
   :root {
-    --canvas: #FDF8EE;
-    --canvas-subtle: #F6F0E2;
+    color-scheme: light;
+    accent-color: var(--primary);
+
+    --canvas: #FBF7F2;
+    --canvas-subtle: #F3ECE2;
     --surface: #FFFFFF;
-    --surface-elevated: #FFFFFF;
-    --border: #E5DDCB;
-    --border-strong: #C4BAA3;
-    --ink: #1E2A26;
-    --ink-muted: #4A5651;
-    --ink-subtle: #73807A;
-    --board: #1F6F54;
-    --board-hover: #175742;
-    --board-light: #EBF5F1;
-    --terracotta: #B83B14;
-    --terracotta-hover: #9E3210;
+    --surface-elevated: #FFFDF9;
+    --border: #E6DDD2;
+    --border-strong: #988777;
+    --ink: #231F1E;
+    --ink-muted: #574F4A;
+    --ink-subtle: #6E655F;
 
-    --status-izin-fg: #164E87;
-    --status-izin-bg: #E7F2FD;
-    --status-izin-border: #BAE3FF;
+    --primary: #B54826;
+    --primary-hover: #96391C;
+    --primary-light: #FCEEE9;
 
-    --status-sakit-fg: #145A3A;
-    --status-sakit-bg: #E6F6EE;
-    --status-sakit-border: #B7E8D0;
+    --accent-slate: #264663;
+    --accent-slate-hover: #1B354D;
+    --accent-slate-light: #EBF2F7;
 
-    --status-alpa-fg: #982613;
-    --status-alpa-bg: #FCEBE7;
-    --status-alpa-border: #F7C5BC;
+    --board: var(--primary);
+    --board-hover: var(--primary-hover);
+    --board-light: var(--primary-light);
+    --terracotta: var(--primary);
+    --terracotta-hover: var(--primary-hover);
+
+    --status-izin-fg: #1E4363;
+    --status-izin-bg: #EBF2F7;
+    --status-izin-border: #C5D9E8;
+
+    --status-sakit-fg: #8A4D0E;
+    --status-sakit-bg: #FEF4E6;
+    --status-sakit-border: #F5D6A7;
+
+    --status-alpa-fg: #962326;
+    --status-alpa-bg: #FCECEB;
+    --status-alpa-border: #F5C2C0;
+
+    --status-success-fg: #36582C;
+    --status-success-bg: #EFF5EC;
+    --status-success-border: #C7DEC0;
+
+    --status-apresiasi-fg: #8A4D0E;
+    --status-apresiasi-bg: #FDF3E3;
+    --status-apresiasi-border: #F3D29B;
   }
 
   .dark {
-    --canvas: #111916;
-    --canvas-subtle: #15201C;
-    --surface: #192420;
-    --surface-elevated: #202E29;
-    --border: #2C3E37;
-    --border-strong: #3F574E;
-    --ink: #F3EFE6;
-    --ink-muted: #A6B5AE;
-    --ink-subtle: #778881;
-    --board: #2B8A6B;
-    --board-hover: #349E7C;
-    --board-light: #1A342B;
-    --terracotta: #E8633F;
-    --terracotta-hover: #F27B5B;
+    color-scheme: dark;
+    accent-color: var(--primary);
+
+    --canvas: #181514;
+    --canvas-subtle: #211D1B;
+    --surface: #26211F;
+    --surface-elevated: #302926;
+    --border: #3D3531;
+    --border-strong: #6E6058;
+    --ink: #F5EFEA;
+    --ink-muted: #B8ACA3;
+    --ink-subtle: #94887F;
+
+    --primary: #B54826;
+    --primary-hover: #96391C;
+    --primary-light: #3D221A;
+
+    --accent-slate: #3A668C;
+    --accent-slate-hover: #4E7DA6;
+    --accent-slate-light: #1A2836;
+
+    --board: var(--primary);
+    --board-hover: var(--primary-hover);
+    --board-light: var(--primary-light);
+    --terracotta: var(--primary);
+    --terracotta-hover: var(--primary-hover);
 
     --status-izin-fg: #90CDF4;
-    --status-izin-bg: #152A40;
-    --status-izin-border: #234E78;
+    --status-izin-bg: #162C40;
+    --status-izin-border: #274B6E;
 
-    --status-sakit-fg: #9AE6B4;
-    --status-sakit-bg: #143324;
-    --status-sakit-border: #225C40;
+    --status-sakit-fg: #FBD38D;
+    --status-sakit-bg: #382A15;
+    --status-sakit-border: #634820;
 
     --status-alpa-fg: #FEB2B2;
-    --status-alpa-bg: #401818;
-    --status-alpa-border: #7A2727;
+    --status-alpa-bg: #3D1B1B;
+    --status-alpa-border: #692B2B;
+
+    --status-success-fg: #A3D9A5;
+    --status-success-bg: #1C301B;
+    --status-success-border: #2E4F2C;
+
+    --status-apresiasi-fg: #FBD38D;
+    --status-apresiasi-bg: #382A15;
+    --status-apresiasi-border: #634820;
+  }
+
+  /* Emerald Forest Theme */
+  [data-theme="emerald"] {
+    --primary: #1E6B4B;
+    --primary-hover: #155038;
+    --primary-light: #EBF6F0;
+  }
+  [data-theme="emerald"].dark,
+  .dark [data-theme="emerald"] {
+    --primary: #1E6B4B;
+    --primary-hover: #155038;
+    --primary-light: #123324;
+  }
+
+  /* Ocean Navy Theme */
+  [data-theme="ocean"] {
+    --primary: #1B5299;
+    --primary-hover: #143E73;
+    --primary-light: #EBF2FA;
+  }
+  [data-theme="ocean"].dark,
+  .dark [data-theme="ocean"] {
+    --primary: #1B5299;
+    --primary-hover: #143E73;
+    --primary-light: #142847;
+  }
+
+  /* Deep Indigo Theme */
+  [data-theme="indigo"] {
+    --primary: #4338CA;
+    --primary-hover: #3730A3;
+    --primary-light: #EEF2FF;
+  }
+  [data-theme="indigo"].dark,
+  .dark [data-theme="indigo"] {
+    --primary: #4338CA;
+    --primary-hover: #3730A3;
+    --primary-light: #1E1B4B;
+  }
+
+  /* Classic Burgundy Theme */
+  [data-theme="burgundy"] {
+    --primary: #881337;
+    --primary-hover: #700F2E;
+    --primary-light: #FFE4E6;
+  }
+  [data-theme="burgundy"].dark,
+  .dark [data-theme="burgundy"] {
+    --primary: #881337;
+    --primary-hover: #700F2E;
+    --primary-light: #4C0519;
   }
 
   body {
@@ -69,32 +161,57 @@
   }
 
   h1, h2, h3, h4, h5, h6, .font-heading {
-    font-family: var(--font-sora), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    letter-spacing: -0.015em;
+    font-family: var(--font-nunito), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    letter-spacing: -0.01em;
   }
 
-  /* Clear accessibility focus ring meeting WCAG 2.2 AA non-text contrast (>= 3:1) */
   :focus-visible {
-    outline: 2px solid var(--board);
+    outline: 2px solid var(--primary);
     outline-offset: 2px;
+  }
+
+  button,
+  [role="button"],
+  a,
+  select,
+  summary,
+  input[type="submit"],
+  input[type="reset"],
+  input[type="button"],
+  input[type="checkbox"],
+  input[type="radio"],
+  label[for] {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [role="button"][aria-disabled="true"],
+  input:disabled,
+  select:disabled {
+    cursor: not-allowed;
   }
 }
 
-/* Touch targets and mobile safety */
 .touch-target {
   min-height: 44px;
   min-width: 44px;
 }
 
-/* Paper card styling */
-.card-paper {
+.card-paper,
+.card-journal {
   background-color: var(--surface);
   border: 1px solid var(--border);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 1px 3px rgba(35, 31, 30, 0.04);
 }
 
-.card-paper-elevated {
+.card-paper-elevated,
+.card-journal-elevated {
   background-color: var(--surface-elevated);
   border: 1px solid var(--border);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.07);
+  box-shadow: 0 8px 24px -4px rgba(35, 31, 30, 0.08);
+}
+
+.cv-auto-section {
+  content-visibility: auto;
+  contain-intrinsic-size: auto none auto 320px;
 }

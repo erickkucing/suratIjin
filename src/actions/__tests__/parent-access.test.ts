@@ -50,12 +50,70 @@ describe("Parent Portal Password Control", () => {
     const isValid = await verifyPassword(newPass, clsAfter!.parentPasswordHash!);
     expect(isValid).toBe(true);
 
-    // Restore original hash
-    if (originalHash) {
-      await db
-        .update(classes)
-        .set({ parentPasswordHash: originalHash })
-        .where(eq(classes.id, classId));
-    }
+    // Always restore original hash (even if null)
+    await db
+      .update(classes)
+      .set({ parentPasswordHash: originalHash })
+      .where(eq(classes.id, classId));
+  });
+
+  it("should allow manual editing of periodTitle and academicYear", async () => {
+    // Manually edit to custom semester
+    await db
+      .update(classes)
+      .set({
+        periodTitle: "Semester Khusus / Antara",
+        academicYear: "2025/2026",
+      })
+      .where(eq(classes.id, classId));
+
+    let cls = await db.query.classes.findFirst({
+      where: eq(classes.id, classId),
+    });
+    expect(cls?.periodTitle).toBe("Semester Khusus / Antara");
+    expect(cls?.academicYear).toBe("2025/2026");
+
+    // Reset back to automatic values
+    const { getAutoAcademicPeriod } = await import("@/lib/academic-year");
+    const auto = getAutoAcademicPeriod();
+    await db
+      .update(classes)
+      .set({
+        periodTitle: auto.periodTitle,
+        academicYear: auto.academicYear,
+      })
+      .where(eq(classes.id, classId));
+
+    cls = await db.query.classes.findFirst({
+      where: eq(classes.id, classId),
+    });
+    expect(cls?.periodTitle).toBe(auto.periodTitle);
+    expect(cls?.academicYear).toBe(auto.academicYear);
+  });
+
+  it("should allow Wali Kelas to update class name while keeping portal slug intact", async () => {
+    const originalClass = await db.query.classes.findFirst({
+      where: eq(classes.id, classId),
+    });
+    const originalName = originalClass!.name;
+    const originalSlug = originalClass!.slug;
+
+    // Update class name
+    await db
+      .update(classes)
+      .set({ name: "XII TKJ 2 (Unggulan)" })
+      .where(eq(classes.id, classId));
+
+    const updated = await db.query.classes.findFirst({
+      where: eq(classes.id, classId),
+    });
+    expect(updated?.name).toBe("XII TKJ 2 (Unggulan)");
+    expect(updated?.slug).toBe(originalSlug); // Slug remains unchanged!
+
+    // Restore original name
+    await db
+      .update(classes)
+      .set({ name: originalName })
+      .where(eq(classes.id, classId));
   });
 });

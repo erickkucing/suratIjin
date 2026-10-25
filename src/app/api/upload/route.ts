@@ -7,6 +7,33 @@ import path from "path";
 import fs from "fs";
 import crypto from "crypto";
 import sharp from "sharp";
+import { checkRateLimit, recordFailedAttempt } from "@/lib/rate-limiter";
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+
+function isValidImageMagicBytes(buffer: Buffer): boolean {
+  if (buffer.length < 12) return false;
+
+  // JPEG: FF D8 FF
+  const isJpeg = buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF;
+  if (isJpeg) return true;
+
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  const isPng =
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4E &&
+    buffer[3] === 0x47;
+  if (isPng) return true;
+
+  // WebP: RIFF .... WEBP
+  const isWebp =
+    buffer.subarray(0, 4).toString("ascii") === "RIFF" &&
+    buffer.subarray(8, 12).toString("ascii") === "WEBP";
+  if (isWebp) return true;
+
+  return false;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,12 +42,31 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Sesi tidak valid. Silakan login kembali." }, { status: 401 });
     }
 
+    // Rate limiting: max 30 uploads per minute per user
+    const uploadRateKey = `upload:${user.id}`;
+    const rateCheck = checkRateLimit(uploadRateKey, 30, 60 * 1000);
+    if (rateCheck.isBlocked) {
+      return NextResponse.json(
+        { error: "Terlalu banyak permintaan unggah file. Silakan tunggu 1 menit." },
+        { status: 429, headers: { "Retry-After": "60" } }
+      );
+    }
+    recordFailedAttempt(uploadRateKey, 30, 60 * 1000);
+
     const formData = await request.formData();
     const classIdStr = formData.get("classId") as string;
     const file = formData.get("file") as File | null;
 
     if (!classIdStr || !file) {
       return NextResponse.json({ error: "Data file atau kelas tidak lengkap." }, { status: 400 });
+    }
+
+    // Hardened file size check before reading arrayBuffer
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        { error: "Ukuran file terlalu besar. Maksimal 10 MB." },
+        { status: 413 }
+      );
     }
 
     const classId = parseInt(classIdStr, 10);
@@ -66,6 +112,12 @@ export async function POST(request: NextRequest) {
       fs.writeFileSync(finalPath, buffer);
       mimeType = "application/pdf";
     } else {
+      if (!isValidImageMagicBytes(buffer)) {
+        return NextResponse.json(
+          { error: "Format file gambar tidak valid. Harap gunakan file JPG, PNG, atau WebP yang sah." },
+          { status: 400 }
+        );
+      }
       // Process with sharp: auto-orient based on EXIF and optimize to WebP
       fileName = `${timestamp}_${randomSuffix}.webp`;
       finalPath = path.join(dirPath, fileName);

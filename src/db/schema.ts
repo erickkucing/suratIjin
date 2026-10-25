@@ -61,6 +61,7 @@ export const students = mysqlTable(
   },
   (table) => [
     index("idx_students_class_active_name").on(table.classId, table.isActive, table.name),
+    uniqueIndex("idx_students_class_nis_unique").on(table.classId, table.nis),
   ]
 );
 
@@ -86,6 +87,11 @@ export const attendanceRecords = mysqlTable(
     updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
   },
   (table) => [
+    uniqueIndex("idx_attendance_class_student_date_unique").on(
+      table.classId,
+      table.studentId,
+      table.attendanceDate
+    ),
     index("idx_attendance_class_date_status").on(
       table.classId,
       table.attendanceDate,
@@ -138,6 +144,22 @@ export const attendanceRecordsRelations = relations(attendanceRecords, ({ one })
   }),
 }));
 
+export const systemSettings = mysqlTable("system_settings", {
+  id: int("id").autoincrement().primaryKey(),
+  appName: varchar("app_name", { length: 150 }).notNull().default("Sistem Surat Izin Siswa"),
+  logoUrl: varchar("logo_url", { length: 255 }),
+  themeColor: varchar("theme_color", { length: 50 }).notNull().default("terracotta"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
+  updatedById: int("updated_by_id").references(() => users.id, { onDelete: "set null" }),
+});
+
+export const systemSettingsRelations = relations(systemSettings, ({ one }) => ({
+  updatedBy: one(users, {
+    fields: [systemSettings.updatedById],
+    references: [users.id],
+  }),
+}));
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type ClassItem = typeof classes.$inferSelect;
@@ -146,3 +168,5 @@ export type Student = typeof students.$inferSelect;
 export type NewStudent = typeof students.$inferInsert;
 export type AttendanceRecord = typeof attendanceRecords.$inferSelect;
 export type NewAttendanceRecord = typeof attendanceRecords.$inferInsert;
+export type SystemSettings = typeof systemSettings.$inferSelect;
+export type NewSystemSettings = typeof systemSettings.$inferInsert;
