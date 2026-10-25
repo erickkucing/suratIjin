@@ -22,20 +22,38 @@ function LoginForm() {
     setLoading(true);
     setErrorMessage(null);
 
-    const formData = new FormData();
-    formData.append("username", username);
-    formData.append("password", password);
-
     try {
-      const res = await loginAction(formData);
-      if (!res.success) {
-        setErrorMessage(res.error || "Gagal masuk. Periksa kembali username dan password.");
+      // Primary authentication via standard REST API
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      const data = await res.json().catch(() => null);
+
+      if (!data || !data.success) {
+        setErrorMessage(data?.error || "Gagal masuk. Periksa kembali username dan password.");
         return;
       }
-      router.push(res.redirectUrl || nextPath);
+
+      router.push(data.redirectUrl || nextPath);
       router.refresh();
-    } catch (err: unknown) {
-      setErrorMessage(err instanceof Error ? err.message : "Terjadi kesalahan koneksi.");
+    } catch {
+      // Fallback to Server Action if fetch fails
+      try {
+        const formData = new FormData();
+        formData.append("username", username);
+        formData.append("password", password);
+        const res = await loginAction(formData);
+        if (!res.success) {
+          setErrorMessage(res.error || "Gagal masuk. Periksa kembali username dan password.");
+          return;
+        }
+        router.push(res.redirectUrl || nextPath);
+        router.refresh();
+      } catch (err: unknown) {
+        setErrorMessage(err instanceof Error ? err.message : "Terjadi kesalahan koneksi.");
+      }
     } finally {
       setLoading(false);
     }

@@ -19,61 +19,87 @@ const loginSchema = z.object({
   password: z.string().min(1, "Password harus diisi."),
 });
 
-export async function loginAction(formData: FormData) {
-  const parse = loginSchema.safeParse({
-    username: formData.get("username"),
-    password: formData.get("password"),
-  });
+const isCookieSecure =
+  process.env.COOKIE_SECURE === "true" ||
+  process.env.NEXT_PUBLIC_APP_URL?.startsWith("https://") === true;
 
-  if (!parse.success) {
+export async function loginAction(
+  data: FormData | { username?: string; password?: string } | Record<string, unknown>
+) {
+  try {
+    let rawUsername = "";
+    let rawPassword = "";
+
+    if (typeof FormData !== "undefined" && data instanceof FormData) {
+      rawUsername = String(data.get("username") || "");
+      rawPassword = String(data.get("password") || "");
+    } else if (data && typeof data === "object") {
+      const obj = data as Record<string, unknown>;
+      rawUsername = typeof obj.username === "string" ? obj.username : String(obj.username || "");
+      rawPassword = typeof obj.password === "string" ? obj.password : String(obj.password || "");
+    }
+
+    const parse = loginSchema.safeParse({
+      username: rawUsername,
+      password: rawPassword,
+    });
+
+    if (!parse.success) {
+      return {
+        success: false,
+        error: parse.error.issues[0]?.message || "Input tidak valid.",
+      };
+    }
+
+    const { username, password } = parse.data;
+
+    const user = await db.query.users.findFirst({
+      where: eq(users.username, username.trim()),
+    });
+
+    if (!user || !user.isActive) {
+      return {
+        success: false,
+        error: "Username atau password salah.",
+      };
+    }
+
+    const isValid = await verifyPassword(password, user.passwordHash);
+    if (!isValid) {
+      return {
+        success: false,
+        error: "Username atau password salah.",
+      };
+    }
+
+    const token = await createSessionToken({
+      id: user.id,
+      username: user.username,
+      displayName: user.displayName,
+      role: user.role,
+    });
+
+    const cookieStore = await cookies();
+    cookieStore.set(SESSION_COOKIE_NAME, token, {
+      httpOnly: true,
+      secure: isCookieSecure,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 7 * 24 * 60 * 60, // 7 days
+    });
+
+    return {
+      success: true,
+      role: user.role,
+      redirectUrl: user.role === "superadmin" ? "/admin" : "/dashboard",
+    };
+  } catch (err) {
+    console.error("loginAction error:", err);
     return {
       success: false,
-      error: parse.error.issues[0]?.message || "Input tidak valid.",
+      error: err instanceof Error ? err.message : "Terjadi kesalahan sistem saat masuk.",
     };
   }
-
-  const { username, password } = parse.data;
-
-  const user = await db.query.users.findFirst({
-    where: eq(users.username, username.trim()),
-  });
-
-  if (!user || !user.isActive) {
-    return {
-      success: false,
-      error: "Username atau password salah.",
-    };
-  }
-
-  const isValid = await verifyPassword(password, user.passwordHash);
-  if (!isValid) {
-    return {
-      success: false,
-      error: "Username atau password salah.",
-    };
-  }
-
-  const token = await createSessionToken({
-    id: user.id,
-    username: user.username,
-    displayName: user.displayName,
-    role: user.role,
-  });
-
-  const cookieStore = await cookies();
-  cookieStore.set(SESSION_COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: 7 * 24 * 60 * 60, // 7 days
-  });
-
-  return {
-    success: true,
-    role: user.role,
-    redirectUrl: user.role === "superadmin" ? "/admin" : "/dashboard",
-  };
 }
 
 export async function logoutAction() {
@@ -115,7 +141,7 @@ export async function parentUnlockAction(classSlug: string, passwordPlain: strin
   const cookieStore = await cookies();
   cookieStore.set(`${PARENT_COOKIE_PREFIX}${cls.slug}`, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: isCookieSecure,
     sameSite: "lax",
     path: "/",
     maxAge: 24 * 60 * 60, // 24 hours

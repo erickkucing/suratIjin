@@ -64,14 +64,29 @@ export function PortalClient({
     setGateError(null);
 
     try {
-      const res = await parentUnlockAction(classSlug, passwordInput);
-      if (!res.success) {
-        setGateError(res.error || "Password salah. Silakan tanyakan kepada Wali Kelas.");
+      const res = await fetch("/api/auth/unlock", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ classSlug, password: passwordInput }),
+      });
+      const data = await res.json().catch(() => null);
+
+      if (!data || !data.success) {
+        setGateError(data?.error || "Password salah. Silakan tanyakan kepada Wali Kelas.");
         return;
       }
       router.refresh();
-    } catch (err: unknown) {
-      setGateError(err instanceof Error ? err.message : "Terjadi kesalahan koneksi.");
+    } catch {
+      try {
+        const res = await parentUnlockAction(classSlug, passwordInput);
+        if (!res.success) {
+          setGateError(res.error || "Password salah. Silakan tanyakan kepada Wali Kelas.");
+          return;
+        }
+        router.refresh();
+      } catch (err: unknown) {
+        setGateError(err instanceof Error ? err.message : "Terjadi kesalahan koneksi.");
+      }
     } finally {
       setGateLoading(false);
     }
