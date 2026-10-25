@@ -211,14 +211,21 @@ export async function updateAttendanceAction(inputData: unknown) {
 
   const record = await db.query.attendanceRecords.findFirst({
     where: eq(attendanceRecords.id, recordId),
-    with: { class: true },
   });
 
-  if (!record || !record.class) {
+  if (!record) {
     return { success: false, error: "Data ketidakhadiran tidak ditemukan." };
   }
 
-  if (user.role !== "superadmin" && record.class.waliKelasId !== user.id) {
+  const targetClass = await db.query.classes.findFirst({
+    where: eq(classes.id, record.classId),
+  });
+
+  if (!targetClass) {
+    return { success: false, error: "Kelas tidak ditemukan." };
+  }
+
+  if (user.role !== "superadmin" && targetClass.waliKelasId !== user.id) {
     return { success: false, error: "Anda tidak memiliki izin mengedit data ini." };
   }
 
@@ -283,7 +290,7 @@ export async function updateAttendanceAction(inputData: unknown) {
   }
 
   revalidatePath("/dashboard");
-  revalidatePath(`/portal/${record.class.slug}`);
+  revalidatePath(`/portal/${targetClass.slug}`);
 
   return { success: true, message: "Data berhasil diperbarui." };
 }
@@ -296,14 +303,21 @@ export async function deleteAttendanceAction(recordId: number) {
 
   const record = await db.query.attendanceRecords.findFirst({
     where: eq(attendanceRecords.id, recordId),
-    with: { class: true },
   });
 
-  if (!record || !record.class) {
+  if (!record) {
     return { success: false, error: "Data tidak ditemukan." };
   }
 
-  if (user.role !== "superadmin" && record.class.waliKelasId !== user.id) {
+  const targetClass = await db.query.classes.findFirst({
+    where: eq(classes.id, record.classId),
+  });
+
+  if (!targetClass) {
+    return { success: false, error: "Kelas tidak ditemukan." };
+  }
+
+  if (user.role !== "superadmin" && targetClass.waliKelasId !== user.id) {
     return { success: false, error: "Anda tidak memiliki izin menghapus data ini." };
   }
 
@@ -317,7 +331,7 @@ export async function deleteAttendanceAction(recordId: number) {
   }
 
   revalidatePath("/dashboard");
-  revalidatePath(`/portal/${record.class.slug}`);
+  revalidatePath(`/portal/${targetClass.slug}`);
 
   return { success: true, message: "Data ketidakhadiran berhasil dihapus." };
 }

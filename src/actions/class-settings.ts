@@ -131,14 +131,21 @@ export async function updateStudentAction(studentId: number, name: string, nis?:
 
   const st = await db.query.students.findFirst({
     where: eq(students.id, studentId),
-    with: { class: true },
   });
 
-  if (!st || !st.class) {
+  if (!st) {
     return { success: false, error: "Siswa tidak ditemukan." };
   }
 
-  if (user.role !== "superadmin" && st.class.waliKelasId !== user.id) {
+  const targetClass = await db.query.classes.findFirst({
+    where: eq(classes.id, st.classId),
+  });
+
+  if (!targetClass) {
+    return { success: false, error: "Kelas tidak ditemukan." };
+  }
+
+  if (user.role !== "superadmin" && targetClass.waliKelasId !== user.id) {
     return { success: false, error: "Akses ditolak." };
   }
 
@@ -176,14 +183,21 @@ export async function toggleStudentActiveAction(studentId: number, isActive: boo
 
   const st = await db.query.students.findFirst({
     where: eq(students.id, studentId),
-    with: { class: true },
   });
 
-  if (!st || !st.class) {
+  if (!st) {
     return { success: false, error: "Siswa tidak ditemukan." };
   }
 
-  if (user.role !== "superadmin" && st.class.waliKelasId !== user.id) {
+  const targetClass = await db.query.classes.findFirst({
+    where: eq(classes.id, st.classId),
+  });
+
+  if (!targetClass) {
+    return { success: false, error: "Kelas tidak ditemukan." };
+  }
+
+  if (user.role !== "superadmin" && targetClass.waliKelasId !== user.id) {
     return { success: false, error: "Akses ditolak." };
   }
 
@@ -252,21 +266,28 @@ export async function deleteStudentAction(studentId: number) {
 
   const st = await db.query.students.findFirst({
     where: eq(students.id, studentId),
-    with: { class: true },
   });
 
-  if (!st || !st.class) {
+  if (!st) {
     return { success: false, error: "Siswa tidak ditemukan." };
   }
 
-  if (user.role !== "superadmin" && st.class.waliKelasId !== user.id) {
+  const targetClass = await db.query.classes.findFirst({
+    where: eq(classes.id, st.classId),
+  });
+
+  if (!targetClass) {
+    return { success: false, error: "Kelas tidak ditemukan." };
+  }
+
+  if (user.role !== "superadmin" && targetClass.waliKelasId !== user.id) {
     return { success: false, error: "Akses ditolak." };
   }
 
   await db.delete(students).where(eq(students.id, studentId));
 
   revalidatePath("/dashboard");
-  revalidatePath(`/portal/${st.class.slug}`);
+  revalidatePath(`/portal/${targetClass.slug}`);
   return { success: true, message: `Siswa "${st.name}" berhasil dihapus.` };
 }
 

@@ -98,10 +98,11 @@ export async function seedLegacyData() {
   });
   let erickId = existingErick?.id;
   if (!existingErick) {
+    const erickHash = await bcrypt.hash("feelgood6969", 10);
     const [res] = await db.insert(users).values({
       username: "erick",
       displayName: "Erick S.Kom (Wali Kelas)",
-      passwordHash: "$2a$12$opludV2bdqxOT.Lx/Jh2dONQjIpS9XQJNr0/skP652rg/zLdA8.9W",
+      passwordHash: erickHash,
       role: "wali_kelas",
       isActive: true,
     });

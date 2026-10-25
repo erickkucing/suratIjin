@@ -93,6 +93,19 @@ describe("Rate Limiter (Anti Brute-Force)", () => {
     });
     expect(await getClientIp(reqWithRealIp)).toBe("198.51.100.4");
 
+    const reqWithCf = new Request("http://localhost:3000", {
+      headers: {
+        "cf-connecting-ip": "198.51.100.99",
+        "x-forwarded-for": "10.0.0.1",
+      },
+    });
+    expect(await getClientIp(reqWithCf)).toBe("198.51.100.99");
+
+    const reqWithMaliciousIp = new Request("http://localhost:3000", {
+      headers: { "x-forwarded-for": "malicious_script_injection_payload" },
+    });
+    expect(await getClientIp(reqWithMaliciousIp)).toBe("127.0.0.1");
+
     const reqEmpty = new Request("http://localhost:3000");
     expect(await getClientIp(reqEmpty)).toBe("127.0.0.1");
   });

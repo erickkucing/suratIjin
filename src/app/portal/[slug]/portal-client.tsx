@@ -112,6 +112,9 @@ export function PortalClient({
               <img
                 src={logoUrl}
                 alt="Logo Sekolah"
+                width={40}
+                height={40}
+                fetchPriority="high"
                 className="w-9 h-9 sm:w-10 sm:h-10 object-contain shrink-0"
               />
             ) : (
@@ -243,6 +246,9 @@ export function PortalClient({
               <img
                 src={logoUrl}
                 alt="Logo Sekolah"
+                width={40}
+                height={40}
+                fetchPriority="high"
                 className="w-9 h-9 sm:w-10 sm:h-10 object-contain shrink-0"
               />
             ) : (

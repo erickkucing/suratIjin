@@ -28,6 +28,14 @@ if (typeof setInterval !== "undefined") {
 /**
  * Extracts client IP from Next.js Request, Headers, or Next headers()
  */
+function sanitizeIp(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (trimmed.length > 0 && trimmed.length <= 45 && /^[a-fA-F0-9:.]+$/.test(trimmed)) {
+    return trimmed;
+  }
+  return null;
+}
+
 export async function getClientIp(requestOrHeaders?: Request | Headers | null): Promise<string> {
   let headerObj: Headers | null = null;
 
@@ -44,17 +52,26 @@ export async function getClientIp(requestOrHeaders?: Request | Headers | null): 
   }
 
   if (headerObj) {
-    const xForwardedFor = headerObj.get("x-forwarded-for");
-    if (xForwardedFor) {
-      const firstIp = xForwardedFor.split(",")[0]?.trim();
-      if (firstIp) return firstIp;
+    const cfConnectingIp = headerObj.get("cf-connecting-ip");
+    if (cfConnectingIp) {
+      const sanitized = sanitizeIp(cfConnectingIp);
+      if (sanitized) return sanitized;
     }
 
     const xRealIp = headerObj.get("x-real-ip");
-    if (xRealIp?.trim()) return xRealIp.trim();
+    if (xRealIp) {
+      const sanitized = sanitizeIp(xRealIp);
+      if (sanitized) return sanitized;
+    }
 
-    const cfConnectingIp = headerObj.get("cf-connecting-ip");
-    if (cfConnectingIp?.trim()) return cfConnectingIp.trim();
+    const xForwardedFor = headerObj.get("x-forwarded-for");
+    if (xForwardedFor) {
+      const firstIp = xForwardedFor.split(",")[0];
+      if (firstIp) {
+        const sanitized = sanitizeIp(firstIp);
+        if (sanitized) return sanitized;
+      }
+    }
   }
 
   return "127.0.0.1";

@@ -312,7 +312,13 @@ export function ParentPortalSettingsModal({
             <div className="flex flex-col sm:flex-row items-center gap-4 pt-2">
               {qrCodeDataUrl && (
                 <div className="p-2 bg-white rounded-lg border border-[var(--border)] shadow-xs shrink-0">
-                  <img src={qrCodeDataUrl} alt="QR Code Portal Wali Murid" className="w-28 h-28" />
+                  <img
+                    src={qrCodeDataUrl}
+                    alt="QR Code Portal Wali Murid"
+                    width={112}
+                    height={112}
+                    className="w-28 h-28"
+                  />
                 </div>
               )}
               <div className="flex-1 space-y-2 w-full">

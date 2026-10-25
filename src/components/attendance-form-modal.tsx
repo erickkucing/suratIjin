@@ -616,6 +616,8 @@ export function AttendanceFormModal({
                     <img
                       src={filePreviewUrl}
                       alt="Pratinjau Surat"
+                      width={56}
+                      height={56}
                       className="w-14 h-14 object-cover rounded-md border border-[var(--border)]"
                     />
                   ) : (

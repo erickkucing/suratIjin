@@ -76,10 +76,14 @@ export async function GET(
           if (!isAuthorized) {
             const record = await db.query.attendanceRecords.findFirst({
               where: eq(attendanceRecords.letterFilePath, relativePath),
-              with: { class: true },
             });
-            if (record?.class && record.class.waliKelasId === user.id) {
-              isAuthorized = true;
+            if (record) {
+              const cls = await db.query.classes.findFirst({
+                where: eq(classes.id, record.classId),
+              });
+              if (cls && cls.waliKelasId === user.id) {
+                isAuthorized = true;
+              }
             }
           }
         }
@@ -91,24 +95,26 @@ export async function GET(
       // Find class associated with this file path in attendance_records
       const record = await db.query.attendanceRecords.findFirst({
         where: eq(attendanceRecords.letterFilePath, relativePath),
-        with: {
-          class: true,
-        },
       });
 
-      if (record && record.class) {
-        // Check if class allows parents to view letter file
-        if (!record.class.parentShowLetterFile) {
-          return new NextResponse(
-            "Akses file surat dibatasi oleh Wali Kelas demi privasi siswa.",
-            { status: 403 }
-          );
-        }
+      if (record) {
+        const cls = await db.query.classes.findFirst({
+          where: eq(classes.id, record.classId),
+        });
+        if (cls) {
+          // Check if class allows parents to view letter file
+          if (!cls.parentShowLetterFile) {
+            return new NextResponse(
+              "Akses file surat dibatasi oleh Wali Kelas demi privasi siswa.",
+              { status: 403 }
+            );
+          }
 
-        // Check if parent has valid session cookie
-        const parentValid = await checkParentAccess(record.class.slug);
-        if (parentValid) {
-          isAuthorized = true;
+          // Check if parent has valid session cookie
+          const parentValid = await checkParentAccess(cls.slug);
+          if (parentValid) {
+            isAuthorized = true;
+          }
         }
       } else if (relativePath.startsWith("legacy/")) {
         // Legacy sample letter is permitted if parent has valid access to xii-tkj-2

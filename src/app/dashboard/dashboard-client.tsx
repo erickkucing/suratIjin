@@ -99,8 +99,20 @@ export function DashboardClient({
 
   const handleDelete = async (record: AttendanceRecordWithStudent) => {
     if (confirm(`Yakin ingin menghapus catatan ketidakhadiran ${record.studentName} pada ${record.attendanceDate}?`)) {
-      await deleteAttendanceAction(record.id);
-      router.refresh();
+      try {
+        const res = await deleteAttendanceAction(record.id);
+        if (res.success) {
+          setData((prev) => ({
+            ...prev,
+            records: prev.records.filter((r) => r.id !== record.id),
+          }));
+        } else {
+          alert(res.error || "Gagal menghapus data ketidakhadiran.");
+        }
+        router.refresh();
+      } catch (err) {
+        console.error("Gagal menghapus data ketidakhadiran:", err);
+      }
     }
   };
 
@@ -172,6 +184,9 @@ export function DashboardClient({
               <img
                 src={logoUrl}
                 alt="Logo Sekolah"
+                width={40}
+                height={40}
+                fetchPriority="high"
                 className="w-9 h-9 sm:w-10 sm:h-10 object-contain shrink-0"
               />
             ) : (

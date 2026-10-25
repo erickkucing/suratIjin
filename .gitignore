@@ -23,4 +23,6 @@ Thumbs.db
 # Test artifacts & generated exports
 Rekap_Kehadiran_*.pdf
 Rekap_Kehadiran_*.xlsx
+test-results/
+playwright-report/
 

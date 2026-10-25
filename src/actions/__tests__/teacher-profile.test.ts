@@ -26,7 +26,7 @@ describe("Wali Kelas Self Profile & Account Settings", () => {
     const [classRes] = await db.insert(classes).values({
       name: "Kelas Uji Coba Profil",
       slug: `uji-profil-${Date.now()}`,
-      teacherId: testUserId,
+      waliKelasId: testUserId,
       isActive: true,
     });
     testClassId = classRes.insertId;

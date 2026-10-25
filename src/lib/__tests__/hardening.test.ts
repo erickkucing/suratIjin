@@ -8,6 +8,7 @@ describe("Hardening & Security Verification", () => {
       const headersConfig = await nextConfig.headers();
       const rootHeaders = headersConfig.find((h: { source: string }) => h.source === "/:path*");
       expect(rootHeaders).toBeDefined();
+      if (!rootHeaders) return;
 
       const headersMap = new Map(rootHeaders.headers.map((h: { key: string; value: string }) => [h.key, h.value]));
       expect(headersMap.get("X-Frame-Options")).toBe("SAMEORIGIN");

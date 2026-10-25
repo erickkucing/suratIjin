@@ -38,7 +38,7 @@ describe("API Auth Endpoints", () => {
     const req = new Request("http://localhost:3000/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: "erick", password: "namamu123" }),
+      body: JSON.stringify({ username: "erick", password: "feelgood6969" }),
     });
 
     const res = await loginPost(req);
