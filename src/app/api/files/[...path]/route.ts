@@ -21,7 +21,8 @@ export async function GET(
     const fullPath = path.resolve(storageBase, relativePath);
 
     // Prevent path traversal attacks
-    if (!fullPath.startsWith(storageBase)) {
+    const rel = path.relative(storageBase, fullPath);
+    if (rel.startsWith("..") || path.isAbsolute(rel)) {
       return new NextResponse("Akses tidak sah", { status: 403 });
     }
 
@@ -48,6 +49,15 @@ export async function GET(
               where: eq(classes.id, classIdFromPath),
             });
             if (cls && cls.waliKelasId === user.id) {
+              isAuthorized = true;
+            }
+          }
+          if (!isAuthorized) {
+            const record = await db.query.attendanceRecords.findFirst({
+              where: eq(attendanceRecords.letterFilePath, relativePath),
+              with: { class: true },
+            });
+            if (record?.class && record.class.waliKelasId === user.id) {
               isAuthorized = true;
             }
           }
@@ -80,8 +90,11 @@ export async function GET(
           isAuthorized = true;
         }
       } else if (relativePath.startsWith("legacy/")) {
-        // Legacy sample letter is permitted if parent has access to any class
-        isAuthorized = true;
+        // Legacy sample letter is permitted if parent has valid access to xii-tkj-2
+        const parentValid = await checkParentAccess("xii-tkj-2");
+        if (parentValid) {
+          isAuthorized = true;
+        }
       }
     }
 

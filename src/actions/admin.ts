@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { db } from "@/db";
 import { users, classes } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and, ne } from "drizzle-orm";
 import { getCurrentUser, hashPassword } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 
@@ -158,6 +158,14 @@ export async function updateClassAction(
 
   if (!existing) {
     return { success: false, error: "Kelas tidak ditemukan." };
+  }
+
+  const duplicateSlug = await db.query.classes.findFirst({
+    where: and(eq(classes.slug, slug.trim()), ne(classes.id, classId)),
+  });
+
+  if (duplicateSlug) {
+    return { success: false, error: "Slug kelas sudah digunakan oleh kelas lain." };
   }
 
   await db

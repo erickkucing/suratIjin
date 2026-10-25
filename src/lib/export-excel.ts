@@ -190,3 +190,103 @@ export async function exportAttendanceExcel({
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+
+export interface ExportRosterParams {
+  classNameTitle: string;
+  academicYear?: string;
+  studentsList: Student[];
+}
+
+export async function exportStudentRosterExcel({
+  classNameTitle,
+  academicYear = "2026/2027",
+  studentsList,
+}: ExportRosterParams) {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Sistem Surat Izin & Ketidakhadiran Siswa";
+  workbook.created = new Date();
+
+  const sheet = workbook.addWorksheet("Daftar Siswa");
+
+  sheet.mergeCells("A1:D1");
+  const titleCell = sheet.getCell("A1");
+  titleCell.value = `DAFTAR SISWA KELAS ${classNameTitle.toUpperCase()}`;
+  titleCell.font = { name: "Arial", size: 14, bold: true, color: { argb: "FF1F6F54" } };
+  titleCell.alignment = { horizontal: "center", vertical: "middle" };
+  sheet.getRow(1).height = 25;
+
+  sheet.mergeCells("A2:D2");
+  const subCell = sheet.getCell("A2");
+  subCell.value = `Tahun Ajaran: ${academicYear} | Total: ${studentsList.length} Siswa`;
+  subCell.font = { name: "Arial", size: 10, italic: true };
+  subCell.alignment = { horizontal: "center", vertical: "middle" };
+  sheet.getRow(2).height = 18;
+
+  sheet.addRow([]);
+
+  const headerRow = sheet.addRow(["No", "NIS", "Nama Lengkap Siswa", "Status"]);
+  headerRow.height = 24;
+
+  headerRow.eachCell((cell) => {
+    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF1F6F54" },
+    };
+    cell.alignment = { horizontal: "center", vertical: "middle" };
+    cell.border = {
+      top: { style: "thin" },
+      left: { style: "thin" },
+      bottom: { style: "thin" },
+      right: { style: "thin" },
+    };
+  });
+
+  studentsList.forEach((st, idx) => {
+    const row = sheet.addRow([
+      idx + 1,
+      st.nis || "-",
+      st.name,
+      st.isActive ? "Aktif" : "Diarsipkan",
+    ]);
+
+    row.getCell(1).alignment = { horizontal: "center" };
+    row.getCell(2).alignment = { horizontal: "center" };
+    row.getCell(4).alignment = { horizontal: "center" };
+
+    if (!st.isActive) {
+      row.getCell(4).font = { color: { argb: "FF982613" }, italic: true };
+    }
+
+    row.eachCell((cell) => {
+      cell.border = {
+        top: { style: "thin", color: { argb: "FFE5DDCB" } },
+        left: { style: "thin", color: { argb: "FFE5DDCB" } },
+        bottom: { style: "thin", color: { argb: "FFE5DDCB" } },
+        right: { style: "thin", color: { argb: "FFE5DDCB" } },
+      };
+    });
+  });
+
+  sheet.columns = [
+    { width: 8 },  // No
+    { width: 16 }, // NIS
+    { width: 38 }, // Nama
+    { width: 16 }, // Status
+  ];
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `Daftar_Siswa_${classNameTitle.replace(/\s+/g, "_")}_${Date.now()}.xlsx`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+

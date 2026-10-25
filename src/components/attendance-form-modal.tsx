@@ -5,6 +5,7 @@ import { X, Camera, Upload, CheckCircle2, AlertCircle, Calendar, User, FileText,
 import { Student } from "@/db/schema";
 import { AttendanceRecordWithStudent } from "@/db/queries";
 import { processFileBeforeUpload, CompressionResult } from "@/lib/client-image-compress";
+import { getLocalDateString, getDaysDifference } from "@/lib/date-utils";
 import { createAttendanceAction, updateAttendanceAction } from "@/actions/attendance";
 
 interface AttendanceFormModalProps {
@@ -27,7 +28,7 @@ export function AttendanceFormModal({
   const [studentId, setStudentId] = useState<number>(0);
   const [studentSearch, setStudentSearch] = useState("");
   const [isMultiDay, setIsMultiDay] = useState(false);
-  const [startDate, setStartDate] = useState(new Date().toISOString().split("T")[0]);
+  const [startDate, setStartDate] = useState(getLocalDateString());
   const [endDate, setEndDate] = useState("");
   const [status, setStatus] = useState<"Izin" | "Sakit" | "Alpa">("Izin");
   const [infoSource, setInfoSource] = useState("Orang tua");
@@ -74,7 +75,7 @@ export function AttendanceFormModal({
       setStudentId(studentsList[0]?.id || 0);
       setStudentSearch("");
       setIsMultiDay(false);
-      setStartDate(new Date().toISOString().split("T")[0]);
+      setStartDate(getLocalDateString());
       setEndDate("");
       setStatus("Izin");
       setInfoSource("Orang tua");
@@ -134,10 +135,7 @@ export function AttendanceFormModal({
 
   const calculateDays = () => {
     if (!isMultiDay || !endDate || endDate < startDate) return 1;
-    const d1 = new Date(startDate);
-    const d2 = new Date(endDate);
-    const diff = Math.round((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-    return Math.min(Math.max(1, diff), 14);
+    return getDaysDifference(startDate, endDate);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

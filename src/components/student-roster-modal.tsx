@@ -1,14 +1,32 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { X, Users, Plus, Upload, Edit2, Check, Archive, Loader2, AlertCircle } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import {
+  X,
+  Users,
+  Plus,
+  Upload,
+  Edit2,
+  Check,
+  Archive,
+  Trash2,
+  FileSpreadsheet,
+  FileUp,
+  Loader2,
+  AlertCircle,
+  Download,
+} from "lucide-react";
 import { Student } from "@/db/schema";
 import {
   addStudentAction,
   updateStudentAction,
   toggleStudentActiveAction,
+  deleteStudentAction,
   bulkAddStudentsAction,
+  bulkImportStudentsAction,
 } from "@/actions/class-settings";
+import { exportStudentRosterExcel } from "@/lib/export-excel";
+import ExcelJS from "exceljs";
 
 interface StudentRosterModalProps {
   isOpen: boolean;
@@ -34,8 +52,11 @@ export function StudentRosterModal({
   const [newName, setNewName] = useState("");
   const [newNis, setNewNis] = useState("");
 
-  // Bulk Add
+  // Bulk Add (Text / Excel)
+  const [bulkMode, setBulkMode] = useState<"file" | "text">("file");
   const [bulkText, setBulkText] = useState("");
+  const [excelStudents, setExcelStudents] = useState<{ name: string; nis?: string }[]>([]);
+  const [excelFileName, setExcelFileName] = useState<string | null>(null);
 
   // Edit Single
   const [editingStudentId, setEditingStudentId] = useState<number | null>(null);
@@ -45,6 +66,8 @@ export function StudentRosterModal({
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ text: string; isError: boolean } | null>(null);
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     if (isOpen) {
       setActiveTab("list");
@@ -52,6 +75,8 @@ export function StudentRosterModal({
       setNewName("");
       setNewNis("");
       setBulkText("");
+      setExcelStudents([]);
+      setExcelFileName(null);
       setEditingStudentId(null);
       setMessage(null);
     }
@@ -96,7 +121,7 @@ export function StudentRosterModal({
     }
   };
 
-  const handleBulkAdd = async (e: React.FormEvent) => {
+  const handleBulkTextAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     const names = bulkText
       .split(/[\r\n,]+/)
@@ -120,6 +145,135 @@ export function StudentRosterModal({
     } catch (err: unknown) {
       setMessage({
         text: err instanceof Error ? err.message : "Gagal impor siswa.",
+        isError: true,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleExcelFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setLoading(true);
+    setMessage(null);
+    setExcelFileName(file.name);
+
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(buffer);
+
+      const worksheet = workbook.worksheets[0];
+      if (!worksheet) {
+        throw new Error("File Excel tidak memiliki lembar kerja (worksheet).");
+      }
+
+      let nameColIdx = -1;
+      let nisColIdx = -1;
+      let headerRowIdx = -1;
+
+      // Scan first 5 rows for header row
+      worksheet.eachRow((row, rowNumber) => {
+        if (rowNumber <= 5 && nameColIdx === -1) {
+          row.eachCell((cell, colNumber) => {
+            const val = String(cell.value || "").toLowerCase().trim();
+            if (val.includes("nama") || val.includes("name") || val.includes("siswa")) {
+              nameColIdx = colNumber;
+              headerRowIdx = rowNumber;
+            }
+            if (val.includes("nis") || val.includes("induk")) {
+              nisColIdx = colNumber;
+            }
+          });
+        }
+      });
+
+      const extracted: { name: string; nis?: string }[] = [];
+
+      worksheet.eachRow((row, rowNumber) => {
+        if (headerRowIdx !== -1 && rowNumber <= headerRowIdx) {
+          return; // Skip header
+        }
+
+        let name = "";
+        let nis = "";
+
+        if (nameColIdx !== -1) {
+          name = String(row.getCell(nameColIdx).value || "").trim();
+          if (nisColIdx !== -1) {
+            nis = String(row.getCell(nisColIdx).value || "").trim();
+          }
+        } else {
+          // If no recognized header, inspect first non-empty text cells
+          const cells: string[] = [];
+          row.eachCell((cell) => {
+            const v = String(cell.value || "").trim();
+            if (v) cells.push(v);
+          });
+
+          if (cells.length === 1) {
+            name = cells[0];
+          } else if (cells.length >= 2) {
+            // If first cell looks like a number/NIS and second looks like name
+            if (/^\d+$/.test(cells[0]) && cells[0].length >= 3 && isNaN(Number(cells[1]))) {
+              nis = cells[0];
+              name = cells[1];
+            } else if (isNaN(Number(cells[0]))) {
+              name = cells[0];
+              if (/^\d+$/.test(cells[1])) nis = cells[1];
+            } else if (cells.length >= 3 && isNaN(Number(cells[2]))) {
+              // Col 1 = No, Col 2 = NIS, Col 3 = Nama
+              nis = cells[1];
+              name = cells[2];
+            }
+          }
+        }
+
+        // Clean name
+        name = name.replace(/^(\d+[\.\)]\s*)+/, "").trim();
+        if (name.length >= 2 && !name.toLowerCase().startsWith("no") && !name.toLowerCase().startsWith("nama")) {
+          extracted.push({ name, nis: nis || undefined });
+        }
+      });
+
+      if (extracted.length === 0) {
+        throw new Error("Tidak dapat menemukan daftar nama siswa dari file Excel tersebut.");
+      }
+
+      setExcelStudents(extracted);
+      setMessage({
+        text: `Berhasil memindai ${extracted.length} siswa dari "${file.name}". Klik "Impor Siswa Sekarang" untuk menyimpan.`,
+        isError: false,
+      });
+    } catch (err: unknown) {
+      console.error("Excel parse error:", err);
+      setMessage({
+        text: err instanceof Error ? err.message : "Gagal membaca file Excel.",
+        isError: true,
+      });
+      setExcelStudents([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConfirmExcelImport = async () => {
+    if (excelStudents.length === 0) return;
+    setLoading(true);
+    setMessage(null);
+    try {
+      const res = await bulkImportStudentsAction(classId, excelStudents);
+      if (!res.success) throw new Error(res.error);
+      setMessage({ text: res.message || "Data siswa berhasil diimpor.", isError: false });
+      setExcelStudents([]);
+      setExcelFileName(null);
+      onSuccess();
+      setActiveTab("list");
+    } catch (err: unknown) {
+      setMessage({
+        text: err instanceof Error ? err.message : "Gagal mengimpor siswa.",
         isError: true,
       });
     } finally {
@@ -158,6 +312,39 @@ export function StudentRosterModal({
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteStudent = async (student: Student) => {
+    if (confirm(`Yakin ingin menghapus siswa "${student.name}" secara permanen? Data ketidakhadiran terkait juga akan terhapus.`)) {
+      setLoading(true);
+      try {
+        const res = await deleteStudentAction(student.id);
+        if (!res.success) throw new Error(res.error);
+        setMessage({ text: res.message || "Siswa berhasil dihapus.", isError: false });
+        onSuccess();
+      } catch (err: unknown) {
+        setMessage({
+          text: err instanceof Error ? err.message : "Gagal menghapus siswa.",
+          isError: true,
+        });
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  const handleExportRoster = async () => {
+    try {
+      await exportStudentRosterExcel({
+        classNameTitle,
+        studentsList,
+      });
+    } catch (err: unknown) {
+      setMessage({
+        text: err instanceof Error ? err.message : "Gagal mengunduh Excel daftar siswa.",
+        isError: true,
+      });
     }
   };
 
@@ -235,7 +422,7 @@ export function StudentRosterModal({
                 : "border-transparent text-[var(--ink-muted)] hover:text-[var(--ink)]"
             }`}
           >
-            Impor Massal (Excel/Teks)
+            Impor Massal (Excel / Teks)
           </button>
         </div>
 
@@ -256,13 +443,24 @@ export function StudentRosterModal({
           {/* TAB 1: LIST */}
           {activeTab === "list" && (
             <div className="space-y-3">
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Cari nama atau NIS siswa..."
-                className="w-full px-3.5 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] placeholder:text-[var(--ink-subtle)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--board)]"
-              />
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Cari nama atau NIS siswa..."
+                  className="flex-1 px-3.5 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] placeholder:text-[var(--ink-subtle)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--board)]"
+                />
+                <button
+                  type="button"
+                  onClick={handleExportRoster}
+                  className="touch-target inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-xs font-semibold text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--board)] shrink-0"
+                  title="Unduh Daftar Siswa ke Excel (.xlsx)"
+                >
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                  <span className="hidden sm:inline">Export Excel</span>
+                </button>
+              </div>
 
               <div className="border border-[var(--border)] rounded-xl divide-y divide-[var(--border)] overflow-hidden">
                 {filteredStudents.length === 0 ? (
@@ -275,7 +473,11 @@ export function StudentRosterModal({
                     return (
                       <div
                         key={st.id}
-                        className="flex items-center justify-between p-3 bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] transition-colors"
+                        className={`flex items-center justify-between p-3 transition-colors ${
+                          st.isActive
+                            ? "bg-[var(--surface)] hover:bg-[var(--canvas-subtle)]"
+                            : "bg-amber-50/50 dark:bg-amber-950/20 opacity-75"
+                        }`}
                       >
                         {isEditing ? (
                           <div className="flex-1 flex items-center gap-2 mr-2">
@@ -318,6 +520,11 @@ export function StudentRosterModal({
                             <div>
                               <p className="text-sm font-semibold text-[var(--ink)]">
                                 {st.name}
+                                {!st.isActive && (
+                                  <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 font-normal">
+                                    Diarsipkan
+                                  </span>
+                                )}
                               </p>
                               {st.nis && (
                                 <p className="text-xs text-[var(--ink-muted)]">NIS: {st.nis}</p>
@@ -337,16 +544,27 @@ export function StudentRosterModal({
                               }}
                               className="touch-target p-1.5 text-[var(--ink-muted)] hover:text-[var(--board)] rounded"
                               title="Edit Nama/NIS"
+                              aria-label={`Edit ${st.name}`}
                             >
                               <Edit2 className="w-4 h-4" />
                             </button>
                             <button
                               type="button"
                               onClick={() => handleToggleArchive(st)}
-                              className="touch-target p-1.5 text-[var(--ink-muted)] hover:text-red-500 rounded"
+                              className="touch-target p-1.5 text-[var(--ink-muted)] hover:text-amber-600 rounded"
                               title={st.isActive ? "Arsipkan Siswa" : "Aktifkan Siswa"}
+                              aria-label={st.isActive ? `Arsipkan ${st.name}` : `Aktifkan ${st.name}`}
                             >
                               <Archive className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteStudent(st)}
+                              className="touch-target p-1.5 text-[var(--ink-muted)] hover:text-red-600 rounded"
+                              title="Hapus Siswa Permanen"
+                              aria-label={`Hapus ${st.name}`}
+                            >
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
                         )}
@@ -401,37 +619,129 @@ export function StudentRosterModal({
             </form>
           )}
 
-          {/* TAB 3: BULK IMPORT */}
+          {/* TAB 3: BULK IMPORT (EXCEL / TEXT) */}
           {activeTab === "bulk" && (
-            <form onSubmit={handleBulkAdd} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-[var(--ink-muted)] mb-1">
-                  Tempel Daftar Nama Siswa (1 Nama per Baris)
-                </label>
-                <textarea
-                  rows={8}
-                  value={bulkText}
-                  onChange={(e) => setBulkText(e.target.value)}
-                  placeholder="Ahmad Dahlan&#10;Budi Santoso&#10;Citra Lestari&#10;Dedi Kurniawan"
-                  className="w-full px-3.5 py-2.5 text-sm font-mono rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--board)]"
-                  required
-                />
-                <p className="mt-1 text-xs text-[var(--ink-muted)]">
-                  Anda dapat menyalin kolom nama langsung dari Microsoft Excel atau Google Sheets.
-                </p>
-              </div>
-
-              <div className="flex justify-end pt-2">
+            <div className="space-y-4">
+              {/* Mode switch */}
+              <div className="flex items-center gap-2 border-b border-[var(--border)] pb-2">
                 <button
-                  type="submit"
-                  disabled={loading}
-                  className="touch-target flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--board)] text-white hover:bg-[var(--board-hover)] text-sm font-semibold shadow-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--board)] disabled:opacity-50"
+                  type="button"
+                  onClick={() => setBulkMode("file")}
+                  className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors ${
+                    bulkMode === "file"
+                      ? "bg-[var(--board)] text-white"
+                      : "bg-[var(--canvas-subtle)] text-[var(--ink-muted)] hover:text-[var(--ink)]"
+                  }`}
                 >
-                  {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                  <span>Impor Semua Siswa</span>
+                  Unggah File Excel (.xlsx)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBulkMode("text")}
+                  className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors ${
+                    bulkMode === "text"
+                      ? "bg-[var(--board)] text-white"
+                      : "bg-[var(--canvas-subtle)] text-[var(--ink-muted)] hover:text-[var(--ink)]"
+                  }`}
+                >
+                  Tempel Salinan Teks
                 </button>
               </div>
-            </form>
+
+              {bulkMode === "file" ? (
+                <div className="space-y-4">
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className="border-2 border-dashed border-[var(--border)] hover:border-[var(--board)] rounded-xl p-6 text-center cursor-pointer bg-[var(--canvas-subtle)] hover:bg-[var(--surface)] transition-all"
+                  >
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".xlsx,.xls,.csv"
+                      onChange={handleExcelFileChange}
+                      className="hidden"
+                    />
+                    <FileUp className="w-10 h-10 mx-auto text-[var(--board)] mb-2" />
+                    <p className="text-sm font-bold text-[var(--ink)]">
+                      {excelFileName ? excelFileName : "Pilih File Excel Siswa (.xlsx)"}
+                    </p>
+                    <p className="text-xs text-[var(--ink-muted)] mt-1">
+                      Mendukung kolom Nama Siswa dan NIS otomatis
+                    </p>
+                  </div>
+
+                  {excelStudents.length > 0 && (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold uppercase tracking-wider text-[var(--board)]">
+                          Pratinjau: {excelStudents.length} Siswa Siap Diimpor
+                        </span>
+                      </div>
+                      <div className="border border-[var(--border)] rounded-xl max-h-48 overflow-y-auto divide-y divide-[var(--border)] bg-[var(--surface)]">
+                        {excelStudents.slice(0, 10).map((st, i) => (
+                          <div key={i} className="px-3 py-2 text-xs flex items-center justify-between">
+                            <span className="font-semibold text-[var(--ink)]">
+                              {i + 1}. {st.name}
+                            </span>
+                            {st.nis && (
+                              <span className="text-[var(--ink-muted)] font-mono">NIS: {st.nis}</span>
+                            )}
+                          </div>
+                        ))}
+                        {excelStudents.length > 10 && (
+                          <div className="px-3 py-2 text-xs text-center text-[var(--ink-muted)] italic bg-[var(--canvas-subtle)]">
+                            ... dan {excelStudents.length - 10} siswa lainnya
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex justify-end pt-2">
+                        <button
+                          type="button"
+                          onClick={handleConfirmExcelImport}
+                          disabled={loading}
+                          className="touch-target flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--board)] text-white hover:bg-[var(--board-hover)] text-sm font-semibold shadow-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--board)] disabled:opacity-50"
+                        >
+                          {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                          <FileSpreadsheet className="w-4 h-4" />
+                          <span>Simpan {excelStudents.length} Siswa ke Kelas</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <form onSubmit={handleBulkTextAdd} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-[var(--ink-muted)] mb-1">
+                      Tempel Daftar Nama Siswa (1 Nama per Baris)
+                    </label>
+                    <textarea
+                      rows={8}
+                      value={bulkText}
+                      onChange={(e) => setBulkText(e.target.value)}
+                      placeholder="Ahmad Dahlan&#10;Budi Santoso&#10;Citra Lestari&#10;Dedi Kurniawan"
+                      className="w-full px-3.5 py-2.5 text-sm font-mono rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--board)]"
+                      required
+                    />
+                    <p className="mt-1 text-xs text-[var(--ink-muted)]">
+                      Anda dapat menyalin kolom nama langsung dari Microsoft Excel atau Google Sheets.
+                    </p>
+                  </div>
+
+                  <div className="flex justify-end pt-2">
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="touch-target flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--board)] text-white hover:bg-[var(--board-hover)] text-sm font-semibold shadow-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--board)] disabled:opacity-50"
+                    >
+                      {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                      <span>Impor Semua Siswa</span>
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
           )}
         </div>
       </div>

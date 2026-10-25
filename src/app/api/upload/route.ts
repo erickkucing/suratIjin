@@ -58,6 +58,9 @@ export async function POST(request: NextRequest) {
     let finalPath: string;
 
     if (isPdf) {
+      if (buffer.length < 5 || buffer.subarray(0, 5).toString() !== "%PDF-") {
+        return NextResponse.json({ error: "File PDF tidak valid atau rusak." }, { status: 400 });
+      }
       fileName = `${timestamp}_${randomSuffix}.pdf`;
       finalPath = path.join(dirPath, fileName);
       fs.writeFileSync(finalPath, buffer);

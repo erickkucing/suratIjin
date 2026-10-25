@@ -3,13 +3,39 @@
 import { z } from "zod";
 import { db } from "@/db";
 import { attendanceRecords, classes, students } from "@/db/schema";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, ne, sql } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import path from "path";
 import fs from "fs";
 
 import { generateDateRange } from "@/lib/date-utils";
+
+/**
+ * Helper to safely delete an unused letter file from disk
+ * with path traversal containment checks.
+ */
+async function safeDeleteUnusedLetter(filePath: string | null | undefined) {
+  if (!filePath || filePath.startsWith("legacy/")) return;
+
+  const otherReference = await db.query.attendanceRecords.findFirst({
+    where: eq(attendanceRecords.letterFilePath, filePath),
+  });
+
+  if (!otherReference) {
+    const storageBase = path.resolve(process.env.STORAGE_PATH || "./storage/uploads");
+    const fullPath = path.resolve(storageBase, filePath);
+    const rel = path.relative(storageBase, fullPath);
+
+    if (!rel.startsWith("..") && !path.isAbsolute(rel) && fs.existsSync(fullPath)) {
+      try {
+        fs.unlinkSync(fullPath);
+      } catch (e) {
+        console.warn("Failed to delete unused letter file:", e);
+      }
+    }
+  }
+}
 
 const createAttendanceSchema = z.object({
   classId: z.coerce.number().positive(),
@@ -101,6 +127,7 @@ export async function createAttendanceAction(inputData: unknown) {
     });
 
     if (existing) {
+      const oldPath = existing.letterFilePath;
       // Update existing record
       await db
         .update(attendanceRecords)
@@ -114,6 +141,10 @@ export async function createAttendanceAction(inputData: unknown) {
           updatedAt: new Date(),
         })
         .where(eq(attendanceRecords.id, existing.id));
+
+      if (oldPath && oldPath !== finalFilePath) {
+        await safeDeleteUnusedLetter(oldPath);
+      }
     } else {
       await db.insert(attendanceRecords).values({
         classId,
@@ -191,6 +222,32 @@ export async function updateAttendanceAction(inputData: unknown) {
     return { success: false, error: "Anda tidak memiliki izin mengedit data ini." };
   }
 
+  // Verify student belongs to this record's class
+  const student = await db.query.students.findFirst({
+    where: and(eq(students.id, studentId), eq(students.classId, record.classId)),
+  });
+
+  if (!student) {
+    return { success: false, error: "Siswa tidak ditemukan dalam kelas ini." };
+  }
+
+  // Prevent duplicate records for the same student on the same date
+  const duplicate = await db.query.attendanceRecords.findFirst({
+    where: and(
+      eq(attendanceRecords.classId, record.classId),
+      eq(attendanceRecords.studentId, studentId),
+      eq(attendanceRecords.attendanceDate, attendanceDate),
+      ne(attendanceRecords.id, recordId)
+    ),
+  });
+
+  if (duplicate) {
+    return {
+      success: false,
+      error: "Catatan ketidakhadiran untuk siswa ini pada tanggal tersebut sudah ada.",
+    };
+  }
+
   let finalLetterStatus = letterStatus;
   let finalFilePath = letterFilePath;
   let finalMimeType = letterMimeType;
@@ -202,6 +259,8 @@ export async function updateAttendanceAction(inputData: unknown) {
   } else if (!finalFilePath) {
     finalLetterStatus = "Belum";
   }
+
+  const oldFilePath = record.letterFilePath;
 
   await db
     .update(attendanceRecords)
@@ -217,6 +276,11 @@ export async function updateAttendanceAction(inputData: unknown) {
       updatedAt: new Date(),
     })
     .where(eq(attendanceRecords.id, recordId));
+
+  // If file changed or was removed, clean up old file if not referenced elsewhere
+  if (oldFilePath && oldFilePath !== finalFilePath) {
+    await safeDeleteUnusedLetter(oldFilePath);
+  }
 
   revalidatePath("/dashboard");
   revalidatePath(`/portal/${record.class.slug}`);
@@ -248,22 +312,8 @@ export async function deleteAttendanceAction(recordId: number) {
   await db.delete(attendanceRecords).where(eq(attendanceRecords.id, recordId));
 
   // If there was a file, check if any other record is referencing it before removing
-  if (oldFilePath && !oldFilePath.startsWith("legacy/")) {
-    const otherReference = await db.query.attendanceRecords.findFirst({
-      where: eq(attendanceRecords.letterFilePath, oldFilePath),
-    });
-
-    if (!otherReference) {
-      const storageBase = path.resolve(process.env.STORAGE_PATH || "./storage/uploads");
-      const fullPath = path.resolve(storageBase, oldFilePath);
-      if (fs.existsSync(fullPath)) {
-        try {
-          fs.unlinkSync(fullPath);
-        } catch (e) {
-          console.warn("Failed to delete unused letter file:", e);
-        }
-      }
-    }
+  if (oldFilePath) {
+    await safeDeleteUnusedLetter(oldFilePath);
   }
 
   revalidatePath("/dashboard");

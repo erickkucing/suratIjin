@@ -197,3 +197,81 @@ export async function bulkAddStudentsAction(classId: number, names: string[]) {
   revalidatePath("/dashboard");
   return { success: true, message: `Berhasil menambahkan ${count} siswa baru.` };
 }
+
+export async function deleteStudentAction(studentId: number) {
+  const user = await getCurrentUser();
+  if (!user) {
+    return { success: false, error: "Sesi telah berakhir." };
+  }
+
+  const st = await db.query.students.findFirst({
+    where: eq(students.id, studentId),
+    with: { class: true },
+  });
+
+  if (!st || !st.class) {
+    return { success: false, error: "Siswa tidak ditemukan." };
+  }
+
+  if (user.role !== "superadmin" && st.class.waliKelasId !== user.id) {
+    return { success: false, error: "Akses ditolak." };
+  }
+
+  await db.delete(students).where(eq(students.id, studentId));
+
+  revalidatePath("/dashboard");
+  revalidatePath(`/portal/${st.class.slug}`);
+  return { success: true, message: `Siswa "${st.name}" berhasil dihapus.` };
+}
+
+export async function bulkImportStudentsAction(
+  classId: number,
+  items: { name: string; nis?: string }[]
+) {
+  const user = await getCurrentUser();
+  if (!user) {
+    return { success: false, error: "Sesi telah berakhir." };
+  }
+
+  const cls = await db.query.classes.findFirst({
+    where: eq(classes.id, classId),
+  });
+
+  if (!cls) {
+    return { success: false, error: "Kelas tidak ditemukan." };
+  }
+
+  if (user.role !== "superadmin" && cls.waliKelasId !== user.id) {
+    return { success: false, error: "Akses ditolak." };
+  }
+
+  let count = 0;
+  for (const item of items) {
+    const trimmedName = item.name.trim();
+    const trimmedNis = item.nis ? item.nis.trim() : null;
+    if (trimmedName.length > 0) {
+      const existing = await db.query.students.findFirst({
+        where: and(eq(students.classId, classId), eq(students.name, trimmedName)),
+      });
+      if (!existing) {
+        await db.insert(students).values({
+          classId,
+          name: trimmedName,
+          nis: trimmedNis || null,
+          isActive: true,
+        });
+        count++;
+      } else if (trimmedNis && !existing.nis) {
+        await db
+          .update(students)
+          .set({ nis: trimmedNis })
+          .where(eq(students.id, existing.id));
+      }
+    }
+  }
+
+  revalidatePath("/dashboard");
+  revalidatePath(`/portal/${cls.slug}`);
+  return { success: true, message: `Berhasil mengimpor ${count} siswa baru.` };
+}
+
