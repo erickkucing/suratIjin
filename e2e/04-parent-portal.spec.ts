@@ -1,5 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { db } from "@/db";
+import { classes } from "@/db/schema";
+import { eq } from "drizzle-orm";
 
 test.describe("04. Parent Portal Workflow", () => {
   let CLASS_SLUG = "eqf";
@@ -8,6 +10,12 @@ test.describe("04. Parent Portal Workflow", () => {
     const cls = await db.query.classes.findFirst();
     if (cls) {
       CLASS_SLUG = cls.slug;
+      if (!cls.parentPasswordHash) {
+        await db
+          .update(classes)
+          .set({ parentPasswordHash: "$2b$10$UbE2l7RTO8tui0wEFfUhkOggyVqCm1WsrJ6dvShvKN7s3T98CL4cu" })
+          .where(eq(classes.id, cls.id));
+      }
     }
   });
 

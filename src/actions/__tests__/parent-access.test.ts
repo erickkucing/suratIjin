@@ -49,10 +49,11 @@ describe("Parent Portal Password Control", () => {
     const isValid = await verifyPassword(newPass, clsAfter!.parentPasswordHash!);
     expect(isValid).toBe(true);
 
-    // Always restore original hash (even if null)
+    // Always restore original hash (or valid default test hash)
+    const restoreHash = originalHash || "$2b$10$UbE2l7RTO8tui0wEFfUhkOggyVqCm1WsrJ6dvShvKN7s3T98CL4cu";
     await db
       .update(classes)
-      .set({ parentPasswordHash: originalHash })
+      .set({ parentPasswordHash: restoreHash })
       .where(eq(classes.id, classId));
   });
 

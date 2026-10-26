@@ -39,6 +39,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
+  viewportFit: "cover",
   colorScheme: "light dark",
   themeColor: "#B54826",
 };
@@ -69,6 +70,8 @@ export default async function RootLayout({
                 font-family: var(--font-jakarta), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
                 background-color: #FBF7F2;
                 color: #231F1E;
+                overflow-x: hidden;
+                max-width: 100%;
               }
               html.dark, html.dark body {
                 background-color: #181514;

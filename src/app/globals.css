@@ -151,6 +151,13 @@
     --primary-light: #4C0519;
   }
 
+  html,
+  body {
+    overflow-x: hidden;
+    max-width: 100%;
+    position: relative;
+  }
+
   body {
     background-color: var(--canvas);
     color: var(--ink);
@@ -158,6 +165,15 @@
     min-height: 100vh;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Prevent iOS Safari auto-zoom on input focus while keeping desktop design */
+  @media (max-width: 767px) {
+    input:not([type="checkbox"]):not([type="radio"]),
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
   }
 
   h1, h2, h3, h4, h5, h6, .font-heading {
