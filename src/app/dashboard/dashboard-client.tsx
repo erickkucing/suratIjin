@@ -976,16 +976,16 @@ export function DashboardClient({
 
           <section className="card-paper p-5 rounded-2xl space-y-3">
             <div className="flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <Award className="w-5 h-5 text-amber-600 shrink-0" />
+              <div className="flex items-center gap-2.5">
+                <Award className="w-5 h-5 text-amber-600 shrink-0" />
+                <div>
                   <h3 className="text-base font-bold font-heading text-[var(--ink)]">
                     Kehadiran 100%
                   </h3>
+                  <p className="text-xs text-[var(--ink-muted)]">
+                    {dynamicMetrics.students100Percent.length} dari {data.totalClassStudents} siswa
+                  </p>
                 </div>
-                <p className="text-xs text-[var(--ink-muted)]">
-                  {dynamicMetrics.students100Percent.length} dari {data.totalClassStudents} siswa
-                </p>
               </div>
             </div>
 

@@ -3,6 +3,8 @@ import { POST as loginPost } from "../login/route";
 import { POST as unlockPost } from "../unlock/route";
 import { _clearRateLimitStoreForTesting } from "@/lib/rate-limiter";
 import { db } from "@/db";
+import { classes } from "@/db/schema";
+import { eq } from "drizzle-orm";
 
 describe("API Auth Endpoints", () => {
   beforeEach(() => {
@@ -124,6 +126,13 @@ describe("API Auth Endpoints", () => {
   it("should block parent unlock after 5 failed attempts with HTTP 429", async () => {
     const cls = await db.query.classes.findFirst();
     const testSlug = cls?.slug || "xii-tkj-2";
+
+    if (cls && !cls.parentPasswordHash) {
+      await db
+        .update(classes)
+        .set({ parentPasswordHash: "$2b$10$UbE2l7RTO8tui0wEFfUhkOggyVqCm1WsrJ6dvShvKN7s3T98CL4cu" })
+        .where(eq(classes.id, cls.id));
+    }
 
     const headers = {
       "Content-Type": "application/json",

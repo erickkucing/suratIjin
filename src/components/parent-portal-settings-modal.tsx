@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { X, Lock, Unlock, Share2, Eye, EyeOff, Copy, Check, MessageSquare, Loader2, RotateCcw, AlertCircle, RefreshCw } from "lucide-react";
 import QRCode from "qrcode";
 import { ClassItem } from "@/db/schema";
@@ -82,6 +82,9 @@ export function ParentPortalSettingsModal({
   const [copiedWa, setCopiedWa] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ text: string; isError: boolean } | null>(null);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const [savedPassNotice, setSavedPassNotice] = useState<string | null>(null);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const { sheetRef, sheetStyle, touchHandlers } = useBottomSheetGesture({
     isOpen,
@@ -90,9 +93,56 @@ export function ParentPortalSettingsModal({
 
   const isCurrentAuto = isAutoPeriod(periodTitle, academicYear);
 
+  const saveSettings = async (patch: Partial<{
+    name: string;
+    requirePassword: boolean;
+    newPassword: string;
+    parentShowLetterFile: boolean;
+    periodTitle: string;
+    academicYear: string;
+  }>) => {
+    setSaveStatus("saving");
+    setMessage(null);
+    try {
+      const payload = {
+        classId: classInfo.id,
+        name: patch.name !== undefined ? patch.name.trim() : className.trim(),
+        requirePassword: patch.requirePassword !== undefined ? patch.requirePassword : requirePassword,
+        newPassword: patch.newPassword !== undefined ? patch.newPassword.trim() : undefined,
+        parentShowLetterFile: patch.parentShowLetterFile !== undefined ? patch.parentShowLetterFile : allowViewPhoto,
+        periodTitle: patch.periodTitle !== undefined ? patch.periodTitle.trim() : periodTitle.trim(),
+        academicYear: patch.academicYear !== undefined ? patch.academicYear.trim() : academicYear.trim(),
+      };
+
+      const res = await updateParentAccessAction(payload);
+      if (!res.success) throw new Error(res.error);
+
+      if (patch.name) classInfo.name = patch.name;
+      if (patch.parentShowLetterFile !== undefined) classInfo.parentShowLetterFile = patch.parentShowLetterFile;
+      if (patch.requirePassword === false) classInfo.parentPasswordHash = null;
+      if (patch.newPassword) {
+        classInfo.parentPasswordHash = "updated";
+        setSavedPassNotice("Kata sandi berhasil disimpan ✓");
+        setTimeout(() => setSavedPassNotice(null), 3000);
+      }
+
+      setSaveStatus("saved");
+      onSuccess();
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = setTimeout(() => setSaveStatus("idle"), 2500);
+    } catch (err: unknown) {
+      setSaveStatus("idle");
+      setMessage({
+        text: err instanceof Error ? err.message : "Gagal menyimpan perubahan.",
+        isError: true,
+      });
+    }
+  };
+
   const handleApplyAuto = () => {
     setPeriodTitle(autoPeriod.periodTitle);
     setAcademicYear(autoPeriod.academicYear);
+    saveSettings({ periodTitle: autoPeriod.periodTitle, academicYear: autoPeriod.academicYear });
   };
 
   const portalUrl = typeof window !== "undefined"
@@ -283,9 +333,23 @@ export function ParentPortalSettingsModal({
               <Share2 className="w-5 h-5" />
             </div>
             <div>
-              <h2 id="portal-settings-title" className="text-base sm:text-lg font-bold font-heading">
-                Pengaturan Kelas &amp; Portal
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 id="portal-settings-title" className="text-base sm:text-lg font-bold font-heading">
+                  Pengaturan Kelas &amp; Portal
+                </h2>
+                {saveStatus === "saving" && (
+                  <span className="inline-flex items-center gap-1 text-[11px] text-[var(--ink-muted)]">
+                    <Loader2 className="w-3 h-3 animate-spin text-[var(--primary)]" />
+                    <span>Menyimpan...</span>
+                  </span>
+                )}
+                {saveStatus === "saved" && (
+                  <span className="inline-flex items-center gap-1 text-[11px] text-[var(--status-success-fg)] font-medium">
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Tersimpan</span>
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-[var(--ink-muted)]">
                 Kelas: {classInfo.name} ({classInfo.slug})
               </p>
@@ -433,7 +497,7 @@ export function ParentPortalSettingsModal({
           </div>
 
           {/* Form Settings */}
-          <form onSubmit={handleSaveSettings} className="space-y-4">
+          <div className="space-y-4">
             {/* Class Name Edit by Wali Kelas */}
             <div className="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] space-y-2">
               <label htmlFor="class-name-input" className="block text-xs font-semibold text-[var(--ink)]">
@@ -444,12 +508,20 @@ export function ParentPortalSettingsModal({
                 type="text"
                 value={className}
                 onChange={(e) => setClassName(e.target.value)}
+                onBlur={() => {
+                  if (className.trim() && className.trim() !== classInfo.name) {
+                    saveSettings({ name: className.trim() });
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                }}
                 placeholder="Contoh: XII TKJ 2"
                 required
                 className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
               />
               <p className="text-[11px] text-[var(--ink-muted)]">
-                Wali Kelas dapat mengganti nama kelas ini kapan saja. Tautan portal tetap <code className="font-mono text-[11px] px-1 py-0.5 rounded bg-[var(--canvas-subtle)]">/portal/{currentSlug}</code> agar QR Code dan tautan wali murid tidak rusak.
+                Wali Kelas dapat mengganti nama kelas ini kapan saja (tersimpan otomatis). Tautan portal tetap <code className="font-mono text-[11px] px-1 py-0.5 rounded bg-[var(--canvas-subtle)]">/portal/{currentSlug}</code> agar QR Code dan tautan wali murid tidak rusak.
               </p>
             </div>
 
@@ -480,7 +552,15 @@ export function ParentPortalSettingsModal({
                 type="button"
                 role="switch"
                 aria-checked={requirePassword}
-                onClick={() => setRequirePassword(!requirePassword)}
+                onClick={() => {
+                  const nextVal = !requirePassword;
+                  setRequirePassword(nextVal);
+                  if (!nextVal) {
+                    saveSettings({ requirePassword: false });
+                  } else if (classInfo.parentPasswordHash) {
+                    saveSettings({ requirePassword: true });
+                  }
+                }}
                 className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] ${
                   requirePassword ? "bg-[var(--primary)]" : "bg-gray-300 dark:bg-gray-700"
                 }`}
@@ -493,76 +573,74 @@ export function ParentPortalSettingsModal({
               </button>
             </div>
 
-            {/* Password input when enabled */}
+            {/* Password input when enabled with inline save */}
             {requirePassword && (
               <div className="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--canvas-subtle)] space-y-2">
-                <label htmlFor="parent-pass" className="block text-xs font-semibold text-[var(--ink)]">
-                  {classInfo.parentPasswordHash ? "Ganti Kata Sandi Akses (Opsional)" : "Tentukan Kata Sandi Baru (Wajib)"}
-                </label>
-                <div className="relative">
-                  <input
-                    id="parent-pass"
-                    type={showPassword ? "text" : "password"}
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder={
-                      classInfo.parentPasswordHash
-                        ? "Kosongkan jika tetap memakai password sebelumnya"
-                        : "Ketik kata sandi akses baru..."
-                    }
-                    className="w-full pl-3.5 pr-10 py-2.5 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
-                  />
+                <div className="flex items-center justify-between">
+                  <label htmlFor="parent-pass" className="block text-xs font-semibold text-[var(--ink)]">
+                    {classInfo.parentPasswordHash ? "Ganti Kata Sandi Akses" : "Tentukan Kata Sandi Akses"}
+                  </label>
+                  {savedPassNotice && (
+                    <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                      {savedPassNotice}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      id="parent-pass"
+                      type={showPassword ? "text" : "password"}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          if (newPassword.trim().length >= 4) {
+                            saveSettings({ requirePassword: true, newPassword: newPassword.trim() });
+                            setNewPassword("");
+                          } else {
+                            setMessage({ text: "Kata sandi minimal 4 karakter.", isError: true });
+                          }
+                        }
+                      }}
+                      placeholder={
+                        classInfo.parentPasswordHash
+                          ? "Ketik untuk ganti kata sandi..."
+                          : "Ketik kata sandi akses baru..."
+                      }
+                      className="w-full pl-3.5 pr-10 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="touch-target absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-[var(--ink-muted)] hover:text-[var(--ink)]"
+                      title={showPassword ? "Sembunyikan password" : "Lihat password"}
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                   <button
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="touch-target absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-[var(--ink-muted)] hover:text-[var(--ink)]"
-                    title={showPassword ? "Sembunyikan password" : "Lihat password"}
+                    onClick={() => {
+                      if (newPassword.trim().length >= 4) {
+                        saveSettings({ requirePassword: true, newPassword: newPassword.trim() });
+                        setNewPassword("");
+                      } else {
+                        setMessage({ text: "Kata sandi minimal 4 karakter.", isError: true });
+                      }
+                    }}
+                    disabled={!newPassword.trim() || newPassword.trim().length < 4 || saveStatus === "saving"}
+                    className="touch-target px-3.5 py-2 rounded-lg bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] text-xs font-semibold shadow-xs disabled:opacity-40 disabled:cursor-not-allowed shrink-0 transition-colors"
                   >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    Simpan Sandi
                   </button>
                 </div>
                 <p className="text-[11px] text-[var(--ink-subtle)]">
-                  Bagikan kata sandi ini kepada wali murid saat membagikan tautan portal.
+                  {classInfo.parentPasswordHash
+                    ? "Status: Kata sandi aktif. Ketik sandi baru lalu klik 'Simpan Sandi' untuk memperbarui."
+                    : "Wali murid wajib memasukkan kata sandi ini untuk mengakses papan presensi."}
                 </p>
-
-                {(newPassword.length > 0 || !classInfo.parentPasswordHash) && (
-                  <div className="space-y-1 pt-2 border-t border-[var(--border)]">
-                    <label htmlFor="parent-pass-confirm" className="block text-xs font-semibold text-[var(--ink)]">
-                      Ulangi Kata Sandi Akses
-                    </label>
-                    <div className="relative">
-                      <input
-                        id="parent-pass-confirm"
-                        type={showConfirmPassword ? "text" : "password"}
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        placeholder="Ketik ulang kata sandi akses..."
-                        className="w-full pl-3.5 pr-10 py-2.5 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                        className="touch-target absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-[var(--ink-muted)] hover:text-[var(--ink)]"
-                        title={showConfirmPassword ? "Sembunyikan password" : "Lihat password"}
-                      >
-                        {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                    {confirmPassword.length > 0 && (
-                      <div className="mt-1">
-                        {newPassword === confirmPassword ? (
-                          <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
-                            <Check className="w-3.5 h-3.5" /> Password cocok
-                          </span>
-                        ) : (
-                          <span className="text-[11px] text-red-500 font-semibold flex items-center gap-1">
-                            <AlertCircle className="w-3.5 h-3.5" /> Password belum cocok
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
             )}
 
@@ -580,7 +658,11 @@ export function ParentPortalSettingsModal({
                 type="button"
                 role="switch"
                 aria-checked={allowViewPhoto}
-                onClick={() => setAllowViewPhoto(!allowViewPhoto)}
+                onClick={() => {
+                  const nextVal = !allowViewPhoto;
+                  setAllowViewPhoto(nextVal);
+                  saveSettings({ parentShowLetterFile: nextVal });
+                }}
                 className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] ${
                   allowViewPhoto ? "bg-[var(--primary)]" : "bg-gray-300 dark:bg-gray-700"
                 }`}
@@ -628,6 +710,14 @@ export function ParentPortalSettingsModal({
                     type="text"
                     value={periodTitle}
                     onChange={(e) => setPeriodTitle(e.target.value)}
+                    onBlur={() => {
+                      if (periodTitle.trim()) {
+                        saveSettings({ periodTitle: periodTitle.trim() });
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                    }}
                     placeholder={autoPeriod.periodTitle}
                     className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
                     required
@@ -643,6 +733,14 @@ export function ParentPortalSettingsModal({
                     type="text"
                     value={academicYear}
                     onChange={(e) => setAcademicYear(e.target.value)}
+                    onBlur={() => {
+                      if (academicYear.trim()) {
+                        saveSettings({ academicYear: academicYear.trim() });
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                    }}
                     placeholder={autoPeriod.academicYear}
                     className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
                     required
@@ -651,39 +749,10 @@ export function ParentPortalSettingsModal({
               </div>
 
               <p className="text-[11px] text-[var(--ink-muted)] leading-relaxed">
-                Semester Ganjil dihitung otomatis Juli s/d Desember, Semester Genap Januari s/d Juni. Tahun ajaran dihitung Juli hingga Juni tahun berikutnya. Anda tetap dapat mengedit kedua kolom di atas secara manual kapan saja.
+                Semester Ganjil dihitung otomatis Juli s/d Desember, Semester Genap Januari s/d Juni. Tahun ajaran dihitung Juli hingga Juni tahun berikutnya. Anda tetap dapat mengedit kedua kolom di atas secara manual kapan saja (tersimpan otomatis).
               </p>
             </div>
-
-            {/* Submit */}
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-[var(--border)]">
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={loading}
-                className="touch-target px-4 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-sm font-semibold text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
-              >
-                Tutup
-              </button>
-              <button
-                type="submit"
-                disabled={
-                  loading ||
-                  !className.trim() ||
-                  (requirePassword &&
-                    !classInfo.parentPasswordHash &&
-                    (!newPassword.trim() || newPassword !== confirmPassword)) ||
-                  (requirePassword &&
-                    Boolean(newPassword) &&
-                    newPassword !== confirmPassword)
-                }
-                className="touch-target flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] text-sm font-semibold shadow-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] disabled:opacity-50 transition-colors"
-              >
-                {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                <span>Simpan Pengaturan</span>
-              </button>
-            </div>
-          </form>
+          </div>
         </div>
       </div>
     </div>

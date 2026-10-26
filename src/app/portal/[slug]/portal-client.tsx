@@ -14,6 +14,7 @@ import {
   Loader2,
   FileCheck2,
   FileX2,
+  FileDown,
 } from "lucide-react";
 import { DashboardData, AttendanceRecordWithStudent } from "@/db/queries";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -22,6 +23,7 @@ import { MonthlyBarChart } from "@/components/monthly-bar-chart";
 import { LetterLightboxModal } from "@/components/letter-lightbox-modal";
 import { parentUnlockAction } from "@/actions/auth";
 import { computeDynamicDashboardMetrics } from "@/lib/attendance-stats";
+import { exportAttendancePdf } from "@/lib/export-pdf";
 
 interface PortalClientProps {
   isUnlocked: boolean;
@@ -57,6 +59,20 @@ export function PortalClient({
 
   const [lightboxRecord, setLightboxRecord] = useState<AttendanceRecordWithStudent | null>(null);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+
+  const dateRangeLabel = useMemo(() => {
+    if (filterDateStart && filterDateEnd) {
+      return `${filterDateStart} s/d ${filterDateEnd}`;
+    }
+    if (filterDateStart) {
+      return `Mulai ${filterDateStart}`;
+    }
+    if (filterDateEnd) {
+      return `Sampai ${filterDateEnd}`;
+    }
+    return "Seluruh Catatan Semester";
+  }, [filterDateStart, filterDateEnd]);
 
   const dynamicMetrics = useMemo(() => {
     if (!data) return null;
@@ -237,11 +253,31 @@ export function PortalClient({
 
   const allowsLetterPhoto = data.classInfo.parentShowLetterFile;
 
+  const handleExportPdf = async () => {
+    if (!data || !dynamicMetrics) return;
+    setIsExportingPdf(true);
+    try {
+      await exportAttendancePdf({
+        classInfo: data.classInfo,
+        teacherName: teacherName,
+        records: displayedRecords,
+        students100Percent: dynamicMetrics.students100Percent,
+        studentRecap: displayedStudentRecap,
+        dateRangeLabel,
+        logoUrl,
+      });
+    } catch (err) {
+      console.error("Gagal export PDF:", err);
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-[var(--canvas)] text-[var(--ink)] pb-12">
-      <header className="px-4 sm:px-6 py-4 border-b border-[var(--border)] bg-[var(--surface)] shadow-xs">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
+      <header className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-[var(--border)] bg-[var(--surface)] shadow-xs">
+        <div className="max-w-6xl mx-auto flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
             {logoUrl ? (
               <img
                 src={logoUrl}
@@ -249,31 +285,33 @@ export function PortalClient({
                 width={40}
                 height={40}
                 fetchPriority="high"
-                className="w-9 h-9 sm:w-10 sm:h-10 object-contain shrink-0"
+                className="w-10 h-10 object-contain shrink-0"
               />
             ) : (
-              <div className="p-2.5 rounded-xl bg-[var(--primary-light)] text-[var(--primary)] shadow-xs flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-[var(--primary-light)] text-[var(--primary)] shadow-xs flex items-center justify-center shrink-0">
                 <School className="w-5 h-5" />
               </div>
             )}
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h1 className="text-base sm:text-lg font-bold font-heading text-[var(--ink)]">
-                  Papan Presensi Kelas {data.classInfo.name}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                <h1 className="text-base sm:text-lg font-bold font-heading text-[var(--ink)] truncate">
+                  Kelas {data.classInfo.name}
                 </h1>
-                <span className="text-xs px-2.5 py-0.5 rounded-full bg-[var(--primary-light)] text-[var(--primary)] font-semibold shrink-0">
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-[var(--primary-light)] text-[var(--primary)] font-semibold shrink-0">
                   {data.classInfo.periodTitle}
                 </span>
               </div>
-              <p className="text-xs font-semibold text-[var(--ink)] whitespace-nowrap truncate max-w-[200px] sm:max-w-md">
+              <p className="text-xs font-semibold text-[var(--ink)] truncate mt-0.5">
                 {teacherName}
               </p>
-              <p className="text-[11px] text-[var(--ink-muted)] leading-tight">
+              <p className="text-[11px] text-[var(--ink-muted)] leading-tight mt-0.5 truncate">
                 {data.totalClassStudents} Siswa &bull; {data.classInfo.academicYear}
               </p>
             </div>
           </div>
-          <ThemeToggle />
+          <div className="shrink-0">
+            <ThemeToggle />
+          </div>
         </div>
       </header>
 
@@ -417,36 +455,53 @@ export function PortalClient({
               </span>
             </div>
 
-            <div
-              role="tablist"
-              aria-label="Mode tampilan tabel"
-              className="inline-flex p-1 rounded-xl bg-[var(--surface)] border border-[var(--border)] self-start sm:self-center"
-            >
+            <div className="flex items-center gap-2 self-start sm:self-center flex-wrap">
+              <div
+                role="tablist"
+                aria-label="Mode tampilan tabel"
+                className="inline-flex p-1 rounded-xl bg-[var(--surface)] border border-[var(--border)]"
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={viewMode === "harian"}
+                  onClick={() => setViewMode("harian")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                    viewMode === "harian"
+                      ? "bg-[var(--primary)] text-white shadow-xs"
+                      : "text-[var(--ink-muted)] hover:text-[var(--ink)]"
+                  }`}
+                >
+                  Riwayat Harian ({displayedRecords.length})
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={viewMode === "rapor"}
+                  onClick={() => setViewMode("rapor")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                    viewMode === "rapor"
+                      ? "bg-[var(--primary)] text-white shadow-xs"
+                      : "text-[var(--ink-muted)] hover:text-[var(--ink)]"
+                  }`}
+                >
+                  Rekap Per Siswa ({displayedStudentRecap.length})
+                </button>
+              </div>
+
               <button
                 type="button"
-                role="tab"
-                aria-selected={viewMode === "harian"}
-                onClick={() => setViewMode("harian")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                  viewMode === "harian"
-                    ? "bg-[var(--primary)] text-white shadow-xs"
-                    : "text-[var(--ink-muted)] hover:text-[var(--ink)]"
-                }`}
+                onClick={handleExportPdf}
+                disabled={isExportingPdf}
+                className="touch-target inline-flex items-center gap-1.5 px-3 py-1.5 sm:py-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-xs font-semibold text-[var(--ink)] shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                title="Unduh laporan kehadiran format PDF"
               >
-                Riwayat Harian ({displayedRecords.length})
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={viewMode === "rapor"}
-                onClick={() => setViewMode("rapor")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                  viewMode === "rapor"
-                    ? "bg-[var(--primary)] text-white shadow-xs"
-                    : "text-[var(--ink-muted)] hover:text-[var(--ink)]"
-                }`}
-              >
-                Rekap Per Siswa ({displayedStudentRecap.length})
+                {isExportingPdf ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-[var(--primary)]" />
+                ) : (
+                  <FileDown className="w-4 h-4 text-[var(--primary)]" />
+                )}
+                <span>Export PDF</span>
               </button>
             </div>
           </div>
@@ -787,16 +842,16 @@ export function PortalClient({
 
           <section className="card-paper p-5 rounded-2xl space-y-3">
             <div className="flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <Award className="w-5 h-5 text-amber-600 shrink-0" />
+              <div className="flex items-center gap-2.5">
+                <Award className="w-5 h-5 text-amber-600 shrink-0" />
+                <div>
                   <h3 className="text-base font-bold font-heading text-[var(--ink)]">
                     Kehadiran 100%
                   </h3>
+                  <p className="text-xs text-[var(--ink-muted)]">
+                    {dynamicMetrics.students100Percent.length} dari {data.totalClassStudents} siswa
+                  </p>
                 </div>
-                <p className="text-xs text-[var(--ink-muted)]">
-                  {dynamicMetrics.students100Percent.length} dari {data.totalClassStudents} siswa
-                </p>
               </div>
             </div>
 
