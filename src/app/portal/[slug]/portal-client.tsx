@@ -8,7 +8,6 @@ import {
   Lock,
   ArrowRight,
   Eye,
-  Award,
   Search,
   AlertCircle,
   Loader2,
@@ -140,7 +139,7 @@ export function PortalClient({
               </div>
               <h2 className="text-xl font-bold font-heading text-[var(--ink)]">Akses Kelas {classNameTitle}</h2>
               <p className="mt-1 text-xs text-[var(--ink-muted)]">
-                Tahun Ajaran {academicYear} &bull; Wali Kelas: {teacherName}
+                Tahun Ajaran {academicYear} &bull; {teacherName}
               </p>
             </div>
 
@@ -256,17 +255,20 @@ export function PortalClient({
                 <School className="w-5 h-5" />
               </div>
             )}
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h1 className="text-base sm:text-lg font-bold font-heading text-[var(--ink)]">
                   Papan Presensi Kelas {data.classInfo.name}
                 </h1>
-                <span className="text-xs px-2.5 py-0.5 rounded-full bg-[var(--primary-light)] text-[var(--primary)] font-semibold">
+                <span className="text-xs px-2.5 py-0.5 rounded-full bg-[var(--primary-light)] text-[var(--primary)] font-semibold shrink-0">
                   {data.classInfo.periodTitle}
                 </span>
               </div>
-              <p className="text-xs text-[var(--ink-muted)]">
-                Wali Kelas: {teacherName} &bull; Tahun Ajaran: {data.classInfo.academicYear}
+              <p className="text-xs font-semibold text-[var(--ink)] whitespace-nowrap truncate max-w-[200px] sm:max-w-md">
+                {teacherName}
+              </p>
+              <p className="text-[11px] text-[var(--ink-muted)] leading-tight">
+                {data.totalClassStudents} Siswa &bull; {data.classInfo.academicYear}
               </p>
             </div>
           </div>
@@ -700,8 +702,8 @@ export function PortalClient({
                           </td>
                           <td className="px-4 py-3 text-center font-bold">
                             {st.totalAbsences === 0 ? (
-                              <span className="px-2.5 py-0.5 rounded-full bg-[var(--status-success-bg)] text-[var(--status-success-fg)] text-[11px]">
-                                100% Hadir
+                              <span className="px-2.5 py-0.5 rounded-full bg-[var(--status-success-bg)] text-[var(--status-success-fg)] text-[11px] whitespace-nowrap">
+                                100%
                               </span>
                             ) : (
                               <span>{st.totalAbsences} Hari</span>
@@ -737,8 +739,8 @@ export function PortalClient({
                         <p className="text-xs text-[var(--ink-muted)]">NIS: {st.nis || "-"}</p>
                       </div>
                       {st.totalAbsences === 0 ? (
-                        <span className="px-2.5 py-0.5 rounded-full bg-[var(--status-success-bg)] text-[var(--status-success-fg)] text-xs font-bold">
-                          100% Hadir
+                        <span className="px-2.5 py-0.5 rounded-full bg-[var(--status-success-bg)] text-[var(--status-success-fg)] text-xs font-bold whitespace-nowrap">
+                          100%
                         </span>
                       ) : (
                         <span className="px-2.5 py-0.5 rounded-full bg-[var(--canvas-subtle)] text-[var(--ink)] text-xs font-bold border border-[var(--border)]">
@@ -785,19 +787,13 @@ export function PortalClient({
           <section className="card-paper p-5 rounded-2xl space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <div className="flex items-center gap-2">
-                  <Award className="w-5 h-5 text-amber-600" />
-                  <h3 className="text-base font-bold font-heading text-[var(--ink)]">
-                    Apresiasi Kehadiran 100%
-                  </h3>
-                </div>
+                <h3 className="text-base font-bold font-heading text-[var(--ink)]">
+                  Kehadiran 100%
+                </h3>
                 <p className="text-xs text-[var(--ink-muted)]">
-                  Siswa dengan rekor kehadiran sempurna ({dynamicMetrics.students100Percent.length} dari {data.totalClassStudents} siswa)
+                  {dynamicMetrics.students100Percent.length} dari {data.totalClassStudents} siswa
                 </p>
               </div>
-              <span className="text-xs px-2.5 py-1 rounded-full bg-[var(--status-apresiasi-bg)] text-[var(--status-apresiasi-fg)] border border-[var(--status-apresiasi-border)] font-bold">
-                Hadir 100%
-              </span>
             </div>
 
             <div className="border border-[var(--border)] rounded-xl max-h-72 overflow-y-auto divide-y divide-[var(--border)]">
@@ -811,14 +807,14 @@ export function PortalClient({
                     key={s.id}
                     className="flex items-center justify-between p-3 bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] transition-colors"
                   >
-                    <div className="flex items-center gap-2.5">
-                      <span className="text-xs font-mono font-bold text-[var(--primary)] w-6 text-right">
+                    <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                      <span className="text-xs font-mono font-bold text-[var(--primary)] w-6 text-right shrink-0">
                         {idx + 1}.
                       </span>
-                      <p className="text-xs font-bold text-[var(--ink)]">{s.name}</p>
+                      <p className="text-xs font-bold text-[var(--ink)] truncate">{s.name}</p>
                     </div>
-                    <span className="text-[11px] px-2 py-0.5 rounded-md bg-[var(--primary-light)] text-[var(--primary)] font-semibold">
-                      Sempurna
+                    <span className="text-xs px-2 py-0.5 rounded-md bg-[var(--primary-light)] text-[var(--primary)] font-semibold shrink-0 whitespace-nowrap">
+                      100%
                     </span>
                   </div>
                 ))

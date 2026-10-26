@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { X, Lock, Unlock, Share2, Eye, EyeOff, Copy, Check, MessageSquare, Loader2, Sparkles, RotateCcw, AlertCircle, RefreshCw } from "lucide-react";
+import { X, Lock, Unlock, Share2, Eye, EyeOff, Copy, Check, MessageSquare, Loader2, RotateCcw, AlertCircle, RefreshCw } from "lucide-react";
 import QRCode from "qrcode";
 import { ClassItem } from "@/db/schema";
 import { updateParentAccessAction, regenerateClassSlugAction } from "@/actions/class-settings";
@@ -596,7 +596,7 @@ export function ParentPortalSettingsModal({
                     className="touch-target inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-[var(--primary-light)] text-[var(--primary)] hover:bg-[var(--primary)] hover:text-white transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
                     title={`Gunakan periode otomatis saat ini (${autoPeriod.periodTitle} ${autoPeriod.academicYear})`}
                   >
-                    <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
+                    <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
                     <span>Set Otomatis ({autoPeriod.periodTitle})</span>
                   </button>
                 )}

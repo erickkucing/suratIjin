@@ -16,7 +16,6 @@ import {
   Eye,
   Edit2,
   Trash2,
-  Award,
   ChevronDown,
   RefreshCw,
   UserCheck,
@@ -198,7 +197,7 @@ export function DashboardClient({
                 <School className="w-5 h-5" />
               </div>
             )}
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
                 {classesList.length > 1 ? (
                   <div className="relative inline-block">
@@ -225,8 +224,11 @@ export function DashboardClient({
                   {data.classInfo.periodTitle}
                 </span>
               </div>
-              <p className="text-xs text-[var(--ink-muted)]">
-                Wali Kelas: {teacherDisplayName} | {data.totalClassStudents} Siswa
+              <p className="text-xs font-semibold text-[var(--ink)] whitespace-nowrap truncate max-w-[200px] sm:max-w-md">
+                {teacherDisplayName}
+              </p>
+              <p className="text-[11px] text-[var(--ink-muted)] leading-tight">
+                {data.totalClassStudents} Siswa
               </p>
             </div>
           </div>
@@ -889,8 +891,8 @@ export function DashboardClient({
                           </td>
                           <td className="px-4 py-3 text-center font-bold">
                             {st.totalAbsences === 0 ? (
-                              <span className="px-2.5 py-0.5 rounded-full bg-[var(--status-success-bg)] text-[var(--status-success-fg)] text-[11px]">
-                                100% Hadir
+                              <span className="px-2.5 py-0.5 rounded-full bg-[var(--status-success-bg)] text-[var(--status-success-fg)] text-[11px] whitespace-nowrap">
+                                100%
                               </span>
                             ) : (
                               <span>{st.totalAbsences} Hari</span>
@@ -926,8 +928,8 @@ export function DashboardClient({
                         <p className="text-xs text-[var(--ink-muted)]">NIS: {st.nis || "-"}</p>
                       </div>
                       {st.totalAbsences === 0 ? (
-                        <span className="px-2.5 py-0.5 rounded-full bg-[var(--status-success-bg)] text-[var(--status-success-fg)] text-xs font-bold">
-                          100% Hadir
+                        <span className="px-2.5 py-0.5 rounded-full bg-[var(--status-success-bg)] text-[var(--status-success-fg)] text-xs font-bold whitespace-nowrap">
+                          100%
                         </span>
                       ) : (
                         <span className="px-2.5 py-0.5 rounded-full bg-[var(--canvas-subtle)] text-[var(--ink)] text-xs font-bold border border-[var(--border)]">
@@ -974,19 +976,13 @@ export function DashboardClient({
           <section className="card-paper p-5 rounded-2xl space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <div className="flex items-center gap-2">
-                  <Award className="w-5 h-5 text-amber-600" />
-                  <h3 className="text-base font-bold font-heading text-[var(--ink)]">
-                    Apresiasi Kehadiran 100%
-                  </h3>
-                </div>
+                <h3 className="text-base font-bold font-heading text-[var(--ink)]">
+                  Kehadiran 100%
+                </h3>
                 <p className="text-xs text-[var(--ink-muted)]">
-                  Siswa tanpa ketidakhadiran ({dynamicMetrics.students100Percent.length} dari {data.totalClassStudents} siswa)
+                  {dynamicMetrics.students100Percent.length} dari {data.totalClassStudents} siswa
                 </p>
               </div>
-              <span className="text-xs px-2.5 py-1 rounded-full bg-[var(--status-apresiasi-bg)] text-[var(--status-apresiasi-fg)] border border-[var(--status-apresiasi-border)] font-bold">
-                Prestasi Sempurna
-              </span>
             </div>
 
             <div className="border border-[var(--border)] rounded-xl max-h-72 overflow-y-auto divide-y divide-[var(--border)]">
@@ -1000,17 +996,17 @@ export function DashboardClient({
                     key={s.id}
                     className="flex items-center justify-between p-3 bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] transition-colors"
                   >
-                    <div className="flex items-center gap-2.5">
-                      <span className="text-xs font-mono font-bold text-[var(--primary)] w-6 text-right">
+                    <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                      <span className="text-xs font-mono font-bold text-[var(--primary)] w-6 text-right shrink-0">
                         {idx + 1}.
                       </span>
-                      <div>
-                        <p className="text-xs font-bold text-[var(--ink)]">{s.name}</p>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-[var(--ink)] truncate">{s.name}</p>
                         {s.nis && <p className="text-[11px] text-[var(--ink-subtle)]">NIS: {s.nis}</p>}
                       </div>
                     </div>
-                    <span className="text-[11px] px-2 py-0.5 rounded-md bg-[var(--primary-light)] text-[var(--primary)] font-semibold">
-                      100% Hadir
+                    <span className="text-xs px-2 py-0.5 rounded-md bg-[var(--primary-light)] text-[var(--primary)] font-semibold shrink-0 whitespace-nowrap">
+                      100%
                     </span>
                   </div>
                 ))
@@ -1027,11 +1023,11 @@ export function DashboardClient({
           setEditRecord(null);
           setIsFormModalOpen(true);
         }}
-        className="touch-target sm:hidden fixed bottom-20 right-4 z-40 flex items-center gap-2 py-3 px-4 rounded-full bg-[var(--primary)] text-white font-bold text-xs shadow-xl shadow-[var(--primary)]/30 hover:bg-[var(--primary-hover)] active:scale-95 transition-all"
+        className="touch-target sm:hidden fixed bottom-20 right-4 z-40 w-12 h-12 rounded-full flex items-center justify-center bg-[var(--primary)] text-white shadow-lg hover:bg-[var(--primary-hover)] active:scale-95 transition-all border border-white/10"
         aria-label="Catat ketidakhadiran baru"
+        title="Catat Ketidakhadiran"
       >
-        <Plus className="w-5 h-5" />
-        <span className="tracking-wide">Catat Izin</span>
+        <Plus className="w-6 h-6" />
       </button>
 
       {/* 4-Tab Bottom Navigation Bar on Mobile */}

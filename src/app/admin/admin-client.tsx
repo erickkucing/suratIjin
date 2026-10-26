@@ -21,7 +21,6 @@ import {
   Image as ImageIcon,
   Upload,
   Trash2,
-  Sparkles,
   Eye,
   EyeOff,
   CheckCircle2,
