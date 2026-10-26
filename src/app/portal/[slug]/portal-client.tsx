@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   School,
@@ -199,15 +198,6 @@ export function PortalClient({
                   <span>Buka Papan Presensi</span>
                 </button>
               </form>
-
-              <div className="pt-3 border-t border-[var(--border)] text-center">
-                <Link
-                  href="/login"
-                  className="text-xs text-[var(--accent-slate)] hover:underline"
-                >
-                  Login Staf Pengajar / Wali Kelas &rarr;
-                </Link>
-              </div>
             </div>
           </div>
         </main>

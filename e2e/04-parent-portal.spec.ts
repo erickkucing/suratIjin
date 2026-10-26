@@ -19,6 +19,7 @@ test.describe("04. Parent Portal Workflow", () => {
     await page.goto(`/portal/${CLASS_SLUG}`);
 
     await expect(page.locator("h2")).toContainText("Akses Kelas XII TKJ 2");
+    await expect(page.locator("text=Login Staf Pengajar")).toHaveCount(0);
     const pinInput = page.locator("#parent-password-input");
     await expect(pinInput).toBeVisible();
 
