@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { toTitleCase } from "../string-utils";
+import { toTitleCase, generateRandomClassCode, isValidClassCode } from "../string-utils";
 
 describe("toTitleCase Utility", () => {
   it("should capitalize the first letter of each word", () => {
@@ -21,5 +21,31 @@ describe("toTitleCase Utility", () => {
     expect(toTitleCase("")).toBe("");
     expect(toTitleCase("ani")).toBe("Ani");
     expect(toTitleCase("  dewi   lestari  ")).toBe("  Dewi   Lestari  ");
+  });
+
+  describe("generateRandomClassCode", () => {
+    it("should generate a 3-character random letter code by default", () => {
+      const code = generateRandomClassCode();
+      expect(code).toHaveLength(3);
+      expect(/^[a-zA-Z]{3}$/.test(code)).toBe(true);
+    });
+
+    it("should generate random codes across multiple invocations", () => {
+      const set = new Set<string>();
+      for (let i = 0; i < 20; i++) {
+        set.add(generateRandomClassCode(3));
+      }
+      expect(set.size).toBeGreaterThan(1);
+    });
+  });
+
+  describe("isValidClassCode", () => {
+    it("should validate proper codes", () => {
+      expect(isValidClassCode("xYZ")).toBe(true);
+      expect(isValidClassCode("AbC")).toBe(true);
+      expect(isValidClassCode("xii-tkj-2")).toBe(true);
+      expect(isValidClassCode("a")).toBe(false);
+      expect(isValidClassCode("")).toBe(false);
+    });
   });
 });

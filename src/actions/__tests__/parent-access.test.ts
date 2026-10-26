@@ -4,15 +4,14 @@ import { classes } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { updateParentAccessAction } from "../class-settings";
 import { verifyPassword } from "@/lib/auth";
+import { generateUniqueClassSlug } from "@/lib/class-slug";
 
 describe("Parent Portal Password Control", () => {
   let classId: number;
   let originalHash: string | null = null;
 
   beforeAll(async () => {
-    const cls = await db.query.classes.findFirst({
-      where: eq(classes.slug, "xii-tkj-2"),
-    });
+    const cls = await db.query.classes.findFirst();
     if (!cls) throw new Error("Class not found");
     classId = cls.id;
     originalHash = cls.parentPasswordHash;
@@ -115,5 +114,15 @@ describe("Parent Portal Password Control", () => {
       .update(classes)
       .set({ name: originalName })
       .where(eq(classes.id, classId));
+  });
+
+  it("should generate a 3-character random letter slug decoupled from class name", async () => {
+    const code = await generateUniqueClassSlug();
+    expect(code).toHaveLength(3);
+    expect(/^[a-zA-Z]{3}$/.test(code)).toBe(true);
+
+    // Ensure it is completely decoupled from class name "XII TKJ 2"
+    expect(code).not.toContain("xii");
+    expect(code).not.toContain("tkj");
   });
 });

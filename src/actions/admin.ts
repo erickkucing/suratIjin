@@ -6,6 +6,7 @@ import { users, classes } from "@/db/schema";
 import { eq, and, ne } from "drizzle-orm";
 import { getCurrentUser, hashPassword } from "@/lib/auth";
 import { getAutoAcademicPeriod } from "@/lib/academic-year";
+import { generateUniqueClassSlug } from "@/lib/class-slug";
 import { revalidatePath } from "next/cache";
 
 const createTeacherSchema = z.object({
@@ -119,7 +120,13 @@ export async function updateTeacherAction(
 
 const createClassSchema = z.object({
   name: z.string().min(2, "Nama kelas minimal 2 karakter."),
-  slug: z.string().min(2, "Slug minimal 2 karakter.").regex(/^[a-z0-9-]+$/, "Slug hanya huruf kecil, angka, dan strip."),
+  slug: z
+    .string()
+    .optional()
+    .refine(
+      (val) => !val || /^[a-zA-Z0-9_-]{3,50}$/.test(val),
+      "Slug hanya huruf, angka, strip, atau garis bawah (minimal 3 karakter)."
+    ),
   academicYear: z.string().default(() => getAutoAcademicPeriod().academicYear),
   periodTitle: z.string().default(() => getAutoAcademicPeriod().periodTitle),
   waliKelasId: z.coerce.number().optional().nullable(),
@@ -141,8 +148,11 @@ export async function createClassAction(inputData: unknown) {
 
   const { name, slug, academicYear, periodTitle, waliKelasId } = parse.data;
 
+  // If slug is provided, check uniqueness; otherwise generate unique 3-char random slug
+  const finalSlug = slug && slug.trim().length > 0 ? slug.trim() : await generateUniqueClassSlug();
+
   const existingSlug = await db.query.classes.findFirst({
-    where: eq(classes.slug, slug.trim()),
+    where: eq(classes.slug, finalSlug),
   });
 
   if (existingSlug) {
@@ -153,7 +163,7 @@ export async function createClassAction(inputData: unknown) {
 
   await db.insert(classes).values({
     name: name.trim(),
-    slug: slug.trim(),
+    slug: finalSlug,
     academicYear,
     periodTitle,
     waliKelasId: waliKelasId || null,
@@ -209,5 +219,8 @@ export async function updateClassAction(
     .where(eq(classes.id, classId));
 
   revalidatePath("/admin");
+  revalidatePath("/dashboard");
+  revalidatePath(`/portal/${existing.slug}`);
+  revalidatePath(`/portal/${slug.trim()}`);
   return { success: true, message: "Data kelas berhasil diperbarui." };
 }

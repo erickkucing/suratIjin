@@ -1,5 +1,6 @@
 import { db } from "./index";
 import { users, classes, students, attendanceRecords } from "./schema";
+import { generateRandomClassCode } from "@/lib/string-utils";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { getAutoAcademicPeriod } from "../lib/academic-year";
@@ -115,13 +116,14 @@ export async function seedLegacyData() {
   // 2. Class XII TKJ 2
   console.log("2. Seeding Class XII TKJ 2...");
   let targetClass = await db.query.classes.findFirst({
-    where: eq(classes.slug, "xii-tkj-2"),
+    where: eq(classes.name, "XII TKJ 2"),
   });
   if (!targetClass) {
     const defaultParentPass = await bcrypt.hash("123456", 10);
     const autoPeriod = getAutoAcademicPeriod();
+    const newSlug = generateRandomClassCode(3);
     const [res] = await db.insert(classes).values({
-      slug: "xii-tkj-2",
+      slug: newSlug,
       name: "XII TKJ 2",
       academicYear: autoPeriod.academicYear,
       periodTitle: autoPeriod.periodTitle,
@@ -133,9 +135,9 @@ export async function seedLegacyData() {
     targetClass = await db.query.classes.findFirst({
       where: eq(classes.id, res.insertId),
     });
-    console.log("   Created class XII TKJ 2 (slug: xii-tkj-2)");
+    console.log(`   Created class XII TKJ 2 (slug: ${newSlug})`);
   } else {
-    console.log("   Class XII TKJ 2 already exists");
+    console.log(`   Class XII TKJ 2 already exists (slug: ${targetClass.slug})`);
   }
 
   const classId = targetClass!.id;

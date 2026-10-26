@@ -66,7 +66,7 @@ Sistem Surat Izin Siswa dirancang untuk menggantikan pencatatan izin kertas konv
 - **Pengaturan Portal Kelas**: Atur apakah wali murid diwajibkan memasukkan PIN atau bisa langsung melihat rekapitulasi, serta opsi izin akses berkas foto surat.
 
 ### 2. Modul Wali Murid (Portal Mandiri)
-- **Akses Tautan Ramah**: Akses mudah via URL slug kelas (misal: `/portal/xii-tkj-2`).
+- **Akses Tautan Ramah**: Akses via kode acak 3 huruf (misal: `/portal/xYZ`) sehingga bebas dari perubahan nama kelas.
 - **Proteksi PIN Fleksibel**: Dapat diproteksi kata sandi kelas atau dibuka langsung tanpa sandi sesuai kebijakan wali kelas.
 - **Pencarian Cepat Siswa**: Filter nama dan NIS siswa untuk melihat riwayat kehadiran anak secara transparan.
 - **Akses Berkas Digital**: Pratinjau surat izin yang telah diunggah jika diizinkan oleh wali kelas.
@@ -378,7 +378,7 @@ Setelah menjalankan `npm run db:seed`, akun berikut siap digunakan:
 | **Superadmin** | `admin` | `feelgood6969` | `/admin` & `/dashboard` |
 | **Superadmin (Legacy)** | `wildwina` | `feelgood6969` | `/admin` & `/dashboard` |
 | **Wali Kelas** | `erick` | `feelgood6969` | `/dashboard` (Kelas: XII TKJ 2) |
-| **Wali Murid** | *(Tanpa Username)* | PIN: `123456` | `/portal/xii-tkj-2` |
+| **Wali Murid** | *(Tanpa Username)* | PIN: `123456` | `/portal/xYZ` *(kode 3 huruf kelas)* |
 
 ---
 
@@ -480,7 +480,7 @@ Wali murid dapat mengakses rekapitulasi kelas anak mereka dengan mudah melalui p
 
 #### 1. Membuka Portal Kelas
 1. Buka tautan yang dibagikan oleh wali kelas melalui WhatsApp, contoh:  
-   `https://izin.sekolah.sch.id/portal/xii-tkj-2`
+   `https://izin.sekolah.sch.id/portal/xYZ`
 2. Jika kelas diproteksi PIN, masukkan PIN yang diberikan wali kelas (misal: `123456`), lalu klik **Buka Papan Presensi**.
 3. Jika kelas tidak menggunakan proteksi, papan informasi akan terbuka secara langsung.
 

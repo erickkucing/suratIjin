@@ -8,11 +8,9 @@ describe("Database Queries and Data Integrity", () => {
   let classId: number;
 
   beforeAll(async () => {
-    const cls = await db.query.classes.findFirst({
-      where: eq(classes.slug, "xii-tkj-2"),
-    });
+    const cls = await db.query.classes.findFirst();
     if (!cls) {
-      throw new Error("Class xii-tkj-2 not found. Ensure db:seed has been run.");
+      throw new Error("Class not found. Ensure db:seed has been run.");
     }
     classId = cls.id;
   });
@@ -83,8 +81,9 @@ describe("Database Queries and Data Integrity", () => {
     expect(adminData.classes.length).toBeGreaterThanOrEqual(1);
     expect(adminData.teachers.length).toBeGreaterThanOrEqual(1);
 
-    const tkj = adminData.classes.find((c) => c.slug === "xii-tkj-2");
+    const tkj = adminData.classes.find((c) => c.name === "XII TKJ 2");
     expect(tkj).toBeDefined();
+    expect(tkj?.slug).toMatch(/^[a-zA-Z0-9_-]{3,50}$/);
     expect(tkj?.totalStudents).toBe(34);
     expect(tkj?.totalAbsences).toBe(12);
   });

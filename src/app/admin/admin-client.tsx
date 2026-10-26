@@ -42,7 +42,7 @@ import {
   createClassAction,
   updateClassAction,
 } from "@/actions/admin";
-import { toTitleCase } from "@/lib/string-utils";
+import { toTitleCase, generateRandomClassCode } from "@/lib/string-utils";
 import {
   updateThemeAction,
   uploadLogoAction,
@@ -845,7 +845,10 @@ export function AdminClient({
             {activeTab === "classes" && (
               <button
                 type="button"
-                onClick={() => setIsClassModalOpen(true)}
+                onClick={() => {
+                  setClassSlugInput(generateRandomClassCode(3));
+                  setIsClassModalOpen(true);
+                }}
                 className="touch-target inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] text-xs font-bold shadow-xs transition-colors"
               >
                 <Plus className="w-4 h-4" />
@@ -2058,30 +2061,37 @@ export function AdminClient({
                   type="text"
                   required
                   value={classNameInput}
-                  onChange={(e) => {
-                    setClassNameInput(e.target.value);
-                    if (!classSlugInput) {
-                      setClassSlugInput(
-                        e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, "-")
-                      );
-                    }
-                  }}
+                  onChange={(e) => setClassNameInput(e.target.value)}
                   placeholder="Contoh: XII TKJ 2"
                   className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
                 />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-[var(--ink-muted)] mb-1">
-                  Slug URL Portal (Huruf kecil, angka, strip)
+                  Kode Slug URL Portal (3 Huruf Acak)
                 </label>
-                <input
-                  type="text"
-                  required
-                  value={classSlugInput}
-                  onChange={(e) => setClassSlugInput(e.target.value)}
-                  placeholder="Contoh: xii-tkj-2"
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] font-mono focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    required
+                    value={classSlugInput}
+                    onChange={(e) => setClassSlugInput(e.target.value)}
+                    placeholder="Contoh: xYZ"
+                    className="flex-1 px-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] font-mono focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setClassSlugInput(generateRandomClassCode(3))}
+                    className="touch-target px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-xs font-semibold flex items-center gap-1.5 shrink-0"
+                    title="Acak kode 3 huruf baru"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Acak</span>
+                  </button>
+                </div>
+                <p className="text-[11px] text-[var(--ink-muted)] mt-1">
+                  Tautan portal: <code className="font-mono">/portal/{classSlugInput || "..."}</code> (tidak terikat nama kelas).
+                </p>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
@@ -2188,15 +2198,29 @@ export function AdminClient({
               </div>
               <div>
                 <label className="block text-xs font-semibold text-[var(--ink-muted)] mb-1">
-                  Slug Portal
+                  Kode Slug URL Portal
                 </label>
-                <input
-                  type="text"
-                  required
-                  value={editClassSlug}
-                  onChange={(e) => setEditClassSlug(e.target.value)}
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] font-mono focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    required
+                    value={editClassSlug}
+                    onChange={(e) => setEditClassSlug(e.target.value)}
+                    className="flex-1 px-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] font-mono focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setEditClassSlug(generateRandomClassCode(3))}
+                    className="touch-target px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-xs font-semibold flex items-center gap-1.5 shrink-0"
+                    title="Acak kode 3 huruf baru"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Acak</span>
+                  </button>
+                </div>
+                <p className="text-[11px] text-[var(--status-warning-fg)] mt-1">
+                  Perhatian: Mengubah slug portal akan mengubah tautan dan QR code yang sudah dibagikan.
+                </p>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>

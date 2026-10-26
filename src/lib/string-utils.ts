@@ -23,3 +23,24 @@ export function toTitleCase(input: string): string {
     })
     .join("");
 }
+
+/**
+ * Generates random letter code for portal URLs (default: 3 random letters, e.g. "xYZ").
+ */
+export function generateRandomClassCode(length = 3): string {
+  const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  let code = "";
+  for (let i = 0; i < length; i++) {
+    code += letters.charAt(Math.floor(Math.random() * letters.length));
+  }
+  return code;
+}
+
+/**
+ * Validates if a string is a valid class slug format (e.g. 3-character random code or custom alphanumeric).
+ */
+export function isValidClassCode(code: string): boolean {
+  if (!code) return false;
+  return /^[a-zA-Z0-9_-]{3,50}$/.test(code.trim());
+}
+

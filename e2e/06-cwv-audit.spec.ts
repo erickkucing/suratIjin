@@ -4,9 +4,10 @@ import { systemSettings } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 test.describe("06. Core Web Vitals & Responsiveness Audit", () => {
+  let portalPath = "/portal/eqf";
   const routes = [
     { name: "Login Page", path: "/login", auth: null },
-    { name: "Parent Portal", path: "/portal/xii-tkj-2", auth: null },
+    { name: "Parent Portal", path: "/portal/eqf", auth: null },
     { name: "Teacher Dashboard", path: "/dashboard", auth: "erick" },
     { name: "Admin Panel", path: "/admin", auth: "admin" },
   ];
@@ -16,6 +17,12 @@ test.describe("06. Core Web Vitals & Responsiveness Audit", () => {
 
   test.beforeAll(async () => {
     try {
+      const cls = await db.query.classes.findFirst();
+      if (cls) {
+        portalPath = `/portal/${cls.slug}`;
+        const parentRoute = routes.find((r) => r.name === "Parent Portal");
+        if (parentRoute) parentRoute.path = portalPath;
+      }
       const current = await db.query.systemSettings.findFirst({
         where: eq(systemSettings.id, 1),
       });
@@ -130,7 +137,7 @@ test.describe("06. Core Web Vitals & Responsiveness Audit", () => {
     await expect(loginCardLogo).toHaveAttribute("fetchpriority", "high");
 
     await page.context().clearCookies();
-    await page.goto("/portal/xii-tkj-2");
+    await page.goto(portalPath);
     const portalLockLogo = page.locator('header img[alt="Logo Sekolah"]');
     await expect(portalLockLogo).toBeVisible();
     await expect(portalLockLogo).toHaveAttribute("width", "40");

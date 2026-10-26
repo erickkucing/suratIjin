@@ -34,7 +34,7 @@ export default async function PortalPage({ params }: PortalPageProps) {
   }
 
   const hasPassword = Boolean(classItem.parentPasswordHash);
-  const isUnlocked = !hasPassword || (await checkParentAccess(slug));
+  const isUnlocked = !hasPassword || (await checkParentAccess(classItem.slug));
 
   let dashboardData = null;
   if (isUnlocked) {
@@ -46,7 +46,7 @@ export default async function PortalPage({ params }: PortalPageProps) {
   return (
     <PortalClient
       isUnlocked={isUnlocked}
-      classSlug={slug}
+      classSlug={classItem.slug}
       data={dashboardData}
       teacherName={teacherName}
       classNameTitle={classItem.name}

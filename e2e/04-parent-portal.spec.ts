@@ -1,7 +1,15 @@
 import { test, expect } from "@playwright/test";
+import { db } from "@/db";
 
 test.describe("04. Parent Portal Workflow", () => {
-  const CLASS_SLUG = "xii-tkj-2";
+  let CLASS_SLUG = "eqf";
+
+  test.beforeAll(async () => {
+    const cls = await db.query.classes.findFirst();
+    if (cls) {
+      CLASS_SLUG = cls.slug;
+    }
+  });
 
   test.beforeEach(async ({ page }) => {
     await page.context().clearCookies();

@@ -117,8 +117,11 @@ export async function GET(
           }
         }
       } else if (relativePath.startsWith("legacy/")) {
-        // Legacy sample letter is permitted if parent has valid access to xii-tkj-2
-        const parentValid = await checkParentAccess("xii-tkj-2");
+        // Legacy sample letter is permitted if parent has valid access to the class
+        const legacyClass = await db.query.classes.findFirst({
+          where: eq(classes.id, 1),
+        });
+        const parentValid = legacyClass ? await checkParentAccess(legacyClass.slug) : false;
         if (parentValid) {
           isAuthorized = true;
         }

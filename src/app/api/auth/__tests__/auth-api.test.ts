@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { POST as loginPost } from "../login/route";
 import { POST as unlockPost } from "../unlock/route";
 import { _clearRateLimitStoreForTesting } from "@/lib/rate-limiter";
+import { db } from "@/db";
 
 describe("API Auth Endpoints", () => {
   beforeEach(() => {
@@ -121,6 +122,9 @@ describe("API Auth Endpoints", () => {
   });
 
   it("should block parent unlock after 5 failed attempts with HTTP 429", async () => {
+    const cls = await db.query.classes.findFirst();
+    const testSlug = cls?.slug || "xii-tkj-2";
+
     const headers = {
       "Content-Type": "application/json",
       "x-forwarded-for": "198.51.100.88",
@@ -130,7 +134,7 @@ describe("API Auth Endpoints", () => {
       const req = new Request("http://localhost:3000/api/auth/unlock", {
         method: "POST",
         headers,
-        body: JSON.stringify({ classSlug: "xii-tkj-2", password: "wrong_pass" }),
+        body: JSON.stringify({ classSlug: testSlug, password: "wrong_pass" }),
       });
       const res = await unlockPost(req);
       expect(res.status).toBe(401);
@@ -140,7 +144,7 @@ describe("API Auth Endpoints", () => {
     const req5 = new Request("http://localhost:3000/api/auth/unlock", {
       method: "POST",
       headers,
-      body: JSON.stringify({ classSlug: "xii-tkj-2", password: "wrong_pass" }),
+      body: JSON.stringify({ classSlug: testSlug, password: "wrong_pass" }),
     });
     const res5 = await unlockPost(req5);
     expect(res5.status).toBe(429);

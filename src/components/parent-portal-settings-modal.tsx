@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { X, Lock, Unlock, Share2, Eye, EyeOff, Copy, Check, MessageSquare, Loader2, Sparkles, RotateCcw, AlertCircle } from "lucide-react";
+import { X, Lock, Unlock, Share2, Eye, EyeOff, Copy, Check, MessageSquare, Loader2, Sparkles, RotateCcw, AlertCircle, RefreshCw } from "lucide-react";
 import QRCode from "qrcode";
 import { ClassItem } from "@/db/schema";
-import { updateParentAccessAction } from "@/actions/class-settings";
+import { updateParentAccessAction, regenerateClassSlugAction } from "@/actions/class-settings";
 import { getAutoAcademicPeriod, isAutoPeriod } from "@/lib/academic-year";
 
 interface ParentPortalSettingsModalProps {
@@ -52,6 +52,9 @@ export function ParentPortalSettingsModal({
   const autoPeriod = useMemo(() => getAutoAcademicPeriod(), []);
 
   const [className, setClassName] = useState(classInfo.name);
+  const [currentSlug, setCurrentSlug] = useState(classInfo.slug);
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  const [showRegenConfirm, setShowRegenConfirm] = useState(false);
   const [requirePassword, setRequirePassword] = useState(Boolean(classInfo.parentPasswordHash));
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -87,12 +90,15 @@ export function ParentPortalSettingsModal({
   };
 
   const portalUrl = typeof window !== "undefined"
-    ? `${window.location.origin}/portal/${classInfo.slug}`
-    : `/portal/${classInfo.slug}`;
+    ? `${window.location.origin}/portal/${currentSlug}`
+    : `/portal/${currentSlug}`;
 
   useEffect(() => {
     if (isOpen) {
       setClassName(classInfo.name);
+      setCurrentSlug(classInfo.slug);
+      setShowRegenConfirm(false);
+      setIsRegenerating(false);
       setRequirePassword(Boolean(classInfo.parentPasswordHash));
       setAllowViewPhoto(classInfo.parentShowLetterFile);
 
@@ -174,6 +180,27 @@ export function ParentPortalSettingsModal({
     if (ok) {
       setCopiedWa(true);
       setTimeout(() => setCopiedWa(false), 2000);
+    }
+  };
+
+  const handleRegenerateSlug = async () => {
+    setIsRegenerating(true);
+    setMessage(null);
+    try {
+      const res = await regenerateClassSlugAction(classInfo.id);
+      if (res.success && res.newSlug) {
+        setCurrentSlug(res.newSlug);
+        classInfo.slug = res.newSlug;
+        setShowRegenConfirm(false);
+        setMessage({ text: `Kode tautan portal berhasil diacak ulang menjadi: /portal/${res.newSlug}`, isError: false });
+        onSuccess();
+      } else {
+        setMessage({ text: res.error || "Gagal mengacak ulang tautan.", isError: true });
+      }
+    } catch {
+      setMessage({ text: "Terjadi kesalahan saat mengacak tautan.", isError: true });
+    } finally {
+      setIsRegenerating(false);
     }
   };
 
@@ -307,7 +334,50 @@ export function ParentPortalSettingsModal({
                 {copiedLink ? <Check className="w-4 h-4 text-[var(--status-success-fg)]" /> : <Copy className="w-4 h-4" />}
                 <span>{copiedLink ? "Tersalin!" : "Salin Link"}</span>
               </button>
+              <button
+                type="button"
+                onClick={() => setShowRegenConfirm(true)}
+                disabled={isRegenerating}
+                className="touch-target flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[var(--surface)] border border-[var(--border)] hover:bg-[var(--canvas)] text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] shadow-xs"
+                title="Acak ulang tautan 3 huruf baru"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isRegenerating ? "animate-spin" : ""}`} />
+                <span className="hidden sm:inline">Acak Ulang</span>
+              </button>
             </div>
+
+            {showRegenConfirm && (
+              <div className="p-3 rounded-lg border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] text-[var(--status-warning-fg)] text-xs space-y-2">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="font-bold">Konfirmasi Acak Ulang Kode Tautan</p>
+                    <p className="text-[11px] opacity-90">
+                      Tautan lama dan QR code fisik yang telah dibagikan tidak akan dapat diakses lagi. Wali murid harus menggunakan tautan baru.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowRegenConfirm(false)}
+                    disabled={isRegenerating}
+                    className="px-2.5 py-1 text-xs rounded border border-current hover:bg-black/5"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRegenerateSlug}
+                    disabled={isRegenerating}
+                    className="px-2.5 py-1 text-xs rounded font-bold bg-[var(--status-warning-fg)] text-white hover:opacity-90 flex items-center gap-1"
+                  >
+                    {isRegenerating && <Loader2 className="w-3 h-3 animate-spin" />}
+                    <span>Ya, Acak Ulang</span>
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="flex flex-col sm:flex-row items-center gap-4 pt-2">
               {qrCodeDataUrl && (
@@ -356,7 +426,7 @@ export function ParentPortalSettingsModal({
                 className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
               />
               <p className="text-[11px] text-[var(--ink-muted)]">
-                Wali Kelas dapat mengganti nama kelas ini kapan saja. Tautan portal tetap <code className="font-mono text-[11px] px-1 py-0.5 rounded bg-[var(--canvas-subtle)]">/portal/{classInfo.slug}</code> agar QR Code dan tautan wali murid tidak rusak.
+                Wali Kelas dapat mengganti nama kelas ini kapan saja. Tautan portal tetap <code className="font-mono text-[11px] px-1 py-0.5 rounded bg-[var(--canvas-subtle)]">/portal/{currentSlug}</code> agar QR Code dan tautan wali murid tidak rusak.
               </p>
             </div>
 

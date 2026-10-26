@@ -12,6 +12,7 @@
     "db:push": "drizzle-kit push",
     "db:seed": "tsx src/db/seed-legacy.ts",
     "db:migrate-remote": "tsx scripts/migrate-remote.ts",
+    "db:migrate-slugs": "tsx scripts/migrate-random-slugs.ts",
     "test:unit": "vitest run",
     "test:e2e": "playwright test"
   },

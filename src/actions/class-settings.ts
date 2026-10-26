@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { classes, students } from "@/db/schema";
 import { eq, and, ne } from "drizzle-orm";
 import { getCurrentUser, hashPassword } from "@/lib/auth";
+import { generateUniqueClassSlug } from "@/lib/class-slug";
 import { revalidatePath } from "next/cache";
 
 const updateParentAccessSchema = z.object({
@@ -361,4 +362,40 @@ export async function bulkImportStudentsAction(
   revalidatePath(`/portal/${cls.slug}`);
   return { success: true, message: `Berhasil mengimpor ${newRows.length} siswa baru.` };
 }
+
+export async function regenerateClassSlugAction(classId: number) {
+  const user = await getCurrentUser();
+  if (!user) {
+    return { success: false, error: "Sesi telah berakhir. Silakan login kembali." };
+  }
+
+  const cls = await db.query.classes.findFirst({
+    where: eq(classes.id, classId),
+  });
+
+  if (!cls) {
+    return { success: false, error: "Kelas tidak ditemukan." };
+  }
+
+  if (user.role !== "superadmin" && cls.waliKelasId !== user.id) {
+    return { success: false, error: "Anda tidak memiliki izin mengedit tautan kelas ini." };
+  }
+
+  const oldSlug = cls.slug;
+  const newSlug = await generateUniqueClassSlug();
+
+  await db.update(classes).set({ slug: newSlug }).where(eq(classes.id, classId));
+
+  revalidatePath("/dashboard");
+  revalidatePath("/admin");
+  revalidatePath(`/portal/${oldSlug}`);
+  revalidatePath(`/portal/${newSlug}`);
+
+  return {
+    success: true,
+    newSlug,
+    message: `Tautan portal berhasil diubah menjadi /portal/${newSlug}`,
+  };
+}
+
 

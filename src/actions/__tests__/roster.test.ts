@@ -16,11 +16,9 @@ describe("Student Roster Management & CRUD Operations", () => {
   let testStudentId: number;
 
   beforeAll(async () => {
-    const cls = await db.query.classes.findFirst({
-      where: eq(classes.slug, "xii-tkj-2"),
-    });
+    const cls = await db.query.classes.findFirst();
     if (!cls) {
-      throw new Error("Class xii-tkj-2 not found.");
+      throw new Error("Class not found.");
     }
     classId = cls.id;
   });
