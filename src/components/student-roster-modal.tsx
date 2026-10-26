@@ -394,7 +394,7 @@ export function StudentRosterModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="student-roster-title"
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6 bg-black/75 backdrop-blur-xs overflow-hidden sm:overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 pt-[env(safe-area-inset-top,1.5rem)] sm:p-6 bg-black/75 backdrop-blur-xs overflow-hidden sm:overflow-y-auto"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -403,11 +403,11 @@ export function StudentRosterModal({
         ref={sheetRef}
         style={sheetStyle}
         {...touchHandlers}
-        className="relative w-full max-w-2xl max-h-[92vh] sm:max-h-[85vh] rounded-t-2xl sm:rounded-2xl rounded-b-none sm:rounded-b-2xl bg-[var(--surface)] text-[var(--ink)] shadow-2xl border-t border-x sm:border border-[var(--border)] overflow-hidden flex flex-col"
+        className="relative w-full max-w-2xl max-h-[84dvh] sm:max-h-[85vh] rounded-t-3xl sm:rounded-2xl rounded-b-none sm:rounded-b-2xl bg-[var(--surface)] text-[var(--ink)] shadow-2xl border-t border-x sm:border border-[var(--border)] overflow-hidden flex flex-col"
       >
         {/* Mobile Tactile Drag Handle */}
-        <div data-drag-handle className="sm:hidden flex justify-center pt-2.5 pb-1 touch-none cursor-grab active:cursor-grabbing bg-[var(--canvas-subtle)]">
-          <div className="w-10 h-1.5 rounded-full bg-[var(--border-strong)]/60" />
+        <div data-drag-handle className="sm:hidden flex justify-center pt-3 pb-2 touch-none cursor-grab active:cursor-grabbing bg-[var(--canvas-subtle)]">
+          <div className="w-12 h-1.5 rounded-full bg-[var(--border-strong)]/60" />
         </div>
 
         {/* Header */}
@@ -476,7 +476,7 @@ export function StudentRosterModal({
         </div>
 
         {/* Body */}
-        <div className="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1">
+        <div className="p-4 sm:p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:pb-6 overflow-y-auto space-y-4 flex-1">
           {message && (
             <div
               className={`p-3 rounded-xl border text-sm font-medium ${

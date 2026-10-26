@@ -67,7 +67,7 @@ export function MobileFilterDrawer({
       role="dialog"
       aria-modal="true"
       aria-labelledby="mobile-filter-title"
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-xs sm:hidden"
+      className="fixed inset-0 z-50 flex items-end justify-center pt-[env(safe-area-inset-top,1.5rem)] bg-black/60 backdrop-blur-xs sm:hidden"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -76,11 +76,11 @@ export function MobileFilterDrawer({
         ref={sheetRef}
         style={sheetStyle}
         {...touchHandlers}
-        className="card-paper w-full max-h-[85vh] rounded-t-3xl border-t border-[var(--border)] overflow-y-auto flex flex-col shadow-2xl"
+        className="card-paper w-full max-h-[84dvh] rounded-t-3xl border-t border-[var(--border)] overflow-y-auto flex flex-col shadow-2xl"
       >
         {/* Pull Handle */}
-        <div data-drag-handle className="pt-3 pb-1 flex justify-center touch-none cursor-grab active:cursor-grabbing">
-          <div className="w-10 h-1 rounded-full bg-[var(--border)]" />
+        <div data-drag-handle className="pt-3 pb-2 flex justify-center touch-none cursor-grab active:cursor-grabbing">
+          <div className="w-12 h-1.5 rounded-full bg-[var(--border-strong)]/60" />
         </div>
 
         {/* Header */}

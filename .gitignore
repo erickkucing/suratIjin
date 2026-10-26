@@ -26,3 +26,9 @@ Rekap_Kehadiran_*.xlsx
 test-results/
 playwright-report/
 
+# Python virtual environments
+venv/
+**/venv/
+__pycache__/
+
+
