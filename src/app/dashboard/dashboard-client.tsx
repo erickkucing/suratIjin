@@ -20,6 +20,8 @@ import {
   ChevronDown,
   RefreshCw,
   UserCheck,
+  ClipboardCheck,
+  SlidersHorizontal,
 } from "lucide-react";
 import { DashboardData, AttendanceRecordWithStudent } from "@/db/queries";
 import { ClassItem } from "@/db/schema";
@@ -34,6 +36,7 @@ import { AttendanceFormModal } from "@/components/attendance-form-modal";
 import { ParentPortalSettingsModal } from "@/components/parent-portal-settings-modal";
 import { StudentRosterModal } from "@/components/student-roster-modal";
 import { TeacherProfileModal } from "@/components/teacher-profile-modal";
+import { MobileFilterDrawer } from "@/components/mobile-filter-drawer";
 import { exportAttendancePdf } from "@/lib/export-pdf";
 import { exportAttendanceExcel } from "@/lib/export-excel";
 import { computeDynamicDashboardMetrics } from "@/lib/attendance-stats";
@@ -72,6 +75,7 @@ export function DashboardClient({
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isRosterModalOpen, setIsRosterModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
 
   useEffect(() => {
     setData(initialData);
@@ -282,10 +286,10 @@ export function DashboardClient({
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 py-6 space-y-6">
+      <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 py-6 pb-28 sm:pb-6 space-y-5 sm:space-y-6">
         <section aria-labelledby="summary-heading">
           <h2 id="summary-heading" className="sr-only">Ringkasan Statistik Ketidakhadiran</h2>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div className="flex overflow-x-auto snap-x snap-mandatory gap-3 pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:overflow-visible no-scrollbar">
             <StatCard
               title="Total Alpa"
               count={dynamicMetrics.summary.totalAlpa}
@@ -339,7 +343,63 @@ export function DashboardClient({
           </div>
         </section>
 
-        <section className="card-paper p-4 rounded-2xl space-y-3">
+        {/* Mobile Quick Filter Chips & Drawer Trigger */}
+        <div className="sm:hidden flex items-center justify-between gap-2 overflow-x-auto pb-1 no-scrollbar">
+          <div className="flex items-center gap-1.5 shrink-0">
+            {["Semua", "Alpa", "Izin", "Sakit"].map((st) => (
+              <button
+                key={st}
+                type="button"
+                onClick={() => {
+                  setFilterStatus(st);
+                  if (st !== "Semua") setFilterLetterStatus("Semua");
+                  setViewMode("harian");
+                }}
+                className={`touch-target px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+                  filterStatus === st && filterLetterStatus !== "Belum_Izin_Sakit"
+                    ? "bg-[var(--primary)] text-white border-[var(--primary)] shadow-xs"
+                    : "bg-[var(--surface)] text-[var(--ink-muted)] border-[var(--border)] hover:bg-[var(--canvas-subtle)]"
+                }`}
+              >
+                {st}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => {
+                setFilterLetterStatus(
+                  filterLetterStatus === "Belum_Izin_Sakit" ? "Semua" : "Belum_Izin_Sakit"
+                );
+                setFilterStatus("Semua");
+                setViewMode("harian");
+              }}
+              className={`touch-target px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all whitespace-nowrap ${
+                filterLetterStatus === "Belum_Izin_Sakit"
+                  ? "bg-[var(--primary)] text-white border-[var(--primary)] shadow-xs"
+                  : "bg-[var(--surface)] text-[var(--ink-muted)] border-[var(--border)] hover:bg-[var(--canvas-subtle)]"
+              }`}
+            >
+              Belum Surat
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsMobileFilterOpen(true)}
+            className="touch-target shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-xs font-bold text-[var(--ink)] shadow-xs hover:bg-[var(--canvas-subtle)]"
+            aria-label="Buka filter lanjutan dan ekspor"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5 text-[var(--primary)]" />
+            <span>Filter</span>
+            {activeFilterCount > 0 && (
+              <span className="w-4 h-4 rounded-full bg-[var(--primary)] text-white text-[10px] flex items-center justify-center font-bold">
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+        </div>
+
+        <section className="hidden sm:block card-paper p-4 rounded-2xl space-y-3">
           <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <button
@@ -661,24 +721,36 @@ export function DashboardClient({
                 </table>
               </div>
 
-              <div className="md:hidden divide-y divide-[var(--border)]">
+              <div className="md:hidden p-3 space-y-3">
                 {displayedRecords.length === 0 ? (
-                  <div className="p-6 text-center text-sm text-[var(--ink-muted)]">
+                  <div className="p-8 text-center text-sm text-[var(--ink-muted)]">
                     Tidak ada data ketidakhadiran yang sesuai dengan kriteria filter.
                   </div>
                 ) : (
                   displayedRecords.map((r) => {
                     const hasFile = !!r.letterFilePath;
+                    const statusBorderClass =
+                      r.status === "Izin"
+                        ? "border-l-4 border-l-[var(--status-izin-fg)]"
+                        : r.status === "Sakit"
+                        ? "border-l-4 border-l-[var(--status-sakit-fg)]"
+                        : "border-l-4 border-l-[var(--status-alpa-fg)]";
+
                     return (
-                      <div key={r.id} className="p-4 space-y-2">
+                      <div
+                        key={r.id}
+                        className={`p-3.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-2xs space-y-2.5 transition-all ${statusBorderClass}`}
+                      >
                         <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <h4 className="text-sm font-bold text-[var(--ink)]">
+                          <div className="space-y-0.5">
+                            <h4 className="text-sm font-bold text-[var(--ink)] leading-snug">
                               {r.studentName}
                             </h4>
-                            <p className="text-xs text-[var(--ink-muted)]">
-                              {r.attendanceDate} &bull; Info: {r.infoSource}
-                            </p>
+                            <div className="flex items-center gap-2 text-[11px] text-[var(--ink-muted)] flex-wrap">
+                              <span className="font-semibold text-[var(--ink)]">{r.attendanceDate}</span>
+                              <span>&bull;</span>
+                              <span>Info: {r.infoSource}</span>
+                            </div>
                           </div>
                           <span
                             className={`px-2.5 py-0.5 rounded-full text-xs font-bold border shrink-0 ${
@@ -694,12 +766,12 @@ export function DashboardClient({
                         </div>
 
                         {r.description && (
-                          <p className="text-xs text-[var(--ink-muted)] bg-[var(--canvas-subtle)] p-2 rounded-lg">
+                          <p className="text-xs text-[var(--ink-muted)] bg-[var(--canvas-subtle)] p-2.5 rounded-lg leading-relaxed">
                             {r.description}
                           </p>
                         )}
 
-                        <div className="flex items-center justify-between pt-2">
+                        <div className="flex items-center justify-between pt-1 border-t border-[var(--border)]">
                           <div>
                             {hasFile ? (
                               <button
@@ -708,13 +780,13 @@ export function DashboardClient({
                                   setLightboxRecord(r);
                                   setIsLightboxOpen(true);
                                 }}
-                                className="touch-target inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-xs font-semibold text-[var(--accent-slate)]"
+                                className="touch-target inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-xs font-bold text-[var(--accent-slate)] shadow-2xs"
                               >
                                 <Eye className="w-3.5 h-3.5" />
                                 <span>Lihat Surat</span>
                               </button>
                             ) : (
-                              <span className="text-xs font-semibold text-[var(--primary)]">
+                              <span className="text-[11px] font-semibold text-[var(--ink-muted)]">
                                 {r.status === "Alpa" ? "Tanpa Surat" : "Surat Belum Ada"}
                               </span>
                             )}
@@ -727,16 +799,16 @@ export function DashboardClient({
                                 setEditRecord(r);
                                 setIsFormModalOpen(true);
                               }}
-                              className="touch-target p-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink-muted)]"
-                              aria-label="Edit catatan"
+                              className="touch-target inline-flex items-center justify-center w-10 h-10 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink-muted)] hover:text-[var(--primary)] hover:bg-[var(--canvas-subtle)]"
+                              aria-label={`Edit catatan ${r.studentName}`}
                             >
                               <Edit2 className="w-4 h-4" />
                             </button>
                             <button
                               type="button"
                               onClick={() => handleDelete(r)}
-                              className="touch-target p-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-red-500"
-                              aria-label="Hapus catatan"
+                              className="touch-target inline-flex items-center justify-center w-10 h-10 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40"
+                              aria-label={`Hapus catatan ${r.studentName}`}
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -840,10 +912,13 @@ export function DashboardClient({
                 </table>
               </div>
 
-              <div className="md:hidden divide-y divide-[var(--border)]">
+              <div className="md:hidden p-3 space-y-3">
                 {displayedStudentRecap.map((st, idx) => (
-                  <div key={st.studentId} className="p-4 space-y-2">
-                    <div className="flex items-center justify-between">
+                  <div
+                    key={st.studentId}
+                    className="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-2xs space-y-2.5"
+                  >
+                    <div className="flex items-start justify-between gap-2">
                       <div>
                         <p className="text-sm font-bold text-[var(--ink)]">
                           {idx + 1}. {st.name}
@@ -856,21 +931,26 @@ export function DashboardClient({
                         </span>
                       ) : (
                         <span className="px-2.5 py-0.5 rounded-full bg-[var(--canvas-subtle)] text-[var(--ink)] text-xs font-bold border border-[var(--border)]">
-                          Total: {st.totalAbsences} Hari
+                          {st.totalAbsences} Hari
                         </span>
                       )}
                     </div>
                     <div className="grid grid-cols-3 gap-2 pt-1 text-center text-xs">
-                      <div className="p-1.5 rounded-lg bg-[var(--status-sakit-bg)] text-[var(--status-sakit-fg)]">
-                        Sakit: <strong>{st.sakit}</strong>
+                      <div className="p-1.5 rounded-lg bg-[var(--status-sakit-bg)] text-[var(--status-sakit-fg)] font-medium">
+                        Sakit: <strong className="font-bold">{st.sakit}</strong>
                       </div>
-                      <div className="p-1.5 rounded-lg bg-[var(--status-izin-bg)] text-[var(--status-izin-fg)]">
-                        Izin: <strong>{st.izin}</strong>
+                      <div className="p-1.5 rounded-lg bg-[var(--status-izin-bg)] text-[var(--status-izin-fg)] font-medium">
+                        Izin: <strong className="font-bold">{st.izin}</strong>
                       </div>
-                      <div className="p-1.5 rounded-lg bg-[var(--status-alpa-bg)] text-[var(--status-alpa-fg)]">
-                        Alpa: <strong>{st.alpa}</strong>
+                      <div className="p-1.5 rounded-lg bg-[var(--status-alpa-bg)] text-[var(--status-alpa-fg)] font-medium">
+                        Alpa: <strong className="font-bold">{st.alpa}</strong>
                       </div>
                     </div>
+                    {st.suratBelum > 0 && (
+                      <p className="text-[11px] font-bold text-[var(--primary)] pt-0.5">
+                        ⚠️ Ada {st.suratBelum} surat yang belum lengkap.
+                      </p>
+                    )}
                   </div>
                 ))}
               </div>
@@ -940,57 +1020,102 @@ export function DashboardClient({
         </div>
       </main>
 
-      <div className="sm:hidden fixed bottom-0 inset-x-0 z-30 p-2.5 bg-[var(--surface)] border-t border-[var(--border)] shadow-lg flex items-center justify-around gap-1.5">
+      {/* Floating Action Button (+ Catat) on Mobile */}
+      <button
+        type="button"
+        onClick={() => {
+          setEditRecord(null);
+          setIsFormModalOpen(true);
+        }}
+        className="touch-target sm:hidden fixed bottom-20 right-4 z-40 flex items-center gap-2 py-3 px-4 rounded-full bg-[var(--primary)] text-white font-bold text-xs shadow-xl shadow-[var(--primary)]/30 hover:bg-[var(--primary-hover)] active:scale-95 transition-all"
+        aria-label="Catat ketidakhadiran baru"
+      >
+        <Plus className="w-5 h-5" />
+        <span className="tracking-wide">Catat Izin</span>
+      </button>
+
+      {/* 4-Tab Bottom Navigation Bar on Mobile */}
+      <nav
+        aria-label="Navigasi Bawah"
+        className="sm:hidden fixed bottom-0 inset-x-0 z-30 bg-[var(--surface)] border-t border-[var(--border)] shadow-lg px-2 pt-1.5 pb-[calc(env(safe-area-inset-bottom)+0.35rem)] flex items-center justify-around"
+      >
         <button
           type="button"
           onClick={() => {
-            setEditRecord(null);
-            setIsFormModalOpen(true);
+            window.scrollTo({ top: 0, behavior: "smooth" });
           }}
-          className="touch-target flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-[var(--primary)] text-white text-xs font-bold shadow-xs hover:bg-[var(--primary-hover)] transition-colors"
+          className="touch-target flex-1 flex flex-col items-center justify-center py-1 text-[var(--primary)] font-bold transition-colors"
         >
-          <Plus className="w-4 h-4" />
-          <span>Catat Izin</span>
+          <ClipboardCheck className="w-5 h-5 mb-0.5" />
+          <span className="text-[10px] leading-tight">Presensi</span>
         </button>
 
         <button
           type="button"
           onClick={() => setIsRosterModalOpen(true)}
-          className="touch-target flex items-center justify-center p-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] text-xs font-semibold"
-          aria-label="Kelola Daftar Siswa"
-          title="Kelola Siswa"
+          className="touch-target flex-1 flex flex-col items-center justify-center py-1 text-[var(--ink-muted)] hover:text-[var(--ink)] transition-colors"
         >
-          <Users className="w-4 h-4" />
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setShowFiltersMobile(!showFiltersMobile)}
-          className="touch-target flex items-center justify-center p-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] text-xs font-semibold"
-          aria-label="Buka filter"
-        >
-          <Filter className="w-4 h-4" />
+          <Users className="w-5 h-5 mb-0.5" />
+          <span className="text-[10px] leading-tight">Siswa</span>
         </button>
 
         <button
           type="button"
           onClick={() => setIsSettingsModalOpen(true)}
-          className="touch-target flex items-center justify-center p-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] text-xs font-semibold"
-          aria-label="Link wali murid"
+          className="touch-target flex-1 flex flex-col items-center justify-center py-1 text-[var(--ink-muted)] hover:text-[var(--ink)] transition-colors"
         >
-          <Share2 className="w-4 h-4" />
+          <Share2 className="w-5 h-5 mb-0.5" />
+          <span className="text-[10px] leading-tight">Portal</span>
         </button>
 
         <button
           type="button"
           onClick={() => setIsProfileModalOpen(true)}
-          className="touch-target flex items-center justify-center p-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] text-xs font-semibold"
-          aria-label="Profil Wali Kelas"
-          title="Profil Saya"
+          className="touch-target flex-1 flex flex-col items-center justify-center py-1 text-[var(--ink-muted)] hover:text-[var(--ink)] transition-colors"
         >
-          <UserCheck className="w-4 h-4" />
+          <UserCheck className="w-5 h-5 mb-0.5" />
+          <span className="text-[10px] leading-tight">Profil</span>
         </button>
-      </div>
+      </nav>
+
+      <MobileFilterDrawer
+        isOpen={isMobileFilterOpen}
+        onClose={() => setIsMobileFilterOpen(false)}
+        studentName={filterStudentName}
+        onStudentNameChange={setFilterStudentName}
+        dateStart={filterDateStart}
+        onDateStartChange={setFilterDateStart}
+        dateEnd={filterDateEnd}
+        onDateEndChange={setFilterDateEnd}
+        status={filterStatus}
+        onStatusChange={setFilterStatus}
+        letterStatus={filterLetterStatus}
+        onLetterStatusChange={setFilterLetterStatus}
+        onReset={handleResetFilters}
+        activeFilterCount={activeFilterCount}
+        onExportPdf={() =>
+          exportAttendancePdf({
+            classInfo: data.classInfo,
+            teacherName: teacherDisplayName,
+            records: displayedRecords,
+            students100Percent: dynamicMetrics.students100Percent,
+            studentRecap: dynamicMetrics.studentRecap,
+            dateRangeLabel,
+            logoUrl,
+          })
+        }
+        onExportExcel={() =>
+          exportAttendanceExcel({
+            classInfo: data.classInfo,
+            teacherName: teacherDisplayName,
+            records: displayedRecords,
+            students100Percent: dynamicMetrics.students100Percent,
+            studentRecap: dynamicMetrics.studentRecap,
+            dateRangeLabel,
+            logoUrl,
+          })
+        }
+      />
 
       <TeacherProfileModal
         isOpen={isProfileModalOpen}

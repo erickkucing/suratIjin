@@ -37,7 +37,7 @@ export function StatCard({
     <button
       type="button"
       onClick={onClick}
-      className={`touch-target text-left w-full p-4 sm:p-5 rounded-2xl card-paper transition-all duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] ${
+      className={`touch-target text-left min-w-[155px] sm:min-w-0 w-[165px] sm:w-full snap-start shrink-0 sm:shrink p-3.5 sm:p-5 rounded-2xl card-paper transition-all duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] ${
         isActive
           ? "ring-2 ring-[var(--primary)] shadow-sm bg-[var(--canvas-subtle)]"
           : "hover:shadow-sm hover:bg-[var(--canvas-subtle)]"
@@ -46,23 +46,27 @@ export function StatCard({
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
           <span className={`w-2 h-2 rounded-full ${dotStyles[accentColor]}`} />
-          <span className="text-xs font-semibold text-[var(--ink-muted)]">
+          <span className="text-xs font-semibold text-[var(--ink-muted)] truncate">
             {title}
           </span>
         </div>
-        <span
-          className={`text-[11px] px-2 py-0.5 rounded-full border font-semibold ${badgeStyles[accentColor]}`}
-        >
-          {isActive ? "Aktif" : "Filter"}
-        </span>
+        {isActive && (
+          <span
+            className={`text-[10px] sm:text-[11px] px-2 py-0.5 rounded-full border font-bold ${badgeStyles[accentColor]}`}
+          >
+            Aktif
+          </span>
+        )}
       </div>
-      <div className="flex items-baseline gap-2">
-        <span className="text-3xl font-extrabold font-heading text-[var(--ink)]">
+      <div className="flex items-baseline gap-1.5">
+        <span className="text-2xl sm:text-3xl font-extrabold font-heading text-[var(--ink)]">
           {count}
         </span>
-        <span className="text-xs text-[var(--ink-subtle)]">siswa/kejadian</span>
+        <span className="text-[11px] sm:text-xs text-[var(--ink-subtle)]">siswa</span>
       </div>
-      <p className="mt-1 text-xs text-[var(--ink-muted)] line-clamp-1">{description}</p>
+      <p className="mt-1 text-[11px] sm:text-xs text-[var(--ink-muted)] line-clamp-1 hidden sm:block">
+        {description}
+      </p>
     </button>
   );
 }

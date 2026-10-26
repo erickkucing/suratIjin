@@ -277,7 +277,7 @@ export function PortalClient({
       <main className="max-w-6xl mx-auto w-full px-4 sm:px-6 py-6 space-y-6">
         <section aria-labelledby="portal-summary-heading">
           <h2 id="portal-summary-heading" className="sr-only">Ringkasan Statistik</h2>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div className="flex overflow-x-auto snap-x snap-mandatory gap-3 pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:overflow-visible no-scrollbar">
             <StatCard
               title="Total Alpa"
               count={dynamicMetrics.summary.totalAlpa}
@@ -549,25 +549,37 @@ export function PortalClient({
                 </table>
               </div>
 
-              <div className="md:hidden divide-y divide-[var(--border)]">
+              <div className="md:hidden p-3 space-y-3">
                 {displayedRecords.length === 0 ? (
-                  <div className="p-6 text-center text-sm text-[var(--ink-muted)]">
+                  <div className="p-8 text-center text-sm text-[var(--ink-muted)]">
                     Tidak ada data ketidakhadiran yang cocok.
                   </div>
                 ) : (
                   displayedRecords.map((r) => {
                     const hasFile = !!r.letterFilePath;
+                    const statusBorderClass =
+                      r.status === "Izin"
+                        ? "border-l-4 border-l-[var(--status-izin-fg)]"
+                        : r.status === "Sakit"
+                        ? "border-l-4 border-l-[var(--status-sakit-fg)]"
+                        : "border-l-4 border-l-[var(--status-alpa-fg)]";
+
                     return (
-                      <div key={r.id} className="p-4 space-y-2">
+                      <div
+                        key={r.id}
+                        className={`p-3.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-2xs space-y-2.5 transition-all ${statusBorderClass}`}
+                      >
                         <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <h4 className="text-sm font-bold text-[var(--ink)]">{r.studentName}</h4>
-                            <p className="text-xs text-[var(--ink-muted)]">
-                              {r.attendanceDate} &bull; Info: {r.infoSource}
-                            </p>
+                          <div className="space-y-0.5">
+                            <h4 className="text-sm font-bold text-[var(--ink)] leading-snug">{r.studentName}</h4>
+                            <div className="flex items-center gap-2 text-[11px] text-[var(--ink-muted)] flex-wrap">
+                              <span className="font-semibold text-[var(--ink)]">{r.attendanceDate}</span>
+                              <span>&bull;</span>
+                              <span>Info: {r.infoSource}</span>
+                            </div>
                           </div>
                           <span
-                            className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                            className={`px-2.5 py-0.5 rounded-full text-xs font-bold border shrink-0 ${
                               r.status === "Izin"
                                 ? "bg-[var(--status-izin-bg)] text-[var(--status-izin-fg)] border-[var(--status-izin-border)]"
                                 : r.status === "Sakit"
@@ -580,12 +592,12 @@ export function PortalClient({
                         </div>
 
                         {r.description && (
-                          <p className="text-xs text-[var(--ink-muted)] bg-[var(--canvas-subtle)] p-2 rounded-lg">
+                          <p className="text-xs text-[var(--ink-muted)] bg-[var(--canvas-subtle)] p-2.5 rounded-lg leading-relaxed">
                             {r.description}
                           </p>
                         )}
 
-                        <div className="flex items-center justify-between pt-2">
+                        <div className="flex items-center justify-between pt-1 border-t border-[var(--border)]">
                           <span className="text-xs text-[var(--ink-muted)]">Bukti Surat:</span>
                           {hasFile && allowsLetterPhoto ? (
                             <button
@@ -594,7 +606,7 @@ export function PortalClient({
                                 setLightboxRecord(r);
                                 setIsLightboxOpen(true);
                               }}
-                              className="touch-target inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-xs font-semibold text-[var(--accent-slate)]"
+                              className="touch-target inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-xs font-bold text-[var(--accent-slate)] shadow-2xs"
                             >
                               <Eye className="w-3.5 h-3.5" />
                               <span>Lihat Surat</span>
@@ -711,10 +723,13 @@ export function PortalClient({
                 </table>
               </div>
 
-              <div className="md:hidden divide-y divide-[var(--border)]">
+              <div className="md:hidden p-3 space-y-3">
                 {displayedStudentRecap.map((st, idx) => (
-                  <div key={st.studentId} className="p-4 space-y-2">
-                    <div className="flex items-center justify-between">
+                  <div
+                    key={st.studentId}
+                    className="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-2xs space-y-2.5"
+                  >
+                    <div className="flex items-start justify-between gap-2">
                       <div>
                         <p className="text-sm font-bold text-[var(--ink)]">
                           {idx + 1}. {st.name}
@@ -727,21 +742,26 @@ export function PortalClient({
                         </span>
                       ) : (
                         <span className="px-2.5 py-0.5 rounded-full bg-[var(--canvas-subtle)] text-[var(--ink)] text-xs font-bold border border-[var(--border)]">
-                          Total: {st.totalAbsences} Hari
+                          {st.totalAbsences} Hari
                         </span>
                       )}
                     </div>
                     <div className="grid grid-cols-3 gap-2 pt-1 text-center text-xs">
-                      <div className="p-1.5 rounded-lg bg-[var(--status-sakit-bg)] text-[var(--status-sakit-fg)]">
-                        Sakit: <strong>{st.sakit}</strong>
+                      <div className="p-1.5 rounded-lg bg-[var(--status-sakit-bg)] text-[var(--status-sakit-fg)] font-medium">
+                        Sakit: <strong className="font-bold">{st.sakit}</strong>
                       </div>
-                      <div className="p-1.5 rounded-lg bg-[var(--status-izin-bg)] text-[var(--status-izin-fg)]">
-                        Izin: <strong>{st.izin}</strong>
+                      <div className="p-1.5 rounded-lg bg-[var(--status-izin-bg)] text-[var(--status-izin-fg)] font-medium">
+                        Izin: <strong className="font-bold">{st.izin}</strong>
                       </div>
-                      <div className="p-1.5 rounded-lg bg-[var(--status-alpa-bg)] text-[var(--status-alpa-fg)]">
-                        Alpa: <strong>{st.alpa}</strong>
+                      <div className="p-1.5 rounded-lg bg-[var(--status-alpa-bg)] text-[var(--status-alpa-fg)] font-medium">
+                        Alpa: <strong className="font-bold">{st.alpa}</strong>
                       </div>
                     </div>
+                    {st.suratBelum > 0 && (
+                      <p className="text-[11px] font-bold text-[var(--primary)] pt-0.5">
+                        ⚠️ Ada {st.suratBelum} surat yang belum lengkap.
+                      </p>
+                    )}
                   </div>
                 ))}
               </div>
