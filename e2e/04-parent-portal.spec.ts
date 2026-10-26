@@ -54,7 +54,7 @@ test.describe("04. Parent Portal Workflow", () => {
     const appreciationHeading = page.locator('h3:has-text("Kehadiran 100%")');
     await expect(appreciationHeading).toBeVisible();
 
-    const badge100 = page.locator('span:has-text("100%")').first();
-    await expect(badge100).toBeVisible();
+    const studentItem = page.locator('section:has(h3:has-text("Kehadiran 100%")) p').first();
+    await expect(studentItem).toBeVisible();
   });
 });

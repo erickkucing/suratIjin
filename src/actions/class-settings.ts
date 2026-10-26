@@ -398,4 +398,45 @@ export async function regenerateClassSlugAction(classId: number) {
   };
 }
 
+export async function deleteAllStudentsAction(classId: number) {
+  const user = await getCurrentUser();
+  if (!user) {
+    return { success: false, error: "Sesi telah berakhir. Silakan login kembali." };
+  }
+
+  const cls = await db.query.classes.findFirst({
+    where: eq(classes.id, classId),
+  });
+
+  if (!cls) {
+    return { success: false, error: "Kelas tidak ditemukan." };
+  }
+
+  if (user.role !== "superadmin" && cls.waliKelasId !== user.id) {
+    return { success: false, error: "Akses ditolak. Anda tidak memiliki izin untuk mengosongkan siswa kelas ini." };
+  }
+
+  const existing = await db
+    .select({ id: students.id })
+    .from(students)
+    .where(eq(students.classId, classId));
+
+  const totalCount = existing.length;
+  if (totalCount === 0) {
+    return { success: false, error: "Tidak ada data siswa yang dapat dihapus di kelas ini." };
+  }
+
+  await db.delete(students).where(eq(students.classId, classId));
+
+  revalidatePath("/dashboard");
+  revalidatePath("/admin");
+  revalidatePath(`/portal/${cls.slug}`);
+
+  return {
+    success: true,
+    deletedCount: totalCount,
+    message: `Berhasil menghapus seluruh data (${totalCount} siswa) kelas ${cls.name}.`,
+  };
+}
+
 

@@ -8,6 +8,7 @@ import {
   Lock,
   ArrowRight,
   Eye,
+  Award,
   Search,
   AlertCircle,
   Loader2,
@@ -279,7 +280,7 @@ export function PortalClient({
       <main className="max-w-6xl mx-auto w-full px-4 sm:px-6 py-6 space-y-6">
         <section aria-labelledby="portal-summary-heading">
           <h2 id="portal-summary-heading" className="sr-only">Ringkasan Statistik</h2>
-          <div className="flex overflow-x-auto snap-x snap-mandatory gap-3 pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:overflow-visible no-scrollbar">
+          <div className="flex overflow-x-auto snap-x snap-mandatory gap-2.5 pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:overflow-visible no-scrollbar">
             <StatCard
               title="Total Alpa"
               count={dynamicMetrics.summary.totalAlpa}
@@ -787,9 +788,12 @@ export function PortalClient({
           <section className="card-paper p-5 rounded-2xl space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-base font-bold font-heading text-[var(--ink)]">
-                  Kehadiran 100%
-                </h3>
+                <div className="flex items-center gap-2">
+                  <Award className="w-5 h-5 text-amber-600 shrink-0" />
+                  <h3 className="text-base font-bold font-heading text-[var(--ink)]">
+                    Kehadiran 100%
+                  </h3>
+                </div>
                 <p className="text-xs text-[var(--ink-muted)]">
                   {dynamicMetrics.students100Percent.length} dari {data.totalClassStudents} siswa
                 </p>
@@ -813,9 +817,6 @@ export function PortalClient({
                       </span>
                       <p className="text-xs font-bold text-[var(--ink)] truncate">{s.name}</p>
                     </div>
-                    <span className="text-xs px-2 py-0.5 rounded-md bg-[var(--primary-light)] text-[var(--primary)] font-semibold shrink-0 whitespace-nowrap">
-                      100%
-                    </span>
                   </div>
                 ))
               )}

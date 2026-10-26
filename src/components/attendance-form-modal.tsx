@@ -18,6 +18,7 @@ import {
   updateAttendanceAction,
 } from "@/actions/attendance";
 import { processFileBeforeUpload } from "@/lib/client-image-compress";
+import { useBottomSheetGesture } from "@/hooks/use-bottom-sheet";
 
 interface AttendanceFormModalProps {
   isOpen: boolean;
@@ -59,6 +60,11 @@ export function AttendanceFormModal({
 
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const { sheetRef, sheetStyle, touchHandlers } = useBottomSheetGesture({
+    isOpen,
+    onClose,
+  });
 
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -292,20 +298,30 @@ export function AttendanceFormModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="attendance-modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/75 backdrop-blur-xs overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6 bg-black/75 backdrop-blur-xs overflow-hidden sm:overflow-y-auto"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="relative w-full max-w-xl my-6 bg-[var(--surface)] text-[var(--ink)] rounded-2xl shadow-2xl border border-[var(--border)] overflow-hidden">
+      <div
+        ref={sheetRef}
+        style={sheetStyle}
+        {...touchHandlers}
+        className="relative w-full max-w-xl max-h-[92vh] sm:max-h-[85vh] rounded-t-2xl sm:rounded-2xl rounded-b-none sm:rounded-b-2xl bg-[var(--surface)] text-[var(--ink)] shadow-2xl border-t border-x sm:border border-[var(--border)] overflow-hidden flex flex-col"
+      >
+        {/* Mobile Tactile Drag Handle */}
+        <div data-drag-handle className="sm:hidden flex justify-center pt-2.5 pb-1 touch-none cursor-grab active:cursor-grabbing bg-[var(--canvas-subtle)]">
+          <div className="w-10 h-1.5 rounded-full bg-[var(--border-strong)]/60" />
+        </div>
+
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] bg-[var(--canvas-subtle)]">
-          <div className="flex items-center gap-2">
-            <div className="p-2 rounded-xl bg-[var(--primary-light)] text-[var(--primary)] shadow-xs">
+        <div className="flex items-center justify-between px-5 sm:px-6 py-3.5 sm:py-4 border-b border-[var(--border)] bg-[var(--canvas-subtle)] shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-[var(--primary-light)] text-[var(--primary)] shadow-xs shrink-0">
               <Calendar className="w-5 h-5" />
             </div>
             <div>
-              <h2 id="attendance-modal-title" className="text-lg font-bold font-heading">
+              <h2 id="attendance-modal-title" className="text-base sm:text-lg font-bold font-heading">
                 {editRecord ? "Edit Catatan Ketidakhadiran" : "+ Catat Ketidakhadiran Baru"}
               </h2>
               <p className="text-xs text-[var(--ink-muted)]">
@@ -324,7 +340,7 @@ export function AttendanceFormModal({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-5 overflow-y-auto flex-1">
           {errorMessage && (
             <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-red-800 dark:text-red-300 text-sm">
               <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />

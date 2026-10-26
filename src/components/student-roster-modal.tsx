@@ -24,9 +24,11 @@ import {
   deleteStudentAction,
   bulkAddStudentsAction,
   bulkImportStudentsAction,
+  deleteAllStudentsAction,
 } from "@/actions/class-settings";
 import { exportStudentRosterExcel, downloadStudentImportTemplate } from "@/lib/export-excel";
 import { toTitleCase } from "@/lib/string-utils";
+import { useBottomSheetGesture } from "@/hooks/use-bottom-sheet";
 
 interface StudentRosterModalProps {
   isOpen: boolean;
@@ -68,7 +70,17 @@ export function StudentRosterModal({
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ text: string; isError: boolean } | null>(null);
 
+  // Delete All Students Confirmation
+  const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
+  const [deleteConfirmInput, setDeleteConfirmInput] = useState("");
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const { sheetRef, sheetStyle, touchHandlers } = useBottomSheetGesture({
+    isOpen,
+    onClose,
+  });
 
   useEffect(() => {
     if (isOpen) {
@@ -81,6 +93,9 @@ export function StudentRosterModal({
       setExcelFileName(null);
       setEditingStudentId(null);
       setMessage(null);
+      setShowDeleteAllModal(false);
+      setDeleteConfirmInput("");
+      setIsDeletingAll(false);
     }
   }, [isOpen]);
 
@@ -348,6 +363,27 @@ export function StudentRosterModal({
     }
   };
 
+  const handleConfirmDeleteAll = async () => {
+    if (deleteConfirmInput.trim() !== "HAPUS") return;
+    setIsDeletingAll(true);
+    try {
+      const res = await deleteAllStudentsAction(classId);
+      if (!res.success) throw new Error(res.error);
+      setMessage({ text: res.message || "Seluruh data siswa berhasil dihapus.", isError: false });
+      setShowDeleteAllModal(false);
+      setDeleteConfirmInput("");
+      onSuccess();
+    } catch (err: unknown) {
+      setMessage({
+        text: err instanceof Error ? err.message : "Gagal menghapus seluruh siswa.",
+        isError: true,
+      });
+      setShowDeleteAllModal(false);
+    } finally {
+      setIsDeletingAll(false);
+    }
+  };
+
   const filteredStudents = studentsList.filter((s) =>
     s.name.toLowerCase().includes(search.toLowerCase()) ||
     (s.nis && s.nis.toLowerCase().includes(search.toLowerCase()))
@@ -358,26 +394,36 @@ export function StudentRosterModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="student-roster-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/75 backdrop-blur-xs overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6 bg-black/75 backdrop-blur-xs overflow-hidden sm:overflow-y-auto"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="relative w-full max-w-2xl my-6 bg-[var(--surface)] text-[var(--ink)] rounded-2xl shadow-2xl border border-[var(--border)] overflow-hidden">
+      <div
+        ref={sheetRef}
+        style={sheetStyle}
+        {...touchHandlers}
+        className="relative w-full max-w-2xl max-h-[92vh] sm:max-h-[85vh] rounded-t-2xl sm:rounded-2xl rounded-b-none sm:rounded-b-2xl bg-[var(--surface)] text-[var(--ink)] shadow-2xl border-t border-x sm:border border-[var(--border)] overflow-hidden flex flex-col"
+      >
+        {/* Mobile Tactile Drag Handle */}
+        <div data-drag-handle className="sm:hidden flex justify-center pt-2.5 pb-1 touch-none cursor-grab active:cursor-grabbing bg-[var(--canvas-subtle)]">
+          <div className="w-10 h-1.5 rounded-full bg-[var(--border-strong)]/60" />
+        </div>
+
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] bg-[var(--canvas-subtle)]">
-          <div className="flex items-center gap-2">
-            <div className="p-2 rounded-xl bg-[var(--primary-light)] text-[var(--primary)] shadow-xs">
+        <div className="flex items-center justify-between px-5 sm:px-6 py-3.5 sm:py-4 border-b border-[var(--border)] bg-[var(--canvas-subtle)] shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-[var(--primary-light)] text-[var(--primary)] shadow-xs shrink-0">
               <Users className="w-5 h-5" />
             </div>
             <div>
-              <h2 id="student-roster-title" className="text-lg font-bold font-heading">
+              <h2 id="student-roster-title" className="text-base sm:text-lg font-bold font-heading">
                 Kelola Daftar Siswa: {classNameTitle}
               </h2>
               <p className="text-xs text-[var(--ink-muted)]">
-                Total {studentsList.filter((s) => s.isActive).length} aktif
+                {studentsList.filter((s) => s.isActive).length} Siswa Terdaftar
                 {studentsList.some((s) => !s.isActive)
-                  ? `, ${studentsList.filter((s) => !s.isActive).length} diarsipkan`
+                  ? ` (${studentsList.filter((s) => !s.isActive).length} diarsipkan)`
                   : ""}
               </p>
             </div>
@@ -393,7 +439,7 @@ export function StudentRosterModal({
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-[var(--border)] bg-[var(--surface)] px-6 pt-3 gap-4">
+        <div className="flex border-b border-[var(--border)] bg-[var(--surface)] px-4 sm:px-6 pt-2.5 sm:pt-3 gap-3 sm:gap-4 shrink-0 overflow-x-auto no-scrollbar">
           <button
             type="button"
             onClick={() => setActiveTab("list")}
@@ -430,7 +476,7 @@ export function StudentRosterModal({
         </div>
 
         {/* Body */}
-        <div className="p-6 max-h-[70vh] overflow-y-auto space-y-4">
+        <div className="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1">
           {message && (
             <div
               className={`p-3 rounded-xl border text-sm font-medium ${
@@ -452,7 +498,7 @@ export function StudentRosterModal({
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Cari nama atau NIS siswa..."
-                  className="flex-1 px-3.5 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] placeholder:text-[var(--ink-subtle)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                  className="flex-1 min-w-0 px-3.5 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] placeholder:text-[var(--ink-subtle)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
                 />
                 <button
                   type="button"
@@ -463,6 +509,20 @@ export function StudentRosterModal({
                   <FileSpreadsheet className="w-4 h-4 text-[var(--status-success-fg)]" />
                   <span className="hidden sm:inline">Export Excel</span>
                 </button>
+                {studentsList.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeleteConfirmInput("");
+                      setShowDeleteAllModal(true);
+                    }}
+                    className="touch-target inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-red-300 dark:border-red-900/60 bg-red-50/50 dark:bg-red-950/20 hover:bg-red-100 dark:hover:bg-red-900/40 text-xs font-semibold text-red-700 dark:text-red-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-500 shrink-0"
+                    title="Hapus semua data siswa di kelas ini"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span className="hidden sm:inline">Hapus Semua</span>
+                  </button>
+                )}
               </div>
 
               <div className="border border-[var(--border)] rounded-xl divide-y divide-[var(--border)] overflow-hidden">
@@ -779,6 +839,77 @@ export function StudentRosterModal({
           )}
         </div>
       </div>
+
+      {/* Danger Modal: Delete All Students */}
+      {showDeleteAllModal && (
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="delete-all-title"
+          className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs"
+        >
+          <div className="w-full max-w-md bg-[var(--surface)] border border-red-300 dark:border-red-900/60 rounded-2xl p-6 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3 text-red-600 dark:text-red-400">
+              <div className="p-2.5 rounded-xl bg-red-100 dark:bg-red-950/50">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 id="delete-all-title" className="text-base font-bold font-heading text-[var(--ink)]">
+                  Hapus Seluruh Data Siswa?
+                </h3>
+                <p className="text-xs text-[var(--ink-muted)]">Tindakan ini tidak dapat dibatalkan</p>
+              </div>
+            </div>
+
+            <div className="text-xs space-y-2 text-[var(--ink-muted)] bg-[var(--canvas-subtle)] p-3.5 rounded-xl border border-[var(--border)]">
+              <p>
+                Anda akan menghapus secara permanen seluruh <strong className="text-[var(--ink)]">{studentsList.length} siswa</strong> di kelas <strong className="text-[var(--ink)]">{classNameTitle}</strong>.
+              </p>
+              <p className="text-red-600 dark:text-red-400 font-semibold">
+                Peringatan: Seluruh data catatan surat izin, sakit, dan alpa yang terkait dengan siswa di kelas ini juga akan terhapus otomatis!
+              </p>
+            </div>
+
+            <div>
+              <label htmlFor="confirm-delete-input" className="block text-xs font-semibold text-[var(--ink)] mb-1.5">
+                Ketik kata <span className="font-mono font-bold text-red-600 bg-red-50 dark:bg-red-950 px-1.5 py-0.5 rounded border border-red-200 dark:border-red-900">HAPUS</span> di bawah ini untuk konfirmasi:
+              </label>
+              <input
+                id="confirm-delete-input"
+                type="text"
+                value={deleteConfirmInput}
+                onChange={(e) => setDeleteConfirmInput(e.target.value)}
+                placeholder="Ketik HAPUS"
+                autoFocus
+                className="w-full px-3 py-2 text-sm rounded-lg border border-red-300 dark:border-red-800 bg-[var(--surface)] text-[var(--ink)] font-mono focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-500"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDeleteAllModal(false);
+                  setDeleteConfirmInput("");
+                }}
+                disabled={isDeletingAll}
+                className="touch-target px-4 py-2 rounded-lg text-xs font-semibold border border-[var(--border)] text-[var(--ink-muted)] hover:bg-[var(--canvas-subtle)] transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteAll}
+                disabled={deleteConfirmInput !== "HAPUS" || isDeletingAll}
+                className="touch-target flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold bg-red-600 hover:bg-red-700 text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-xs"
+              >
+                {isDeletingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                <span>{isDeletingAll ? "Menghapus..." : "Hapus Semua Siswa"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

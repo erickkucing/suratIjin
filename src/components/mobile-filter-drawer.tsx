@@ -2,6 +2,7 @@
 
 import React, { useEffect } from "react";
 import { X, Search, Calendar, FileDown, FileSpreadsheet, RotateCcw, Check } from "lucide-react";
+import { useBottomSheetGesture } from "@/hooks/use-bottom-sheet";
 
 interface MobileFilterDrawerProps {
   isOpen: boolean;
@@ -40,6 +41,11 @@ export function MobileFilterDrawer({
   onExportPdf,
   onExportExcel,
 }: MobileFilterDrawerProps) {
+  const { sheetRef, sheetStyle, touchHandlers } = useBottomSheetGesture({
+    isOpen,
+    onClose,
+  });
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -66,9 +72,14 @@ export function MobileFilterDrawer({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="card-paper w-full max-h-[85vh] rounded-t-3xl border-t border-[var(--border)] overflow-y-auto flex flex-col animate-in slide-in-from-bottom duration-200 shadow-2xl">
+      <div
+        ref={sheetRef}
+        style={sheetStyle}
+        {...touchHandlers}
+        className="card-paper w-full max-h-[85vh] rounded-t-3xl border-t border-[var(--border)] overflow-y-auto flex flex-col shadow-2xl"
+      >
         {/* Pull Handle */}
-        <div className="pt-3 pb-1 flex justify-center">
+        <div data-drag-handle className="pt-3 pb-1 flex justify-center touch-none cursor-grab active:cursor-grabbing">
           <div className="w-10 h-1 rounded-full bg-[var(--border)]" />
         </div>
 

@@ -16,6 +16,7 @@ import {
   Eye,
   Edit2,
   Trash2,
+  Award,
   ChevronDown,
   RefreshCw,
   UserCheck,
@@ -291,7 +292,7 @@ export function DashboardClient({
       <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 py-6 pb-28 sm:pb-6 space-y-5 sm:space-y-6">
         <section aria-labelledby="summary-heading">
           <h2 id="summary-heading" className="sr-only">Ringkasan Statistik Ketidakhadiran</h2>
-          <div className="flex overflow-x-auto snap-x snap-mandatory gap-3 pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:overflow-visible no-scrollbar">
+          <div className="flex overflow-x-auto snap-x snap-mandatory gap-2.5 pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:overflow-visible no-scrollbar">
             <StatCard
               title="Total Alpa"
               count={dynamicMetrics.summary.totalAlpa}
@@ -976,9 +977,12 @@ export function DashboardClient({
           <section className="card-paper p-5 rounded-2xl space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-base font-bold font-heading text-[var(--ink)]">
-                  Kehadiran 100%
-                </h3>
+                <div className="flex items-center gap-2">
+                  <Award className="w-5 h-5 text-amber-600 shrink-0" />
+                  <h3 className="text-base font-bold font-heading text-[var(--ink)]">
+                    Kehadiran 100%
+                  </h3>
+                </div>
                 <p className="text-xs text-[var(--ink-muted)]">
                   {dynamicMetrics.students100Percent.length} dari {data.totalClassStudents} siswa
                 </p>
@@ -1005,9 +1009,6 @@ export function DashboardClient({
                         {s.nis && <p className="text-[11px] text-[var(--ink-subtle)]">NIS: {s.nis}</p>}
                       </div>
                     </div>
-                    <span className="text-xs px-2 py-0.5 rounded-md bg-[var(--primary-light)] text-[var(--primary)] font-semibold shrink-0 whitespace-nowrap">
-                      100%
-                    </span>
                   </div>
                 ))
               )}

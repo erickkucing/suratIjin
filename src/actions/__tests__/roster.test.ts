@@ -8,6 +8,7 @@ import {
   toggleStudentActiveAction,
   deleteStudentAction,
   bulkImportStudentsAction,
+  deleteAllStudentsAction,
 } from "../class-settings";
 import { createSessionToken } from "@/lib/auth";
 
@@ -111,5 +112,11 @@ describe("Student Roster Management & CRUD Operations", () => {
         .delete(students)
         .where(and(eq(students.classId, classId), eq(students.name, item.name)));
     }
+  });
+
+  it("should guard deleteAllStudentsAction with session authentication", async () => {
+    const res = await deleteAllStudentsAction(classId);
+    expect(res.success).toBe(false);
+    expect(res.error).toContain("Sesi telah berakhir");
   });
 });

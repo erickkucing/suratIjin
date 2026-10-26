@@ -37,13 +37,13 @@ export function StatCard({
     <button
       type="button"
       onClick={onClick}
-      className={`touch-target text-left min-w-[155px] sm:min-w-0 w-[165px] sm:w-full snap-start shrink-0 sm:shrink p-3.5 sm:p-5 rounded-2xl card-paper transition-all duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] ${
+      className={`touch-target text-left min-w-[125px] sm:min-w-0 w-auto sm:w-full snap-start shrink-0 sm:shrink px-3.5 py-3 sm:p-5 rounded-xl sm:rounded-2xl card-paper transition-all duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] ${
         isActive
           ? "ring-2 ring-[var(--primary)] shadow-sm bg-[var(--canvas-subtle)]"
           : "hover:shadow-sm hover:bg-[var(--canvas-subtle)]"
       }`}
     >
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between mb-1.5 sm:mb-2">
         <div className="flex items-center gap-1.5">
           <span className={`w-2 h-2 rounded-full ${dotStyles[accentColor]}`} />
           <span className="text-xs font-semibold text-[var(--ink-muted)] truncate">
@@ -59,7 +59,7 @@ export function StatCard({
         )}
       </div>
       <div className="flex items-baseline gap-1.5">
-        <span className="text-2xl sm:text-3xl font-extrabold font-heading text-[var(--ink)]">
+        <span className="text-xl sm:text-3xl font-extrabold font-heading text-[var(--ink)]">
           {count}
         </span>
         <span className="text-[11px] sm:text-xs text-[var(--ink-subtle)]">siswa</span>
