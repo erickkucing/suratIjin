@@ -6,10 +6,12 @@ import {
   Calendar,
   Camera,
   Upload,
-  CheckCircle2,
   AlertCircle,
   Loader2,
   FileText,
+  ScanLine,
+  ChevronDown,
+  Image as ImageIcon,
 } from "lucide-react";
 import { Student } from "@/db/schema";
 import { AttendanceRecordWithStudent } from "@/db/queries";
@@ -60,19 +62,53 @@ export function AttendanceFormModal({
 
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [scanningLetter, setScanningLetter] = useState(false);
+  const [ocrResultBanner, setOcrResultBanner] = useState<{
+    studentName: string | null;
+    candidateName?: string | null;
+    className?: string | null;
+    matchConfidence: number;
+    status: string;
+    startDate: string;
+    endDate: string;
+    isMultiDay: boolean;
+    description: string;
+  } | null>(null);
 
   const { sheetRef, sheetStyle, touchHandlers } = useBottomSheetGesture({
     isOpen,
     onClose,
+    onExpand: () => setIsExpanded(true),
   });
 
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
+  const comboRef = useRef<HTMLDivElement>(null);
+  const [isComboOpen, setIsComboOpen] = useState(false);
+  const [showSourceSheet, setShowSourceSheet] = useState(false);
+  const [studentError, setStudentError] = useState(false);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (comboRef.current && !comboRef.current.contains(e.target as Node)) {
+        setIsComboOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
+      setIsExpanded(false);
+      setIsComboOpen(false);
+      setShowSourceSheet(false);
+      setStudentError(false);
       if (editRecord) {
         setStudentId(editRecord.studentId);
+        const found = studentsList.find((s) => s.id === editRecord.studentId);
+        setStudentSearch(found ? found.name : "");
         setStartDate(editRecord.attendanceDate);
         setEndDate(editRecord.attendanceDate);
         setIsMultiDay(false);
@@ -93,7 +129,7 @@ export function AttendanceFormModal({
         );
       } else {
         const today = new Date().toISOString().split("T")[0];
-        setStudentId(studentsList.length > 0 ? studentsList[0].id : 0);
+        setStudentId(0);
         setStudentSearch("");
         setStartDate(today);
         setEndDate(today);
@@ -110,6 +146,8 @@ export function AttendanceFormModal({
       setCompressionProgress(0);
       setCompressionInfo(null);
       setErrorMessage(null);
+      setScanningLetter(false);
+      setOcrResultBanner(null);
     }
   }, [isOpen, editRecord, studentsList]);
 
@@ -137,7 +175,109 @@ export function AttendanceFormModal({
 
   if (!isOpen) return null;
 
-  const handleFilePicked = async (file: File) => {
+  const runOcrScan = async (fileToScan: File) => {
+    setScanningLetter(true);
+    setErrorMessage(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("classId", String(classId));
+      formData.append("file", fileToScan);
+
+      const res = await fetch("/api/ocr/letter", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal memindai dokumen surat.");
+      }
+
+      const detected = data.detected;
+      if (detected) {
+        if (detected.studentId) {
+          setStudentId(detected.studentId);
+          setStudentError(false);
+          const found = studentsList.find((s) => s.id === detected.studentId);
+          if (found) {
+            setStudentSearch(found.name);
+          }
+        } else if (detected.studentName) {
+          const found = studentsList.find(
+            (s) => s.name.toLowerCase() === detected.studentName.toLowerCase()
+          );
+          if (found) {
+            setStudentId(found.id);
+            setStudentSearch(found.name);
+            setStudentError(false);
+          }
+        }
+
+        if (detected.status === "Sakit" || detected.status === "Izin") {
+          setStatus(detected.status);
+        }
+
+        if (detected.startDate) {
+          setStartDate(detected.startDate);
+        }
+        if (detected.endDate) {
+          setEndDate(detected.endDate);
+        }
+
+        const isMultiDayDetected =
+          detected.isMultiDay === true ||
+          Boolean(
+            detected.startDate &&
+            detected.endDate &&
+            detected.startDate !== detected.endDate
+          );
+
+        if (isMultiDayDetected) {
+          setIsMultiDay(true);
+        } else if (typeof detected.isMultiDay === "boolean") {
+          setIsMultiDay(detected.isMultiDay);
+        }
+
+        if (detected.description) {
+          setDescription(detected.description);
+        }
+
+        if (detected.infoSource) {
+          const defaultSources = ["Orang tua", "Siswa sendiri", "Pengurus kelas"];
+          if (defaultSources.includes(detected.infoSource)) {
+            setInfoSource(detected.infoSource);
+            setCustomInfoSource("");
+          } else {
+            setInfoSource("Lainnya");
+            setCustomInfoSource(detected.infoSource);
+          }
+        }
+
+        setOcrResultBanner({
+          studentName: detected.studentName,
+          candidateName: detected.candidateName,
+          className: detected.className,
+          matchConfidence: detected.matchConfidence || 0,
+          status: detected.status,
+          startDate: detected.startDate,
+          endDate: detected.endDate,
+          isMultiDay: isMultiDayDetected,
+          description: detected.description,
+        });
+      }
+    } catch (err: unknown) {
+      setErrorMessage(
+        err instanceof Error
+          ? err.message
+          : "Gagal memindai surat izin. Anda tetap dapat mengisi formulir secara manual."
+      );
+    } finally {
+      setScanningLetter(false);
+    }
+  };
+
+  const handleFilePicked = async (file: File, autoScan: boolean = true) => {
     setErrorMessage(null);
     const validTypes = [
       "image/jpeg",
@@ -153,6 +293,8 @@ export function AttendanceFormModal({
       return;
     }
 
+    let finalFile = file;
+
     if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
       setSelectedFile(file);
       setFilePreviewUrl(null);
@@ -161,34 +303,40 @@ export function AttendanceFormModal({
         compressedSize: file.size,
         reductionPercentage: 0,
       });
-      return;
+      finalFile = file;
+    } else {
+      setCompressing(true);
+      setCompressionProgress(15);
+
+      try {
+        const result = await processFileBeforeUpload(file, (p) =>
+          setCompressionProgress(Math.min(100, Math.round(p)))
+        );
+
+        setSelectedFile(result.file);
+        setFilePreviewUrl(URL.createObjectURL(result.file));
+        setCompressionInfo({
+          originalSize: result.originalSize,
+          compressedSize: result.compressedSize,
+          reductionPercentage: result.reductionPercentage,
+        });
+        finalFile = result.file;
+      } catch {
+        setSelectedFile(file);
+        setFilePreviewUrl(URL.createObjectURL(file));
+        setCompressionInfo({
+          originalSize: file.size,
+          compressedSize: file.size,
+          reductionPercentage: 0,
+        });
+        finalFile = file;
+      } finally {
+        setCompressing(false);
+      }
     }
 
-    setCompressing(true);
-    setCompressionProgress(15);
-
-    try {
-      const result = await processFileBeforeUpload(file, (p) =>
-        setCompressionProgress(Math.min(100, Math.round(p)))
-      );
-
-      setSelectedFile(result.file);
-      setFilePreviewUrl(URL.createObjectURL(result.file));
-      setCompressionInfo({
-        originalSize: result.originalSize,
-        compressedSize: result.compressedSize,
-        reductionPercentage: result.reductionPercentage,
-      });
-    } catch {
-      setSelectedFile(file);
-      setFilePreviewUrl(URL.createObjectURL(file));
-      setCompressionInfo({
-        originalSize: file.size,
-        compressedSize: file.size,
-        reductionPercentage: 0,
-      });
-    } finally {
-      setCompressing(false);
+    if (autoScan) {
+      await runOcrScan(finalFile);
     }
   };
 
@@ -202,10 +350,16 @@ export function AttendanceFormModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!studentId) {
-      setErrorMessage("Pilih siswa terlebih dahulu.");
+    const exactStudent = studentsList.find(
+      (s) => s.name.toLowerCase() === studentSearch.trim().toLowerCase()
+    );
+    const effectiveStudentId = studentId || (exactStudent ? exactStudent.id : 0);
+    if (!effectiveStudentId) {
+      setErrorMessage("Pilih siswa terlebih dahulu dari daftar.");
+      setStudentError(true);
       return;
     }
+    setStudentError(false);
     if (!startDate) {
       setErrorMessage("Tentukan tanggal ketidakhadiran.");
       return;
@@ -247,7 +401,7 @@ export function AttendanceFormModal({
       if (editRecord) {
         const res = await updateAttendanceAction({
           recordId: editRecord.id,
-          studentId,
+          studentId: effectiveStudentId,
           attendanceDate: startDate,
           status,
           infoSource: finalSource,
@@ -262,7 +416,7 @@ export function AttendanceFormModal({
       } else {
         const res = await createAttendanceAction({
           classId,
-          studentId,
+          studentId: effectiveStudentId,
           startDate,
           endDate: isMultiDay ? endDate : undefined,
           status,
@@ -307,7 +461,9 @@ export function AttendanceFormModal({
         ref={sheetRef}
         style={sheetStyle}
         {...touchHandlers}
-        className="relative w-full max-w-xl max-h-[84dvh] sm:max-h-[85vh] rounded-t-3xl sm:rounded-2xl rounded-b-none sm:rounded-b-2xl bg-[var(--surface)] text-[var(--ink)] shadow-2xl border-t border-x sm:border border-[var(--border)] overflow-hidden flex flex-col"
+        className={`relative w-full max-w-xl min-h-0 rounded-t-3xl sm:rounded-2xl rounded-b-none sm:rounded-b-2xl bg-[var(--surface)] text-[var(--ink)] shadow-2xl border-t border-x sm:border border-[var(--border)] overflow-hidden flex flex-col modal-bottom-sheet ${
+          isExpanded ? "max-h-[83dvh] expanded" : "max-h-[68dvh]"
+        } sm:max-h-[85vh]`}
       >
         {/* Mobile Tactile Drag Handle */}
         <div data-drag-handle className="sm:hidden flex justify-center pt-3 pb-2 touch-none cursor-grab active:cursor-grabbing bg-[var(--canvas-subtle)]">
@@ -315,7 +471,7 @@ export function AttendanceFormModal({
         </div>
 
         {/* Header */}
-        <div className="flex items-center justify-between px-5 sm:px-6 py-3.5 sm:py-4 border-b border-[var(--border)] bg-[var(--canvas-subtle)] shrink-0">
+        <div data-sheet-header className="flex items-center justify-between px-5 sm:px-6 py-3.5 sm:py-4 border-b border-[var(--border)] bg-[var(--canvas-subtle)] shrink-0 touch-none select-none">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-[var(--primary-light)] text-[var(--primary)] shadow-xs shrink-0">
               <Calendar className="w-5 h-5" />
@@ -329,18 +485,211 @@ export function AttendanceFormModal({
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="touch-target inline-flex items-center justify-center p-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-[var(--ink-muted)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
-            aria-label="Tutup dialog"
-          >
-            <X className="w-5 h-5" />
-          </button>
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-4 sm:p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:pb-6 space-y-5 overflow-y-auto flex-1">
+        <form
+          onSubmit={handleSubmit}
+          onScroll={(e) => {
+            if (!isExpanded && e.currentTarget.scrollTop > 18) {
+              setIsExpanded(true);
+            }
+          }}
+          className="p-4 sm:p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:pb-6 space-y-5 overflow-y-auto min-h-0 flex-1"
+        >
+          {/* Hidden file inputs accessible by camera and gallery buttons */}
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleFilePicked(f, true);
+            }}
+          />
+          <input
+            ref={galleryInputRef}
+            type="file"
+            accept=".pdf,.jpg,.jpeg,.png,.heic,.heif,image/*,application/pdf"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleFilePicked(f, true);
+            }}
+          />
+
+          {/* Bagian Paling Atas: Tombol Upload/Foto & Langsung OCR, serta Mini Preview */}
+          {status !== "Alpa" && (
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--canvas-subtle)] p-3 sm:p-3.5 space-y-2.5">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-[var(--primary-light)] text-[var(--primary)] shrink-0">
+                    <ScanLine className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-semibold text-[var(--ink)] block">
+                      Pindai Surat Otomatis (OCR)
+                    </span>
+                    <span className="text-[11px] text-[var(--ink-muted)] block">
+                      Foto atau unggah surat untuk mengisi data langsung
+                    </span>
+                  </div>
+                </div>
+
+                {!selectedFile && !existingFilePath && (
+                  <div className="flex items-center gap-2 shrink-0">
+                    {/* Desktop button: direct file picker */}
+                    <button
+                      type="button"
+                      disabled={compressing || scanningLetter || loading}
+                      onClick={() => galleryInputRef.current?.click()}
+                      className="hidden sm:inline-flex touch-target items-center justify-center gap-2 px-3.5 py-2 rounded-xl bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] text-xs font-semibold shadow-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] disabled:opacity-50 transition-colors cursor-pointer"
+                    >
+                      {compressing || scanningLetter ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Camera className="w-3.5 h-3.5" />
+                      )}
+                      <span>{compressing ? "Mengompres..." : scanningLetter ? "Memindai..." : "Foto / Pindai Surat"}</span>
+                    </button>
+
+                    {/* Mobile button: triggers mobile bottom sheet */}
+                    <button
+                      type="button"
+                      disabled={compressing || scanningLetter || loading}
+                      onClick={() => setShowSourceSheet(true)}
+                      className="sm:hidden w-full touch-target flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] text-xs font-semibold shadow-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] disabled:opacity-50 transition-colors cursor-pointer"
+                    >
+                      {compressing || scanningLetter ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Camera className="w-3.5 h-3.5" />
+                      )}
+                      <span>{compressing ? "Mengompres..." : scanningLetter ? "Memindai Surat..." : "Foto / Pindai Surat"}</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Compression Progress Bar */}
+              {compressing && (
+                <div className="p-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] space-y-1">
+                  <div className="flex items-center justify-between text-[11px] text-[var(--ink-muted)]">
+                    <span className="flex items-center gap-1.5">
+                      <Loader2 className="w-3 h-3 animate-spin text-[var(--primary)]" />
+                      Mengompres foto untuk pemindaian cepat...
+                    </span>
+                    <span className="font-semibold">{compressionProgress}%</span>
+                  </div>
+                  <div className="w-full h-1 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+                    <div
+                      className="h-full bg-[var(--primary)] transition-all duration-150"
+                      style={{ width: `${compressionProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Scanning state badge */}
+              {scanningLetter && !compressing && (
+                <div className="flex items-center gap-2 p-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-xs text-[var(--ink-muted)]">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--primary)] shrink-0" />
+                  <span>Sedang membaca dan mengekstrak data dari surat izin...</span>
+                </div>
+              )}
+
+              {/* Mini Preview Thumbnail saat file ada */}
+              {(selectedFile || existingFilePath) && (
+                <div className="relative flex items-center gap-3 p-2 rounded-lg bg-[var(--surface)] border border-[var(--border)]">
+                  {filePreviewUrl ? (
+                    <img
+                      src={filePreviewUrl}
+                      alt="Pratinjau Surat"
+                      width={48}
+                      height={48}
+                      className="w-12 h-12 object-cover rounded-md border border-[var(--border)] shrink-0"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-md bg-[var(--canvas-subtle)] flex items-center justify-center text-[var(--ink-muted)] border border-[var(--border)] shrink-0">
+                      <FileText className="w-5 h-5" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold truncate text-[var(--ink)]">
+                      {selectedFile ? selectedFile.name : existingFilePath}
+                    </p>
+                    <p className="text-[11px] text-[var(--ink-muted)]">
+                      {selectedFile ? `${Math.round(selectedFile.size / 1024)} KB` : "File tersimpan"}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedFile(null);
+                      setExistingFilePath(null);
+                      setFilePreviewUrl(null);
+                      setCompressionInfo(null);
+                      setOcrResultBanner(null);
+                      if (cameraInputRef.current) cameraInputRef.current.value = "";
+                      if (galleryInputRef.current) galleryInputRef.current.value = "";
+                    }}
+                    className="touch-target p-2 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 cursor-pointer transition-colors"
+                    title="Hapus file"
+                    aria-label="Hapus file surat"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+
+              {/* Hasil Pemindaian: Teks Ringkas 1-2 Baris (Tanpa Card Terpisah) */}
+              {ocrResultBanner && (
+                <div className="flex items-start justify-between gap-2 pt-1 text-[11px] text-[var(--ink-muted)] border-t border-[var(--border)]/60">
+                  <div className="flex items-start gap-1.5 min-w-0">
+                    <ScanLine className="w-3.5 h-3.5 text-[var(--primary)] shrink-0 mt-0.5" />
+                    <div className="min-w-0 leading-relaxed">
+                      <span className="text-[var(--ink)] font-semibold">
+                        {ocrResultBanner.studentName || ocrResultBanner.candidateName || "Siswa"}
+                      </span>
+                      {" • "}
+                      <span className="font-medium text-[var(--primary)]">
+                        {ocrResultBanner.status}
+                      </span>
+                      {" • "}
+                      {ocrResultBanner.startDate ? (
+                        <span>
+                          {ocrResultBanner.isMultiDay && ocrResultBanner.endDate
+                            ? `${ocrResultBanner.startDate} s/d ${ocrResultBanner.endDate}`
+                            : ocrResultBanner.startDate}
+                        </span>
+                      ) : (
+                        <span className="text-amber-600 dark:text-amber-400 italic">
+                          (Tanggal diisi manual)
+                        </span>
+                      )}
+                      {ocrResultBanner.description && (
+                        <span className="italic truncate block sm:inline sm:ml-1 text-[var(--ink-subtle)]">
+                          (&ldquo;{ocrResultBanner.description}&rdquo;)
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setOcrResultBanner(null)}
+                    className="p-1 text-[var(--ink-subtle)] hover:text-[var(--ink)] rounded cursor-pointer shrink-0"
+                    title="Tutup ringkasan pindai"
+                    aria-label="Tutup ringkasan pindai"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           {errorMessage && (
             <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-red-800 dark:text-red-300 text-sm">
               <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
@@ -348,39 +697,109 @@ export function AttendanceFormModal({
             </div>
           )}
 
-          {/* Student Selection */}
-          <div>
-            <label htmlFor="student-select" className="block text-xs font-semibold text-[var(--ink-muted)] mb-1.5">
+          {/* Combobox Pilih Siswa (Ketik & Autocomplete Jadi Satu) */}
+          <div ref={comboRef} className="relative">
+            <label htmlFor="student-combobox" className="block text-xs font-semibold text-[var(--ink-muted)] mb-1.5">
               Pilih Siswa <span className="text-red-500">*</span>
             </label>
-            <div className="space-y-2">
+            <div className="relative">
               <input
+                id="student-combobox"
                 type="text"
+                role="combobox"
+                aria-expanded={isComboOpen}
+                aria-autocomplete="list"
+                aria-controls="student-listbox"
                 value={studentSearch}
-                onChange={(e) => setStudentSearch(e.target.value)}
-                placeholder="Ketik untuk mencari nama siswa..."
-                className="w-full px-3.5 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] placeholder:text-[var(--ink-subtle)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
-              />
-              <select
-                id="student-select"
-                value={studentId}
-                onChange={(e) => setStudentId(parseInt(e.target.value, 10))}
-                className="w-full px-3.5 py-2.5 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                onFocus={() => setIsComboOpen(true)}
+                onClick={() => setIsComboOpen(true)}
+                onChange={(e) => {
+                  setStudentSearch(e.target.value);
+                  setStudentError(false);
+                  setIsComboOpen(true);
+                  if (!e.target.value.trim()) {
+                    setStudentId(0);
+                  }
+                }}
+                placeholder="Ketik nama atau NIS siswa..."
+                className={`w-full pl-3.5 pr-16 py-2.5 text-sm rounded-lg bg-[var(--surface)] text-[var(--ink)] placeholder:text-[var(--ink-subtle)] focus-visible:outline focus-visible:outline-2 transition-all ${
+                  studentError
+                    ? "border-2 border-red-500 focus-visible:outline-red-500 ring-2 ring-red-500/20"
+                    : "border border-[var(--border)] focus-visible:outline-[var(--primary)]"
+                }`}
                 required
+              />
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 text-[var(--ink-muted)]">
+                {studentSearch && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setStudentSearch("");
+                      setStudentId(0);
+                      setStudentError(false);
+                      setIsComboOpen(true);
+                    }}
+                    className="p-1 hover:text-[var(--ink)] rounded cursor-pointer"
+                    aria-label="Bersihkan pencarian siswa"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsComboOpen(!isComboOpen)}
+                  className="p-1 hover:text-[var(--ink)] rounded cursor-pointer"
+                  aria-label="Buka daftar siswa"
+                >
+                  <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isComboOpen ? "rotate-180" : ""}`} />
+                </button>
+              </div>
+            </div>
+
+            {/* Floating Dropdown Listbox */}
+            {isComboOpen && (
+              <div
+                id="student-listbox"
+                role="listbox"
+                className="absolute z-30 left-0 right-0 mt-1 max-h-52 overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-xl py-1 text-sm text-[var(--ink)]"
               >
                 {filteredStudents.length === 0 ? (
-                  <option value={0} disabled>
-                    Tidak ada siswa yang sesuai
-                  </option>
+                  <div className="px-3.5 py-2.5 text-xs text-[var(--ink-muted)] italic">
+                    Tidak ada siswa yang cocok dengan &ldquo;{studentSearch}&rdquo;
+                  </div>
                 ) : (
-                  filteredStudents.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} {s.nis ? `(${s.nis})` : ""}
-                    </option>
-                  ))
+                  filteredStudents.map((s) => {
+                    const isSelected = s.id === studentId;
+                    return (
+                      <div
+                        key={s.id}
+                        role="option"
+                        aria-selected={isSelected}
+                        onClick={() => {
+                          setStudentId(s.id);
+                          setStudentSearch(s.name);
+                          setStudentError(false);
+                          setIsComboOpen(false);
+                        }}
+                        className={`flex items-center justify-between px-3.5 py-2 cursor-pointer transition-colors ${
+                          isSelected
+                            ? "bg-[var(--primary-light)] text-[var(--primary)] font-semibold"
+                            : "hover:bg-[var(--canvas-subtle)] text-[var(--ink)]"
+                        }`}
+                      >
+                        <span>{s.name}</span>
+                        {s.nis && (
+                          <span className="text-xs text-[var(--ink-muted)] ml-2 shrink-0">
+                            NIS: {s.nis}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })
                 )}
-              </select>
-            </div>
+              </div>
+            )}
           </div>
 
           {/* Single Day vs Multi-Day Rentang Tanggal Toggle */}
@@ -535,48 +954,25 @@ export function AttendanceFormModal({
             />
           </div>
 
-          {/* Mobile Camera & File Upload Section (Disabled if Alpa) */}
-          {status !== "Alpa" && (
+          {/* Mobile Camera & File Upload Section (Fallback / hanya tampil jika belum ada file dan bukan Alpa) */}
+          {status !== "Alpa" && !selectedFile && !existingFilePath && (
             <div className="p-4 rounded-xl border border-[var(--border)] bg-[var(--canvas-subtle)] space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-[var(--ink-muted)]">
-                  Foto Surat Izin / Keterangan Dokter
+                  Lampiran Foto Surat (Manual)
                 </span>
                 <span className="text-xs text-[var(--ink-subtle)]">
                   Mendukung JPG, PNG, HEIC, PDF
                 </span>
               </div>
 
-              {/* Hidden file inputs */}
-              <input
-                ref={cameraInputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) handleFilePicked(f);
-                }}
-              />
-              <input
-                ref={galleryInputRef}
-                type="file"
-                accept=".pdf,.jpg,.jpeg,.png,.heic,.heif,image/*,application/pdf"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) handleFilePicked(f);
-                }}
-              />
-
               {/* Two explicit mobile action buttons */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <button
                   type="button"
                   onClick={() => cameraInputRef.current?.click()}
-                  disabled={compressing}
-                  className="touch-target flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-[var(--accent-slate)] text-white hover:bg-[var(--accent-slate-hover)] text-sm font-semibold shadow-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-slate)] disabled:opacity-50 transition-colors"
+                  disabled={compressing || scanningLetter}
+                  className="touch-target flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-[var(--accent-slate)] text-white hover:bg-[var(--accent-slate-hover)] text-sm font-semibold shadow-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-slate)] disabled:opacity-50 transition-colors cursor-pointer"
                 >
                   <Camera className="w-4 h-4" />
                   <span>Ambil Foto Kamera</span>
@@ -585,86 +981,13 @@ export function AttendanceFormModal({
                 <button
                   type="button"
                   onClick={() => galleryInputRef.current?.click()}
-                  disabled={compressing}
-                  className="touch-target flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas)] text-[var(--ink)] text-sm font-semibold shadow-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-slate)] disabled:opacity-50 transition-colors"
+                  disabled={compressing || scanningLetter}
+                  className="touch-target flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas)] text-[var(--ink)] text-sm font-semibold shadow-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-slate)] disabled:opacity-50 transition-colors cursor-pointer"
                 >
                   <Upload className="w-4 h-4" />
                   <span>Pilih File / Galeri</span>
                 </button>
               </div>
-
-              {/* Compression Progress */}
-              {compressing && (
-                <div className="p-3 rounded-lg bg-[var(--surface)] border border-[var(--border)] space-y-1.5">
-                  <div className="flex items-center justify-between text-xs text-[var(--ink-muted)]">
-                    <span className="flex items-center gap-1.5">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--primary)]" />
-                      Mengompres foto untuk koneksi cepat...
-                    </span>
-                    <span className="font-semibold">{compressionProgress}%</span>
-                  </div>
-                  <div className="w-full h-1.5 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
-                    <div
-                      className="h-full bg-[var(--primary)] transition-all duration-150"
-                      style={{ width: `${compressionProgress}%` }}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Compression feedback badge */}
-              {compressionInfo && (
-                <div className="flex items-center justify-between p-2.5 rounded-lg bg-[var(--status-success-bg)] border border-[var(--status-success-border)] text-[var(--status-success-fg)] text-xs">
-                  <span className="flex items-center gap-1.5">
-                    <CheckCircle2 className="w-4 h-4 text-[var(--status-success-fg)] shrink-0" />
-                    File siap diunggah ({Math.round(compressionInfo.compressedSize / 1024)} KB
-                    {compressionInfo.reductionPercentage > 0
-                      ? `, hemat ${compressionInfo.reductionPercentage}%`
-                      : ""})
-                  </span>
-                </div>
-              )}
-
-              {/* File Preview */}
-              {(filePreviewUrl || existingFilePath) && (
-                <div className="relative flex items-center gap-3 p-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)]">
-                  {filePreviewUrl ? (
-                    <img
-                      src={filePreviewUrl}
-                      alt="Pratinjau Surat"
-                      width={56}
-                      height={56}
-                      className="w-14 h-14 object-cover rounded-md border border-[var(--border)]"
-                    />
-                  ) : (
-                    <div className="w-14 h-14 rounded-md bg-[var(--canvas-subtle)] flex items-center justify-center text-[var(--ink-muted)] border border-[var(--border)]">
-                      <FileText className="w-6 h-6" />
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold truncate text-[var(--ink)]">
-                      {selectedFile ? selectedFile.name : existingFilePath}
-                    </p>
-                    <p className="text-xs text-[var(--ink-muted)]">
-                      {selectedFile ? `${Math.round(selectedFile.size / 1024)} KB` : "File tersimpan"}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedFile(null);
-                      setExistingFilePath(null);
-                      setFilePreviewUrl(null);
-                      setCompressionInfo(null);
-                    }}
-                    className="touch-target p-1.5 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40"
-                    title="Hapus file"
-                    aria-label="Hapus file surat"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
             </div>
           )}
 
@@ -673,15 +996,15 @@ export function AttendanceFormModal({
             <button
               type="button"
               onClick={onClose}
-              disabled={loading || compressing}
-              className="touch-target px-4 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-sm font-semibold text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] disabled:opacity-50"
+              disabled={loading || compressing || scanningLetter}
+              className="touch-target px-4 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-sm font-semibold text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] disabled:opacity-50 cursor-pointer"
             >
               Batal
             </button>
             <button
               type="submit"
-              disabled={loading || compressing}
-              className="touch-target flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] text-sm font-semibold shadow-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] disabled:opacity-50 transition-colors"
+              disabled={loading || compressing || scanningLetter}
+              className="touch-target flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] text-sm font-semibold shadow-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] disabled:opacity-50 transition-colors cursor-pointer"
             >
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
               <span>{editRecord ? "Simpan Perubahan" : "Simpan Catatan"}</span>
@@ -689,6 +1012,59 @@ export function AttendanceFormModal({
           </div>
         </form>
       </div>
+
+      {/* Mobile Bottom Sheet untuk Pilihan Kamera vs Galeri */}
+      {showSourceSheet && (
+        <div
+          className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60 backdrop-blur-xs transition-opacity"
+          onClick={() => setShowSourceSheet(false)}
+        >
+          <div
+            className="w-full max-w-lg bg-[var(--surface)] rounded-t-2xl p-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] border-t border-[var(--border)] shadow-2xl space-y-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-1">
+              <span className="text-xs font-bold text-[var(--ink)] uppercase tracking-wider">
+                Pilih Sumber Foto Surat
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowSourceSheet(false)}
+                className="touch-target text-[var(--ink-muted)] hover:text-[var(--ink)] p-1 rounded-md cursor-pointer"
+                aria-label="Tutup menu pilihan"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSourceSheet(false);
+                  cameraInputRef.current?.click();
+                }}
+                className="touch-target flex flex-col items-center justify-center gap-2 py-3 px-2 rounded-xl bg-[var(--canvas-subtle)] hover:bg-[var(--primary-light)] text-[var(--ink)] hover:text-[var(--primary)] border border-[var(--border)] text-xs font-semibold cursor-pointer transition-colors"
+              >
+                <Camera className="w-5 h-5 text-[var(--primary)]" />
+                <span>Ambil Foto</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSourceSheet(false);
+                  galleryInputRef.current?.click();
+                }}
+                className="touch-target flex flex-col items-center justify-center gap-2 py-3 px-2 rounded-xl bg-[var(--canvas-subtle)] hover:bg-[var(--primary-light)] text-[var(--ink)] hover:text-[var(--primary)] border border-[var(--border)] text-xs font-semibold cursor-pointer transition-colors"
+              >
+                <ImageIcon className="w-5 h-5 text-[var(--accent-slate)]" />
+                <span>Galeri / File</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

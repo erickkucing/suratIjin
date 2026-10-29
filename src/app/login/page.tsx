@@ -1,5 +1,6 @@
 import { School } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { AppFooter } from "@/components/app-footer";
 import { LoginForm } from "./login-form";
 import { getSystemSettings } from "@/lib/system-settings";
 
@@ -26,7 +27,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
               className="w-9 h-9 sm:w-10 sm:h-10 object-contain shrink-0"
             />
           ) : (
-            <div className="p-2 rounded-xl bg-[var(--primary-light)] text-[var(--primary)] shadow-xs flex items-center justify-center shrink-0">
+            <div className="p-2 rounded-xl bg-[var(--primary)]/15 text-[var(--primary)] shadow-xs flex items-center justify-center shrink-0">
               <School className="w-5 h-5" />
             </div>
           )}
@@ -55,7 +56,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
                 />
               </div>
             ) : (
-              <div className="inline-flex p-3 rounded-2xl bg-[var(--primary-light)] text-[var(--primary)] mb-3">
+              <div className="inline-flex p-3 rounded-2xl bg-[var(--primary)]/15 text-[var(--primary)] mb-3">
                 <School className="w-6 h-6" />
               </div>
             )}
@@ -69,9 +70,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         </div>
       </main>
 
-      <footer className="py-4 text-center text-xs text-[var(--ink-muted)]">
-        &copy; {new Date().getFullYear()} {settings.appName}. Dibuat untuk kenyamanan guru dan orang tua.
-      </footer>
+      <AppFooter text={settings.footerText} />
     </div>
   );
 }

@@ -171,6 +171,51 @@ export function resetRateLimit(key: string): void {
 }
 
 /**
+ * Dual-bucket rate limit check: checks both an IP-scoped bucket and a Target-scoped bucket.
+ * Protects against distributed / spoofed brute-force attacks targeting a single account or class.
+ */
+export function checkDualRateLimit(
+  ipKey: string,
+  targetKey: string,
+  ipConfig = { maxAttempts: DEFAULT_MAX_ATTEMPTS, windowMs: DEFAULT_WINDOW_MS },
+  targetConfig = { maxAttempts: DEFAULT_MAX_ATTEMPTS, windowMs: DEFAULT_WINDOW_MS }
+): RateLimitCheckResult {
+  const ipCheck = checkRateLimit(ipKey, ipConfig.maxAttempts, ipConfig.windowMs);
+  if (ipCheck.isBlocked) return ipCheck;
+
+  const targetCheck = checkRateLimit(targetKey, targetConfig.maxAttempts, targetConfig.windowMs);
+  if (targetCheck.isBlocked) return targetCheck;
+
+  return ipCheck.remainingAttempts <= targetCheck.remainingAttempts ? ipCheck : targetCheck;
+}
+
+/**
+ * Records failed attempt across both IP-scoped and Target-scoped buckets.
+ */
+export function recordDualFailedAttempt(
+  ipKey: string,
+  targetKey: string,
+  ipConfig = { maxAttempts: DEFAULT_MAX_ATTEMPTS, windowMs: DEFAULT_WINDOW_MS },
+  targetConfig = { maxAttempts: DEFAULT_MAX_ATTEMPTS, windowMs: DEFAULT_WINDOW_MS }
+): RateLimitCheckResult {
+  const ipResult = recordFailedAttempt(ipKey, ipConfig.maxAttempts, ipConfig.windowMs);
+  const targetResult = recordFailedAttempt(targetKey, targetConfig.maxAttempts, targetConfig.windowMs);
+
+  if (ipResult.isBlocked) return ipResult;
+  if (targetResult.isBlocked) return targetResult;
+
+  return ipResult.remainingAttempts <= targetResult.remainingAttempts ? ipResult : targetResult;
+}
+
+/**
+ * Resets both IP-scoped and Target-scoped rate limit buckets upon successful auth.
+ */
+export function resetDualRateLimit(ipKey: string, targetKey: string): void {
+  resetRateLimit(ipKey);
+  resetRateLimit(targetKey);
+}
+
+/**
  * For testing purposes: clears the entire in-memory store
  */
 export function _clearRateLimitStoreForTesting(): void {

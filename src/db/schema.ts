@@ -98,11 +98,6 @@ export const attendanceRecords = mysqlTable(
       table.status,
       table.letterStatus
     ),
-    index("idx_attendance_class_student_date").on(
-      table.classId,
-      table.studentId,
-      table.attendanceDate
-    ),
   ]
 );
 
@@ -149,6 +144,12 @@ export const systemSettings = mysqlTable("system_settings", {
   appName: varchar("app_name", { length: 150 }).notNull().default("Sistem Surat Izin Siswa"),
   logoUrl: varchar("logo_url", { length: 255 }),
   themeColor: varchar("theme_color", { length: 50 }).notNull().default("terracotta"),
+  bgTheme: varchar("bg_theme", { length: 50 }).notNull().default("warm-zinc"),
+  footerText: varchar("footer_text", { length: 255 }).default("Sistem Surat Izin & Ketidakhadiran Siswa."),
+  aiEnabled: boolean("ai_enabled").notNull().default(false),
+  aiRouterUrl: varchar("ai_router_url", { length: 255 }).notNull().default("http://127.0.0.1:20128/v1"),
+  aiRouterApiKey: varchar("ai_router_api_key", { length: 255 }),
+  aiRouterModel: varchar("ai_router_model", { length: 100 }).notNull().default("gemini/gemini-3.8-flash"),
   updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
   updatedById: int("updated_by_id").references(() => users.id, { onDelete: "set null" }),
 });

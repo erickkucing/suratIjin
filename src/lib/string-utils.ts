@@ -17,7 +17,10 @@ export function toTitleCase(input: string): string {
         .split(/([.\-_])/)
         .map((part) => {
           if (!part || /^[.\-_]$/.test(part)) return part;
-          return part.charAt(0).toUpperCase() + part.slice(1);
+          const rest = part.slice(1);
+          const isAllUpper = part === part.toUpperCase() && part.toLowerCase() !== part.toUpperCase();
+          const restStr = isAllUpper ? rest.toLowerCase() : rest;
+          return part.charAt(0).toUpperCase() + restStr;
         })
         .join("");
     })

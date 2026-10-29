@@ -25,10 +25,15 @@ Rekap_Kehadiran_*.pdf
 Rekap_Kehadiran_*.xlsx
 test-results/
 playwright-report/
+audit-reports/
 
 # Python virtual environments
 venv/
 **/venv/
 __pycache__/
 
+
+
+dev.db
+.agents/
 

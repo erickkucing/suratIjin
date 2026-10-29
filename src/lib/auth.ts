@@ -5,8 +5,22 @@ import { db } from "@/db";
 import { users, classes } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
+const DEFAULT_FALLBACK_SECRET = "surat_ijin_super_secret_jwt_key_2026_modern_academic_system";
+
+if (
+  process.env.NODE_ENV === "production" &&
+  process.env.NEXT_PHASE !== "phase-production-build"
+) {
+  const secret = process.env.JWT_SECRET;
+  if (!secret || secret === DEFAULT_FALLBACK_SECRET) {
+    throw new Error(
+      "SECURITY ERROR: In production, a unique and random JWT_SECRET must be configured in environment variables."
+    );
+  }
+}
+
 const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "surat_ijin_super_secret_jwt_key_2026_modern_academic_system"
+  process.env.JWT_SECRET || DEFAULT_FALLBACK_SECRET
 );
 
 export const SESSION_COOKIE_NAME = "surat_session";
@@ -48,7 +62,20 @@ export async function createSessionToken(payload: UserSessionPayload): Promise<s
 export async function verifySessionToken(token: string): Promise<UserSessionPayload | null> {
   try {
     const { payload } = await jwtVerify(token, JWT_SECRET);
-    return payload as unknown as UserSessionPayload;
+    const userPayload = payload as unknown as UserSessionPayload;
+    if (!userPayload || !userPayload.id) return null;
+
+    // Real-time revocation check: ensure user exists and remains active in database
+    const activeUser = await db.query.users.findFirst({
+      where: eq(users.id, userPayload.id),
+      columns: { id: true, isActive: true },
+    });
+
+    if (!activeUser || !activeUser.isActive) {
+      return null;
+    }
+
+    return userPayload;
   } catch {
     return null;
   }

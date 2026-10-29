@@ -1,10 +1,35 @@
-import { describe, it, expect } from "vitest";
-import { THEME_PRESETS, getSystemSettings, ThemeColor } from "../system-settings";
+import { describe, it, expect, beforeAll, beforeEach } from "vitest";
+import {
+  THEME_PRESETS,
+  getSystemSettings,
+  ThemeColor,
+  invalidateSystemSettingsCache,
+} from "../system-settings";
 import { db } from "@/db";
 import { systemSettings, classes, users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 describe("System Settings & 5 Curated Themes", () => {
+  beforeEach(() => {
+    invalidateSystemSettingsCache();
+  });
+  beforeAll(async () => {
+    await db
+      .insert(systemSettings)
+      .values({
+        id: 1,
+        appName: "Sistem Surat Izin Siswa",
+        themeColor: "terracotta",
+        bgTheme: "warm-zinc",
+        aiEnabled: false,
+      })
+      .onDuplicateKeyUpdate({
+        set: {
+          themeColor: "terracotta",
+          logoUrl: null,
+        },
+      });
+  });
   it("should provide exactly 5 curated color themes with complete palette tokens", () => {
     expect(THEME_PRESETS.length).toBe(5);
 
@@ -36,6 +61,7 @@ describe("System Settings & 5 Curated Themes", () => {
       .update(systemSettings)
       .set({ themeColor: "emerald" })
       .where(eq(systemSettings.id, 1));
+    invalidateSystemSettingsCache();
 
     let settings = await getSystemSettings();
     expect(settings.themeColor).toBe("emerald");
@@ -45,6 +71,7 @@ describe("System Settings & 5 Curated Themes", () => {
       .update(systemSettings)
       .set({ themeColor: "terracotta" })
       .where(eq(systemSettings.id, 1));
+    invalidateSystemSettingsCache();
 
     settings = await getSystemSettings();
     expect(settings.themeColor).toBe("terracotta");
@@ -56,6 +83,7 @@ describe("System Settings & 5 Curated Themes", () => {
       .update(systemSettings)
       .set({ logoUrl: testLogo })
       .where(eq(systemSettings.id, 1));
+    invalidateSystemSettingsCache();
 
     let settings = await getSystemSettings();
     expect(settings.logoUrl).toBe(testLogo);
@@ -65,8 +93,56 @@ describe("System Settings & 5 Curated Themes", () => {
       .update(systemSettings)
       .set({ logoUrl: null })
       .where(eq(systemSettings.id, 1));
+    invalidateSystemSettingsCache();
 
     settings = await getSystemSettings();
     expect(settings.logoUrl).toBeNull();
+  });
+
+  it("should fetch and update footerText in systemSettings table", async () => {
+    let settings = await getSystemSettings();
+    expect(settings.footerText).toBe("Sistem Surat Izin & Ketidakhadiran Siswa.");
+
+    const customFooter = "SMK Negeri 1 Surabaya - Dibuat untuk kenyamanan bersama.";
+    await db
+      .update(systemSettings)
+      .set({ footerText: customFooter })
+      .where(eq(systemSettings.id, 1));
+    invalidateSystemSettingsCache();
+
+    settings = await getSystemSettings();
+    expect(settings.footerText).toBe(customFooter);
+
+    // Reset back to default
+    await db
+      .update(systemSettings)
+      .set({ footerText: "Sistem Surat Izin & Ketidakhadiran Siswa." })
+      .where(eq(systemSettings.id, 1));
+    invalidateSystemSettingsCache();
+  });
+
+  it("should reuse in-memory cache until invalidated", async () => {
+    const first = await getSystemSettings();
+    // Directly update DB without invalidation
+    await db
+      .update(systemSettings)
+      .set({ appName: "Direct DB Mutated Name" })
+      .where(eq(systemSettings.id, 1));
+
+    // Should still return cached value
+    const second = await getSystemSettings();
+    expect(second.appName).toBe(first.appName);
+
+    // Now invalidate and verify fresh fetch
+    invalidateSystemSettingsCache();
+    const third = await getSystemSettings();
+    expect(third.appName).toBe("Direct DB Mutated Name");
+
+    // Cleanup
+    await db
+      .update(systemSettings)
+      .set({ appName: "Sistem Surat Izin Siswa" })
+      .where(eq(systemSettings.id, 1));
+    invalidateSystemSettingsCache();
   });
 });

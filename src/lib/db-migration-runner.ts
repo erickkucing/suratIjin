@@ -110,6 +110,12 @@ const TABLE_DEFINITIONS: { name: string; ddl: string }[] = [
         \`app_name\` varchar(150) NOT NULL DEFAULT 'Sistem Surat Izin Siswa',
         \`logo_url\` varchar(255),
         \`theme_color\` varchar(50) NOT NULL DEFAULT 'terracotta',
+        \`bg_theme\` varchar(50) NOT NULL DEFAULT 'warm-zinc',
+        \`footer_text\` varchar(255) DEFAULT 'Sistem Surat Izin & Ketidakhadiran Siswa.',
+        \`ai_enabled\` tinyint(1) NOT NULL DEFAULT 0,
+        \`ai_router_url\` varchar(255) NOT NULL DEFAULT 'http://127.0.0.1:20128/v1',
+        \`ai_router_api_key\` varchar(255),
+        \`ai_router_model\` varchar(100) NOT NULL DEFAULT 'gemini/gemini-3.8-flash',
         \`updated_at\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         \`updated_by_id\` int,
         CONSTRAINT \`system_settings_id\` PRIMARY KEY(\`id\`),
@@ -227,31 +233,61 @@ export async function runRemoteMigration(
       const localSettings = await db.query.systemSettings.findFirst();
       if (localSettings) {
         await conn.query(
-          `INSERT INTO \`system_settings\` (\`id\`, \`app_name\`, \`logo_url\`, \`theme_color\`, \`updated_at\`, \`updated_by_id\`)
-           VALUES (?, ?, ?, ?, ?, ?)
-           ON DUPLICATE KEY UPDATE \`app_name\` = VALUES(\`app_name\`), \`logo_url\` = VALUES(\`logo_url\`), \`theme_color\` = VALUES(\`theme_color\`);`,
-          [localSettings.id, localSettings.appName, localSettings.logoUrl, localSettings.themeColor, localSettings.updatedAt, localSettings.updatedById]
+          `INSERT INTO \`system_settings\` (\`id\`, \`app_name\`, \`logo_url\`, \`theme_color\`, \`bg_theme\`, \`footer_text\`, \`ai_enabled\`, \`ai_router_url\`, \`ai_router_api_key\`, \`ai_router_model\`, \`updated_at\`, \`updated_by_id\`)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE \`app_name\` = VALUES(\`app_name\`), \`logo_url\` = VALUES(\`logo_url\`), \`theme_color\` = VALUES(\`theme_color\`), \`bg_theme\` = VALUES(\`bg_theme\`), \`footer_text\` = VALUES(\`footer_text\`), \`ai_enabled\` = VALUES(\`ai_enabled\`), \`ai_router_url\` = VALUES(\`ai_router_url\`), \`ai_router_api_key\` = VALUES(\`ai_router_api_key\`), \`ai_router_model\` = VALUES(\`ai_router_model\`);`,
+          [
+            localSettings.id,
+            localSettings.appName,
+            localSettings.logoUrl,
+            localSettings.themeColor,
+            localSettings.bgTheme || "warm-zinc",
+            localSettings.footerText || "Sistem Surat Izin & Ketidakhadiran Siswa.",
+            localSettings.aiEnabled ? 1 : 0,
+            localSettings.aiRouterUrl,
+            localSettings.aiRouterApiKey,
+            localSettings.aiRouterModel,
+            localSettings.updatedAt,
+            localSettings.updatedById,
+          ]
         );
         stats.settingsCount = 1;
-        logs.push("✓ Pengaturan sistem (branding & tema) berhasil disalin.");
+        logs.push("✓ Pengaturan sistem (branding, tema & AI) berhasil disalin.");
       }
     }
 
-    // 4. Fallback / Superadmin check: ensure at least one superadmin exists
-    const [userRows] = await conn.query<mysql.RowDataPacket[]>(
-      "SELECT COUNT(*) AS total FROM `users` WHERE `role` = 'superadmin';"
-    );
-    const superadminCount = Number(userRows[0]?.total || 0);
+    // 4. Guarantee Superadmin Preservation:
+    // Always preserve and copy active local superadmin accounts to the target DB,
+    // ensuring the administrator is never locked out even if dropExistingTables is true
+    // or copyExistingData is false.
+    const localSuperadmins = await db.query.users.findMany({
+      where: (u, { eq }) => eq(u.role, "superadmin"),
+    });
 
-    if (superadminCount === 0) {
-      logs.push("--> Membuat akun superadmin bawaan di database target...");
-      const defaultPasswordHash = await bcrypt.hash("feelgood6969", 10);
-      await conn.query(
-        `INSERT INTO \`users\` (\`username\`, \`display_name\`, \`password_hash\`, \`role\`, \`is_active\`)
-         VALUES ('admin', 'Administrator Utama', ?, 'superadmin', true);`,
-        [defaultPasswordHash]
+    if (localSuperadmins.length > 0) {
+      for (const sa of localSuperadmins) {
+        await conn.query(
+          `INSERT INTO \`users\` (\`id\`, \`username\`, \`display_name\`, \`password_hash\`, \`role\`, \`is_active\`, \`created_at\`)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE \`display_name\` = VALUES(\`display_name\`), \`password_hash\` = VALUES(\`password_hash\`), \`role\` = VALUES(\`role\`), \`is_active\` = VALUES(\`is_active\`);`,
+          [sa.id, sa.username, sa.displayName, sa.passwordHash, sa.role, sa.isActive, sa.createdAt]
+        );
+      }
+      logs.push(`✓ Akun superadmin (${localSuperadmins.map((s) => s.username).join(", ")}) berhasil dipertahankan ke database target.`);
+    } else {
+      const [userRows] = await conn.query<mysql.RowDataPacket[]>(
+        "SELECT COUNT(*) AS total FROM `users` WHERE `role` = 'superadmin';"
       );
-      logs.push("✓ Akun superadmin 'admin' dengan password 'feelgood6969' berhasil dibuat.");
+      if (Number(userRows[0]?.total || 0) === 0) {
+        logs.push("--> Membuat akun superadmin bawaan di database target...");
+        const defaultPasswordHash = await bcrypt.hash("feelgood6969", 10);
+        await conn.query(
+          `INSERT INTO \`users\` (\`username\`, \`display_name\`, \`password_hash\`, \`role\`, \`is_active\`)
+           VALUES ('admin', 'Administrator Utama', ?, 'superadmin', true);`,
+          [defaultPasswordHash]
+        );
+        logs.push("✓ Akun superadmin 'admin' dengan password 'feelgood6969' berhasil dibuat.");
+      }
     }
 
     // 5. System Settings initialization if still empty
@@ -260,8 +296,8 @@ export async function runRemoteMigration(
     );
     if (Number(settingsRows[0]?.total || 0) === 0) {
       await conn.query(
-        `INSERT INTO \`system_settings\` (\`id\`, \`app_name\`, \`theme_color\`)
-         VALUES (1, 'Sistem Surat Izin Siswa', 'terracotta');`
+        `INSERT INTO \`system_settings\` (\`id\`, \`app_name\`, \`theme_color\`, \`bg_theme\`)
+         VALUES (1, 'Sistem Surat Izin Siswa', 'terracotta', 'warm-zinc');`
       );
       logs.push("✓ Pengaturan sistem default berhasil diinisialisasi.");
     }

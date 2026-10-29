@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect } from "react";
-import { X, Search, Calendar, FileDown, FileSpreadsheet, RotateCcw, Check } from "lucide-react";
+import { Search, Calendar, FileDown, FileSpreadsheet, RotateCcw, Check } from "lucide-react";
 import { useBottomSheetGesture } from "@/hooks/use-bottom-sheet";
 
 interface MobileFilterDrawerProps {
@@ -76,7 +76,7 @@ export function MobileFilterDrawer({
         ref={sheetRef}
         style={sheetStyle}
         {...touchHandlers}
-        className="card-paper w-full max-h-[84dvh] rounded-t-3xl border-t border-[var(--border)] overflow-y-auto flex flex-col shadow-2xl"
+        className="card-paper w-full min-h-0 modal-bottom-sheet max-h-[68dvh] sm:max-h-[85vh] rounded-t-3xl border-t border-[var(--border)] overflow-y-auto flex flex-col shadow-2xl"
       >
         {/* Pull Handle */}
         <div data-drag-handle className="pt-3 pb-2 flex justify-center touch-none cursor-grab active:cursor-grabbing">
@@ -84,7 +84,7 @@ export function MobileFilterDrawer({
         </div>
 
         {/* Header */}
-        <div className="px-5 py-3 flex items-center justify-between border-b border-[var(--border)]">
+        <div data-sheet-header className="px-5 py-3 flex items-center justify-between border-b border-[var(--border)] touch-none select-none">
           <div className="flex items-center gap-2">
             <h3 id="mobile-filter-title" className="text-base font-bold font-heading text-[var(--ink)]">
               Filter &amp; Ekspor
@@ -95,14 +95,6 @@ export function MobileFilterDrawer({
               </span>
             )}
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="touch-target p-1.5 rounded-full text-[var(--ink-muted)] hover:text-[var(--ink)] hover:bg-[var(--canvas-subtle)]"
-            aria-label="Tutup panel filter"
-          >
-            <X className="w-5 h-5" />
-          </button>
         </div>
 
         {/* Content */}
@@ -162,7 +154,7 @@ export function MobileFilterDrawer({
                   key={st}
                   type="button"
                   onClick={() => onStatusChange(st)}
-                  className={`h-9 text-xs rounded-lg font-semibold border transition-colors ${
+                  className={`touch-target min-h-[44px] h-11 text-xs rounded-xl font-semibold border transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] ${
                     status === st
                       ? "bg-[var(--primary)] text-white border-[var(--primary)] shadow-xs"
                       : "bg-[var(--surface)] text-[var(--ink)] border-[var(--border)] hover:bg-[var(--canvas-subtle)]"

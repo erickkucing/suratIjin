@@ -4,6 +4,8 @@ import { getAdminOverviewData } from "@/db/queries";
 import { getSystemSettings } from "@/lib/system-settings";
 import { AdminClient } from "./admin-client";
 
+export const dynamic = "force-dynamic";
+
 export default async function AdminPage() {
   const user = await getCurrentUser();
   if (!user) {

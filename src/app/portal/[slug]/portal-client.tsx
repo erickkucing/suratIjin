@@ -18,7 +18,16 @@ import {
 import { DashboardData, AttendanceRecordWithStudent } from "@/db/queries";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { StatCard } from "@/components/stat-card";
-import { MonthlyBarChart } from "@/components/monthly-bar-chart";
+import dynamic from "next/dynamic";
+const MonthlyBarChart = dynamic(
+  () => import("@/components/monthly-bar-chart").then((mod) => mod.MonthlyBarChart),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-64 animate-pulse rounded-2xl bg-neutral-100 dark:bg-neutral-800" />
+    ),
+  }
+);
 import { LetterLightboxModal } from "@/components/letter-lightbox-modal";
 import { parentUnlockAction } from "@/actions/auth";
 import { computeDynamicDashboardMetrics } from "@/lib/attendance-stats";
@@ -133,7 +142,7 @@ export function PortalClient({
                 className="w-9 h-9 sm:w-10 sm:h-10 object-contain shrink-0"
               />
             ) : (
-              <div className="p-2 rounded-xl bg-[var(--primary-light)] text-[var(--primary)] shadow-xs flex items-center justify-center shrink-0">
+              <div className="p-2 rounded-xl bg-[var(--primary)]/15 text-[var(--primary)] shadow-xs flex items-center justify-center shrink-0">
                 <School className="w-5 h-5" />
               </div>
             )}
@@ -150,7 +159,7 @@ export function PortalClient({
         <main className="flex-1 flex items-center justify-center p-4 sm:p-6">
           <div className="w-full max-w-md card-journal-elevated rounded-2xl overflow-hidden border border-[var(--border)]">
             <div className="px-6 pt-8 pb-2 text-center bg-[var(--surface)]">
-              <div className="inline-flex p-3 rounded-2xl bg-[var(--primary-light)] text-[var(--primary)] mb-3">
+              <div className="inline-flex p-3 rounded-2xl bg-[var(--primary)]/15 text-[var(--primary)] mb-3">
                 <Lock className="w-6 h-6" />
               </div>
               <h2 className="text-xl font-bold font-heading text-[var(--ink)]">Akses Kelas {classNameTitle}</h2>
@@ -201,10 +210,6 @@ export function PortalClient({
             </div>
           </div>
         </main>
-
-        <footer className="py-4 text-center text-xs text-[var(--ink-muted)]">
-          &copy; {new Date().getFullYear()} Sistem Surat Izin &amp; Ketidakhadiran Siswa.
-        </footer>
       </div>
     );
   }
@@ -278,7 +283,7 @@ export function PortalClient({
                 className="w-10 h-10 object-contain shrink-0"
               />
             ) : (
-              <div className="w-10 h-10 rounded-xl bg-[var(--primary-light)] text-[var(--primary)] shadow-xs flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-[var(--primary)]/15 text-[var(--primary)] shadow-xs flex items-center justify-center shrink-0">
                 <School className="w-5 h-5" />
               </div>
             )}
@@ -287,7 +292,7 @@ export function PortalClient({
                 <h1 className="text-base sm:text-lg font-bold font-heading text-[var(--ink)] truncate">
                   Kelas {data.classInfo.name}
                 </h1>
-                <span className="text-[11px] px-2 py-0.5 rounded-full bg-[var(--primary-light)] text-[var(--primary)] font-semibold shrink-0">
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-[var(--primary)]/15 text-[var(--primary)] font-semibold shrink-0">
                   {data.classInfo.periodTitle}
                 </span>
               </div>

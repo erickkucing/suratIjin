@@ -31,6 +31,11 @@ function getEnvFilePath(): string {
 }
 
 function updateEnvDatabaseUrl(newUrl: string): void {
+  const sanitizedUrl = newUrl.replace(/[\r\n\0]/g, "").trim();
+  if (!sanitizedUrl.startsWith("mysql://")) {
+    throw new Error("Format database URL tidak valid. Harus diawali dengan mysql://");
+  }
+
   const envPath = getEnvFilePath();
   let content = "";
   if (fs.existsSync(envPath)) {
@@ -38,7 +43,7 @@ function updateEnvDatabaseUrl(newUrl: string): void {
   }
 
   const regex = /^DATABASE_URL=.*$/m;
-  const newLine = `DATABASE_URL="${newUrl}"`;
+  const newLine = `DATABASE_URL="${sanitizedUrl}"`;
 
   if (regex.test(content)) {
     content = content.replace(regex, newLine);
@@ -198,4 +203,60 @@ export async function revertToLocalDatabaseAction() {
     success: true,
     message: "Aplikasi berhasil dikembalikan ke database lokal.",
   };
+}
+
+/**
+ * All-in-one action: runs DDL migration & data copy, then immediately activates as primary DB.
+ */
+export async function migrateAndApplyDatabaseAction(
+  rawInput: unknown,
+  options: MigrationOptions = {}
+): Promise<MigrationResult & { applied?: boolean }> {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "superadmin") {
+    return {
+      success: false,
+      logs: ["✗ Akses ditolak. Memerlukan peran Superadmin."],
+      error: "Akses ditolak. Memerlukan peran Superadmin.",
+    };
+  }
+
+  const parse = remoteConfigSchema.safeParse(rawInput);
+  if (!parse.success) {
+    return {
+      success: false,
+      logs: ["✗ Format konfigurasi database tidak valid."],
+      error: "Format konfigurasi database tidak valid.",
+    };
+  }
+
+  const config = parse.data;
+  const migrationResult = await runRemoteMigration(config, options);
+  if (!migrationResult.success) {
+    return {
+      ...migrationResult,
+      applied: false,
+    };
+  }
+
+  try {
+    const fullUrl = buildDbUrl(config);
+    updateEnvDatabaseUrl(fullUrl);
+    process.env.DATABASE_URL = fullUrl;
+    await restartSystemService();
+    migrationResult.logs.push("✓ Konfigurasi DATABASE_URL di .env berhasil diperbarui ke database remote.");
+    migrationResult.logs.push("✓ Service sistem aplikasi berhasil dimuat ulang.");
+    return {
+      ...migrationResult,
+      applied: true,
+    };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    migrationResult.logs.push(`✗ Gagal mengalihkan database aktif: ${msg}`);
+    return {
+      ...migrationResult,
+      applied: false,
+      error: `Migrasi selesai namun gagal mengaktifkan database: ${msg}`,
+    };
+  }
 }

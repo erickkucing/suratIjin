@@ -5,6 +5,9 @@ import {
   resetRateLimit,
   getClientIp,
   _clearRateLimitStoreForTesting,
+  checkDualRateLimit,
+  recordDualFailedAttempt,
+  resetDualRateLimit,
 } from "../rate-limiter";
 
 describe("Rate Limiter (Anti Brute-Force)", () => {
@@ -108,5 +111,43 @@ describe("Rate Limiter (Anti Brute-Force)", () => {
 
     const reqEmpty = new Request("http://localhost:3000");
     expect(await getClientIp(reqEmpty)).toBe("127.0.0.1");
+  });
+
+  describe("SEC-FINDING-02: Dual-Bucket Rate Limiting (IP + Target Protection)", () => {
+    it("should block when target account reaches max attempts even if IPs rotate (spoofing prevention)", () => {
+      const targetUserKey = "login:account:erick";
+      const config = { maxAttempts: 5, windowMs: 15 * 60 * 1000 };
+
+      // Attacker rotates 5 distinct spoofed IPs against the same account
+      for (let i = 1; i <= 4; i++) {
+        const spoofedIpKey = `login:ip:10.0.0.${i}`;
+        const res = recordDualFailedAttempt(spoofedIpKey, targetUserKey, config, config);
+        expect(res.isBlocked).toBe(false);
+      }
+
+      // 5th attempt from yet another new IP
+      const freshIpKey = "login:ip:10.0.0.99";
+      const blockedRes = recordDualFailedAttempt(freshIpKey, targetUserKey, config, config);
+      expect(blockedRes.isBlocked).toBe(true);
+      expect(blockedRes.errorMessage).toContain("Terlalu banyak percobaan gagal");
+
+      // Check with a 6th new IP should immediately be blocked due to account bucket
+      const check = checkDualRateLimit("login:ip:10.0.0.100", targetUserKey, config, config);
+      expect(check.isBlocked).toBe(true);
+    });
+
+    it("should reset both IP and target buckets on successful authentication", () => {
+      const ipKey = "login:ip:192.168.1.50";
+      const userKey = "login:account:wildwina";
+
+      recordDualFailedAttempt(ipKey, userKey);
+      recordDualFailedAttempt(ipKey, userKey);
+
+      resetDualRateLimit(ipKey, userKey);
+
+      const check = checkDualRateLimit(ipKey, userKey);
+      expect(check.isBlocked).toBe(false);
+      expect(check.remainingAttempts).toBeGreaterThanOrEqual(5);
+    });
   });
 });

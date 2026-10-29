@@ -5,24 +5,28 @@ import { useState, useRef, useEffect, useCallback } from "react";
 interface UseBottomSheetOptions {
   isOpen: boolean;
   onClose: () => void;
-  threshold?: number; // pixels to drag down before closing, default 80
+  onExpand?: () => void;
+  threshold?: number; // pixels to drag down before closing, default 50
 }
 
 export function useBottomSheetGesture({
   isOpen,
   onClose,
-  threshold = 80,
+  onExpand,
+  threshold = 50,
 }: UseBottomSheetOptions) {
   const [offsetY, setOffsetY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const startYRef = useRef(0);
   const startTimeRef = useRef(0);
+  const isDragTargetRef = useRef(false);
   const sheetRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (isOpen) {
       setOffsetY(0);
       setIsDragging(false);
+      isDragTargetRef.current = false;
     }
   }, [isOpen]);
 
@@ -31,17 +35,24 @@ export function useBottomSheetGesture({
     if (typeof window !== "undefined" && window.innerWidth >= 640) return;
 
     const target = e.target as HTMLElement;
-    const isDragHandle = Boolean(target.closest("[data-drag-handle]"));
+
+    // Do not initiate drag gesture on interactive elements (buttons, inputs, links)
+    if (target.closest("button, input, select, textarea, a, [role='button']")) {
+      return;
+    }
+
+    const isDragTarget = Boolean(target.closest("[data-drag-handle], [data-sheet-header]"));
     const scrollContainer = sheetRef.current?.querySelector(".overflow-y-auto") as HTMLElement | null;
 
-    // If touching inside a scrolled container (scrollTop > 0) and not on drag handle, let native scroll work
-    if (!isDragHandle && scrollContainer && scrollContainer.scrollTop > 0) {
+    // If touching inside scrollable content (not header) while scrolled down, let native scroll handle it
+    if (!isDragTarget && scrollContainer && scrollContainer.scrollTop > 5) {
       return;
     }
 
     const touch = e.touches[0];
     startYRef.current = touch.clientY;
     startTimeRef.current = Date.now();
+    isDragTargetRef.current = isDragTarget;
     setIsDragging(true);
   }, []);
 
@@ -51,15 +62,37 @@ export function useBottomSheetGesture({
 
       const touch = e.touches[0];
       const deltaY = touch.clientY - startYRef.current;
+      const scrollContainer = sheetRef.current?.querySelector(".overflow-y-auto") as HTMLElement | null;
 
-      // Only allow dragging downwards
+      // Swiping upwards (expanding bottom sheet or beginning to scroll down)
+      if (deltaY < -20) {
+        onExpand?.();
+        // If swiping inside scrollable content, hand over to native scroll
+        if (!isDragTargetRef.current) {
+          setIsDragging(false);
+          setOffsetY(0);
+        }
+        return;
+      }
+
+      // Dragging downwards (pull to dismiss)
       if (deltaY > 0) {
-        setOffsetY(deltaY);
+        if (isDragTargetRef.current) {
+          // Direct 1:1 tactile drag on handle or header
+          setOffsetY(deltaY);
+        } else if (!scrollContainer || scrollContainer.scrollTop <= 0) {
+          // Pulling down from content at top of scroll
+          setOffsetY(deltaY * 0.85);
+        } else {
+          // Content is scrolled, let native scroll handle it
+          setOffsetY(0);
+          setIsDragging(false);
+        }
       } else {
         setOffsetY(0);
       }
     },
-    [isDragging]
+    [isDragging, onExpand]
   );
 
   const handleTouchEnd = useCallback(() => {
@@ -70,22 +103,23 @@ export function useBottomSheetGesture({
     const elapsed = Date.now() - startTimeRef.current;
     const velocity = deltaY / Math.max(elapsed, 1);
 
-    if (deltaY > threshold || (velocity > 0.45 && deltaY > 30)) {
-      // Slide down and dismiss
-      setOffsetY(400);
+    // Threshold: 50px drag or a natural downward flick (> 0.25 px/ms and > 20px)
+    if (deltaY > threshold || (velocity > 0.25 && deltaY > 20)) {
+      // Slide down and dismiss smoothly
+      setOffsetY(window.innerHeight || 500);
       setTimeout(() => {
         onClose();
         setOffsetY(0);
-      }, 160);
+      }, 180);
     } else {
-      // Spring back to top
+      // Spring smoothly back to top
       setOffsetY(0);
     }
   }, [isDragging, offsetY, threshold, onClose]);
 
   const sheetStyle: React.CSSProperties = {
     transform: offsetY > 0 ? `translateY(${offsetY}px)` : undefined,
-    transition: isDragging ? "none" : "transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
+    transition: isDragging ? "none" : "transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1)",
     willChange: "transform",
   };
 

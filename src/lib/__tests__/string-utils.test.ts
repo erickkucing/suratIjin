@@ -5,6 +5,8 @@ describe("toTitleCase Utility", () => {
   it("should capitalize the first letter of each word", () => {
     expect(toTitleCase("erick pratama")).toBe("Erick Pratama");
     expect(toTitleCase("budi santoso")).toBe("Budi Santoso");
+    expect(toTitleCase("AHMAD DAHLAN")).toBe("Ahmad Dahlan");
+    expect(toTitleCase("SITI NURHALIZA")).toBe("Siti Nurhaliza");
   });
 
   it("should properly preserve and capitalize academic titles with dots", () => {

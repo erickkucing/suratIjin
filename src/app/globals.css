@@ -1,18 +1,19 @@
 @import "tailwindcss";
 
 @layer base {
-  :root {
+  :root,
+  [data-bg-theme="warm-zinc"] {
     color-scheme: light;
     accent-color: var(--primary);
 
-    --canvas: #FBF7F2;
-    --canvas-subtle: #F3ECE2;
-    --surface: #FFFFFF;
-    --surface-elevated: #FFFDF9;
-    --border: #E6DDD2;
-    --border-strong: #988777;
+    --canvas: #F5EFEB;
+    --canvas-subtle: #E9DFD7;
+    --surface: #FDFBF7;
+    --surface-elevated: #FFFFFF;
+    --border: #DCD0C2;
+    --border-strong: #8C7B6C;
     --ink: #231F1E;
-    --ink-muted: #574F4A;
+    --ink-muted: #5D534A;
     --ink-subtle: #6E655F;
 
     --primary: #B54826;
@@ -48,25 +49,32 @@
     --status-apresiasi-fg: #8A4D0E;
     --status-apresiasi-bg: #FDF3E3;
     --status-apresiasi-border: #F3D29B;
+
+    --status-warning-fg: #8A4D0E;
+    --status-warning-bg: #FEF4E6;
+    --status-warning-border: #F5D6A7;
   }
 
-  .dark {
+  .dark,
+  [data-bg-theme="warm-zinc"].dark,
+  .dark[data-bg-theme="warm-zinc"],
+  .dark [data-bg-theme="warm-zinc"] {
     color-scheme: dark;
     accent-color: var(--primary);
 
-    --canvas: #181514;
+    --canvas: #171413;
     --canvas-subtle: #211D1B;
-    --surface: #26211F;
-    --surface-elevated: #302926;
-    --border: #3D3531;
-    --border-strong: #6E6058;
+    --surface: #241F1D;
+    --surface-elevated: #2D2724;
+    --border: #322A26;
+    --border-strong: #54463F;
     --ink: #F5EFEA;
     --ink-muted: #B8ACA3;
     --ink-subtle: #94887F;
 
     --primary: #B54826;
     --primary-hover: #96391C;
-    --primary-light: #3D221A;
+    --primary-light: #2A1712;
 
     --accent-slate: #3A668C;
     --accent-slate-hover: #4E7DA6;
@@ -97,6 +105,118 @@
     --status-apresiasi-fg: #FBD38D;
     --status-apresiasi-bg: #382A15;
     --status-apresiasi-border: #634820;
+
+    --status-warning-fg: #FBD38D;
+    --status-warning-bg: #382A15;
+    --status-warning-border: #634820;
+  }
+
+  /* -------------------------------------------------------------------------
+     Background Themes: 5 Curated Palettes (Pure CSS Variables)
+     ------------------------------------------------------------------------- */
+
+  /* 2. Clean Slate */
+  [data-bg-theme="clean-slate"] {
+    --canvas: #EBF0F5;
+    --canvas-subtle: #DDE5ED;
+    --surface: #F8FAFC;
+    --surface-elevated: #FFFFFF;
+    --border: #CBD5E1;
+    --border-strong: #64748B;
+    --ink: #0F172A;
+    --ink-muted: #475569;
+    --ink-subtle: #64748B;
+  }
+  [data-bg-theme="clean-slate"].dark,
+  .dark[data-bg-theme="clean-slate"],
+  .dark [data-bg-theme="clean-slate"] {
+    --canvas: #0B1320;
+    --canvas-subtle: #131E30;
+    --surface: #162338;
+    --surface-elevated: #1D2D47;
+    --border: #1E2D44;
+    --border-strong: #3D5373;
+    --ink: #F1F5F9;
+    --ink-muted: #94A3B8;
+    --ink-subtle: #64748B;
+  }
+
+  /* 3. Subtle Cream */
+  [data-bg-theme="subtle-cream"] {
+    --canvas: #F5EEDB;
+    --canvas-subtle: #E9DECA;
+    --surface: #FDFBF4;
+    --surface-elevated: #FFFFFF;
+    --border: #DACBB0;
+    --border-strong: #8F7E5E;
+    --ink: #292318;
+    --ink-muted: #5E533F;
+    --ink-subtle: #7A6F5C;
+  }
+  [data-bg-theme="subtle-cream"].dark,
+  .dark[data-bg-theme="subtle-cream"],
+  .dark [data-bg-theme="subtle-cream"] {
+    --canvas: #181511;
+    --canvas-subtle: #221E19;
+    --surface: #27221C;
+    --surface-elevated: #332D25;
+    --border: #332B23;
+    --border-strong: #594D3F;
+    --ink: #FAF5EC;
+    --ink-muted: #B2A591;
+    --ink-subtle: #756754;
+  }
+
+  /* 4. Minimal Zinc */
+  [data-bg-theme="deep-charcoal"] {
+    --canvas: #EEEEF0;
+    --canvas-subtle: #E2E2E6;
+    --surface: #F8F8FA;
+    --surface-elevated: #FFFFFF;
+    --border: #D1D1D6;
+    --border-strong: #6E6E73;
+    --ink: #18181B;
+    --ink-muted: #52525B;
+    --ink-subtle: #71717A;
+  }
+  [data-bg-theme="deep-charcoal"].dark,
+  .dark[data-bg-theme="deep-charcoal"],
+  .dark [data-bg-theme="deep-charcoal"] {
+    --canvas: #101012;
+    --canvas-subtle: #19191D;
+    --surface: #1E1E23;
+    --surface-elevated: #28282F;
+    --border: #2A2A33;
+    --border-strong: #4E4E59;
+    --ink: #F4F4F6;
+    --ink-muted: #A1A1AA;
+    --ink-subtle: #71717A;
+  }
+
+  /* 5. Nordic Frost */
+  [data-bg-theme="nordic-cool"] {
+    --canvas: #E5EEF5;
+    --canvas-subtle: #D4E3EF;
+    --surface: #F4F9FD;
+    --surface-elevated: #FFFFFF;
+    --border: #C0D4E4;
+    --border-strong: #547896;
+    --ink: #0F1E2E;
+    --ink-muted: #3D566E;
+    --ink-subtle: #547896;
+  }
+  [data-bg-theme="nordic-cool"].dark,
+  .dark[data-bg-theme="nordic-cool"],
+  .dark [data-bg-theme="nordic-cool"] {
+    --canvas: #0D151E;
+    --canvas-subtle: #14202D;
+    --surface: #182737;
+    --surface-elevated: #22354A;
+    --border: #1F3247;
+    --border-strong: #3B5A7D;
+    --ink: #F0F6FC;
+    --ink-muted: #8BA6C1;
+    --ink-subtle: #517498;
   }
 
   /* Emerald Forest Theme */
@@ -109,7 +229,7 @@
   .dark [data-theme="emerald"] {
     --primary: #1E6B4B;
     --primary-hover: #155038;
-    --primary-light: #123324;
+    --primary-light: #0D2117;
   }
 
   /* Ocean Navy Theme */
@@ -122,7 +242,7 @@
   .dark [data-theme="ocean"] {
     --primary: #1B5299;
     --primary-hover: #143E73;
-    --primary-light: #142847;
+    --primary-light: #0F1E33;
   }
 
   /* Deep Indigo Theme */
@@ -135,7 +255,7 @@
   .dark [data-theme="indigo"] {
     --primary: #4338CA;
     --primary-hover: #3730A3;
-    --primary-light: #1E1B4B;
+    --primary-light: #161438;
   }
 
   /* Classic Burgundy Theme */
@@ -148,7 +268,7 @@
   .dark [data-theme="burgundy"] {
     --primary: #881337;
     --primary-hover: #700F2E;
-    --primary-light: #4C0519;
+    --primary-light: #2E0713;
   }
 
   html,
@@ -231,3 +351,75 @@
   content-visibility: auto;
   contain-intrinsic-size: auto none auto 320px;
 }
+
+/* Responsive expandable mobile bottom sheet */
+.modal-bottom-sheet {
+  max-height: 68dvh;
+  min-height: 0;
+  transition: max-height 420ms cubic-bezier(0.32, 0.72, 0, 1);
+  will-change: max-height;
+}
+
+@media (max-width: 639px) {
+  .modal-bottom-sheet {
+    max-height: 68dvh;
+  }
+  .modal-bottom-sheet.expanded {
+    max-height: 83dvh;
+  }
+}
+
+@media (min-width: 640px) {
+  .modal-bottom-sheet,
+  .modal-bottom-sheet.expanded {
+    max-height: 85vh;
+  }
+}
+
+.modal-bottom-sheet > .overflow-y-auto,
+.modal-bottom-sheet form.overflow-y-auto {
+  min-height: 0;
+  flex: 1 1 0%;
+}
+
+/* =========================================================================
+   Hide Horizontal Scrollbars Universally Across All Pages & Components
+   Eliminates horizontal scrollbar thumbs and tracks on mobile and desktop
+   while preserving smooth touch/trackpad/wheel horizontal scrolling.
+   ========================================================================= */
+
+/* WebKit / Blink / Safari / Chrome / Android / iOS / Edge */
+*::-webkit-scrollbar:horizontal {
+  display: none !important;
+  height: 0 !important;
+  width: 0 !important;
+  background: transparent !important;
+}
+
+::-webkit-scrollbar:horizontal {
+  display: none !important;
+  height: 0 !important;
+  width: 0 !important;
+  background: transparent !important;
+}
+
+/* Hide scrollbars for any horizontal scroll containers (Firefox, IE, Edge, WebKit) */
+.no-scrollbar,
+.overflow-x-auto,
+.overflow-x-scroll,
+[class*="overflow-x-"] {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+.no-scrollbar::-webkit-scrollbar,
+.overflow-x-auto::-webkit-scrollbar,
+.overflow-x-scroll::-webkit-scrollbar,
+[class*="overflow-x-"]::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+}
+

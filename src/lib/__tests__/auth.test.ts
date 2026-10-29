@@ -1,4 +1,7 @@
 import { describe, it, expect } from "vitest";
+import { db } from "@/db";
+import { users } from "@/db/schema";
+import { eq } from "drizzle-orm";
 import {
   hashPassword,
   verifyPassword,
@@ -31,8 +34,12 @@ describe("Authentication & Token Security", () => {
   });
 
   it("should create and verify signed user session JWT tokens", async () => {
+    const user = await db.query.users.findFirst({
+      where: eq(users.username, "erick"),
+    });
+
     const userPayload = {
-      id: 2,
+      id: user?.id ?? 2,
       username: "erick",
       displayName: "Erick S.Kom",
       role: "wali_kelas" as const,
@@ -45,6 +52,29 @@ describe("Authentication & Token Security", () => {
     expect(decoded).not.toBeNull();
     expect(decoded?.username).toBe("erick");
     expect(decoded?.role).toBe("wali_kelas");
+  });
+
+  it("should reject token if user is deactivated in database", async () => {
+    const user = await db.query.users.findFirst({
+      where: eq(users.username, "erick"),
+    });
+    if (!user) return;
+
+    // Temporarily deactivate
+    await db.update(users).set({ isActive: false }).where(eq(users.id, user.id));
+
+    const token = await createSessionToken({
+      id: user.id,
+      username: user.username,
+      displayName: user.displayName,
+      role: user.role,
+    });
+
+    const decoded = await verifySessionToken(token);
+    expect(decoded).toBeNull();
+
+    // Re-activate
+    await db.update(users).set({ isActive: true }).where(eq(users.id, user.id));
   });
 
   it("should reject tampered user session tokens", async () => {

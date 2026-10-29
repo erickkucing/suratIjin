@@ -15,9 +15,9 @@ import {
 } from "@/lib/auth";
 import {
   getClientIp,
-  checkRateLimit,
-  recordFailedAttempt,
-  resetRateLimit,
+  checkDualRateLimit,
+  recordDualFailedAttempt,
+  resetDualRateLimit,
 } from "@/lib/rate-limiter";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -62,11 +62,12 @@ export async function loginAction(
 
     const { username, password } = parse.data;
 
-    // Rate limiting check
+    // Dual-bucket rate limiting: IP bucket + Account bucket (SEC-FINDING-02)
     const clientIp = await getClientIp();
-    const rateLimitKey = `login:${clientIp}:${username.toLowerCase().trim()}`;
+    const ipKey = `login:ip:${clientIp}`;
+    const accountKey = `login:account:${username.toLowerCase().trim()}`;
 
-    const limitCheck = checkRateLimit(rateLimitKey);
+    const limitCheck = checkDualRateLimit(ipKey, accountKey);
     if (limitCheck.isBlocked) {
       return {
         success: false,
@@ -79,7 +80,7 @@ export async function loginAction(
     });
 
     if (!user || !user.isActive) {
-      const failStatus = recordFailedAttempt(rateLimitKey);
+      const failStatus = recordDualFailedAttempt(ipKey, accountKey);
       return {
         success: false,
         error: failStatus.isBlocked
@@ -90,7 +91,7 @@ export async function loginAction(
 
     const isValid = await verifyPassword(password, user.passwordHash);
     if (!isValid) {
-      const failStatus = recordFailedAttempt(rateLimitKey);
+      const failStatus = recordDualFailedAttempt(ipKey, accountKey);
       return {
         success: false,
         error: failStatus.isBlocked
@@ -99,7 +100,7 @@ export async function loginAction(
       };
     }
 
-    resetRateLimit(rateLimitKey);
+    resetDualRateLimit(ipKey, accountKey);
 
     const token = await createSessionToken({
       id: user.id,
@@ -142,10 +143,12 @@ export async function parentUnlockAction(classSlug: string, passwordPlain: strin
     return { success: false, error: "Password akses harus diisi." };
   }
 
+  // Dual-bucket rate limiting: IP bucket + Class bucket (SEC-FINDING-02)
   const clientIp = await getClientIp();
-  const rateLimitKey = `unlock:${clientIp}:${classSlug.toLowerCase().trim()}`;
+  const ipKey = `unlock:ip:${clientIp}`;
+  const classKey = `unlock:class:${classSlug.toLowerCase().trim()}`;
 
-  const limitCheck = checkRateLimit(rateLimitKey);
+  const limitCheck = checkDualRateLimit(ipKey, classKey);
   if (limitCheck.isBlocked) {
     return {
       success: false,
@@ -167,7 +170,7 @@ export async function parentUnlockAction(classSlug: string, passwordPlain: strin
 
   const isValid = await verifyPassword(passwordPlain, cls.parentPasswordHash);
   if (!isValid) {
-    const failStatus = recordFailedAttempt(rateLimitKey);
+    const failStatus = recordDualFailedAttempt(ipKey, classKey);
     return {
       success: false,
       error: failStatus.isBlocked
@@ -176,7 +179,7 @@ export async function parentUnlockAction(classSlug: string, passwordPlain: strin
     };
   }
 
-  resetRateLimit(rateLimitKey);
+  resetDualRateLimit(ipKey, classKey);
 
   const token = await createParentToken({
     classSlug: cls.slug,
@@ -197,6 +200,7 @@ export async function parentUnlockAction(classSlug: string, passwordPlain: strin
 
 const updateSelfProfileSchema = z.object({
   displayName: z.string().min(2, "Nama lengkap minimal 2 karakter."),
+  currentPassword: z.string().optional().or(z.literal("")),
   newPassword: z.string().optional().or(z.literal("")),
 });
 
@@ -214,16 +218,38 @@ export async function updateSelfProfileAction(inputData: unknown) {
     };
   }
 
-  const { displayName, newPassword } = parse.data;
+  const { displayName, currentPassword, newPassword } = parse.data;
 
   const updateFields: { displayName: string; passwordHash?: string } = {
     displayName: displayName.trim(),
   };
 
+  // Re-authentication verification for password changes (SEC-FINDING-03)
   if (newPassword && newPassword.trim().length > 0) {
+    if (!currentPassword || currentPassword.trim().length === 0) {
+      return {
+        success: false,
+        error: "Kata sandi saat ini harus diisi untuk mengubah kata sandi.",
+      };
+    }
+
     if (newPassword.trim().length < 6) {
       return { success: false, error: "Password baru minimal 6 karakter." };
     }
+
+    const userInDb = await db.query.users.findFirst({
+      where: eq(users.id, user.id),
+    });
+
+    if (!userInDb) {
+      return { success: false, error: "Pengguna tidak ditemukan." };
+    }
+
+    const isCurrentValid = await verifyPassword(currentPassword, userInDb.passwordHash);
+    if (!isCurrentValid) {
+      return { success: false, error: "Kata sandi saat ini salah." };
+    }
+
     updateFields.passwordHash = await hashPassword(newPassword.trim());
   }
 

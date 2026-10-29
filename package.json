@@ -10,10 +10,15 @@
     "restart": "systemctl restart surat-ijin",
     "lint": "next lint",
     "db:push": "drizzle-kit push",
+    "db:init": "tsx scripts/init-db.ts",
     "db:seed": "tsx src/db/seed-legacy.ts",
     "db:migrate-remote": "tsx scripts/migrate-remote.ts",
     "db:migrate-slugs": "tsx scripts/migrate-random-slugs.ts",
+    "storage:clean": "tsx scripts/cleanup-orphaned-uploads.ts",
+    "setup:https": "scripts/setup-https.sh",
+    "setup:tunnel": "scripts/setup-cloudflare-tunnel.sh",
     "test:unit": "vitest run",
+    "test:ocr": "services/ocr-service/venv/bin/python services/ocr-service/test_letter_parser.py 2>/dev/null || python3 services/ocr-service/test_letter_parser.py",
     "test:e2e": "playwright test"
   },
   "dependencies": {
@@ -39,6 +44,7 @@
   "devDependencies": {
     "@playwright/test": "^1.64.1",
     "@tailwindcss/postcss": "^4.0.7",
+    "@testing-library/react": "^16.3.3",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20.17.19",
     "@types/qrcode": "^1.5.5",
@@ -47,6 +53,7 @@
     "drizzle-kit": "^0.30.4",
     "eslint": "^9.20.1",
     "eslint-config-next": "^15.1.7",
+    "happy-dom": "^21.0.4",
     "postcss": "^8.5.2",
     "tailwindcss": "^4.0.7",
     "tsx": "^4.19.2",

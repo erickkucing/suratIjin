@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { generateDateRange, getDaysDifference, getLocalDateString } from "@/lib/date-utils";
+import { isValidLetterFilePath } from "@/lib/attendance-security";
 
 describe("Attendance Business Rules & Date Calculations", () => {
   it("should return a single date if no endDate is provided", () => {
@@ -45,5 +46,36 @@ describe("Attendance Business Rules & Date Calculations", () => {
     const specificDate = new Date(2026, 9, 25, 2, 30, 0); // Oct 25, 2026 02:30 AM local
     const formatted = getLocalDateString(specificDate);
     expect(formatted).toBe("2026-10-25");
+  });
+});
+
+describe("SEC-FINDING-01: Cross-Class Letter File Path Isolation & Traversal Prevention", () => {
+  it("should allow legitimate files belonging to the target class", () => {
+    expect(isValidLetterFilePath("1/2026-10/1729838493_a1b2c3.webp", 1)).toBe(true);
+    expect(isValidLetterFilePath("42/2026-11/surat.pdf", 42)).toBe(true);
+    expect(isValidLetterFilePath(null, 1)).toBe(true);
+    expect(isValidLetterFilePath(undefined, 1)).toBe(true);
+  });
+
+  it("should reject cross-class letter paths (BOLA prevention)", () => {
+    // Teacher in class 1 attempting to link letter from class 2
+    expect(isValidLetterFilePath("2/2026-10/1729838493_a1b2c3.webp", 1)).toBe(false);
+    expect(isValidLetterFilePath("10/2026-10/surat.pdf", 1)).toBe(false);
+  });
+
+  it("should reject path traversal attempts", () => {
+    // Traversal via ../ or backslashes
+    expect(isValidLetterFilePath("1/../2/2026-10/secret.webp", 1)).toBe(false);
+    expect(isValidLetterFilePath("1/..\\2/2026-10/secret.webp", 1)).toBe(false);
+    expect(isValidLetterFilePath("../etc/passwd", 1)).toBe(false);
+  });
+
+  it("should allow preserving existing legacy path if unchanged on edit", () => {
+    const legacyPath = "legacy/sample_surat_izin.webp";
+    // Allowed when existing record already has this path
+    expect(isValidLetterFilePath(legacyPath, 1, legacyPath)).toBe(true);
+    // Disallowed when creating a new record or modifying path to a legacy path
+    expect(isValidLetterFilePath(legacyPath, 1, "1/2026-10/other.webp")).toBe(false);
+    expect(isValidLetterFilePath(legacyPath, 1)).toBe(false);
   });
 });

@@ -2,7 +2,7 @@ import { drizzle } from "drizzle-orm/mysql2";
 import mysql from "mysql2/promise";
 import * as schema from "./schema";
 
-if (typeof process.loadEnvFile === "function") {
+if (process.env.NODE_ENV !== "test" && typeof process.loadEnvFile === "function") {
   try {
     process.loadEnvFile();
   } catch {}
@@ -13,16 +13,20 @@ const globalForDb = globalThis as unknown as {
 };
 
 const poolUri = process.env.DATABASE_URL || "mysql://root:@localhost:3306/db_suratizin";
+const connectionLimit = parseInt(process.env.DB_CONNECTION_LIMIT || "15", 10);
+const maxIdle = parseInt(process.env.DB_MAX_IDLE || "10", 10);
+const idleTimeout = parseInt(process.env.DB_IDLE_TIMEOUT || "60000", 10);
+const queueLimit = parseInt(process.env.DB_QUEUE_LIMIT || "50", 10);
 
 const pool =
   globalForDb.conn ??
   mysql.createPool({
     uri: poolUri,
     waitForConnections: true,
-    connectionLimit: 10,
-    maxIdle: 10,
-    idleTimeout: 60000,
-    queueLimit: 0,
+    connectionLimit,
+    maxIdle,
+    idleTimeout,
+    queueLimit,
     enableKeepAlive: true,
     keepAliveInitialDelay: 0,
   });

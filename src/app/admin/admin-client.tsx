@@ -32,6 +32,8 @@ import {
   Terminal,
   ArrowRightLeft,
   HardDrive,
+  Cpu,
+  Settings,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { logoutAction } from "@/actions/auth";
@@ -40,19 +42,25 @@ import {
   updateTeacherAction,
   createClassAction,
   updateClassAction,
+  updateAdminSelfPasswordAction,
 } from "@/actions/admin";
 import { toTitleCase, generateRandomClassCode } from "@/lib/string-utils";
 import {
   updateThemeAction,
+  updateBgThemeAction,
   uploadLogoAction,
   removeLogoAction,
   updateAppNameAction,
+  updateSystemIdentityAction,
+  updateAiSettingsAction,
+  testAiConnectionAction,
 } from "@/actions/system-settings";
 import {
   getCurrentDatabaseInfoAction,
   testDatabaseConnectionAction,
   migrateDatabaseAction,
   applyActiveDatabaseAction,
+  migrateAndApplyDatabaseAction,
   revertToLocalDatabaseAction,
 } from "@/actions/database-admin";
 import {
@@ -65,6 +73,9 @@ import { getAutoAcademicPeriod } from "@/lib/academic-year";
 import {
   THEME_PRESETS,
   ThemeColor,
+  BgTheme,
+  BgThemePreset,
+  BG_THEME_PRESETS,
   SystemSettingsData,
 } from "@/lib/system-settings-constants";
 
@@ -79,20 +90,64 @@ export function AdminClient({
   initialClasses,
   initialTeachers,
   initialSettings,
-  superadminName,
+  superadminName: _superadminName,
 }: AdminClientProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"classes" | "teachers" | "settings" | "database">("classes");
+  const [technicalSubTab, setTechnicalSubTab] = useState<"ai" | "database">("ai");
 
   const [appNameInput, setAppNameInput] = useState(
     initialSettings?.appName || "Sistem Surat Izin Siswa"
   );
+  const [footerTextInput, setFooterTextInput] = useState(
+    initialSettings?.footerText || "Sistem Surat Izin & Ketidakhadiran Siswa."
+  );
+  const [identityLoading, setIdentityLoading] = useState(false);
   const [appNameLoading, setAppNameLoading] = useState(false);
   const [currentTheme, setCurrentTheme] = useState<ThemeColor>(initialSettings?.themeColor || "terracotta");
   const [logoPreview, setLogoPreview] = useState<string | null>(initialSettings?.logoUrl || null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoLoading, setLogoLoading] = useState(false);
   const [themeLoading, setThemeLoading] = useState(false);
+
+  // Superadmin Self-Password States
+  const [adminNewPassword, setAdminNewPassword] = useState("");
+  const [adminConfirmPassword, setAdminConfirmPassword] = useState("");
+  const [showAdminNewPassword, setShowAdminNewPassword] = useState(false);
+  const [showAdminConfirmPassword, setShowAdminConfirmPassword] = useState(false);
+  const [adminPasswordLoading, setAdminPasswordLoading] = useState(false);
+
+  // 9router AI States
+  const [aiEnabled, setAiEnabled] = useState<boolean>(initialSettings?.aiEnabled ?? false);
+  const [aiRouterUrl, setAiRouterUrl] = useState<string>(initialSettings?.aiRouterUrl || "http://127.0.0.1:20128/v1");
+  const [aiRouterApiKey, setAiRouterApiKey] = useState<string>(initialSettings?.aiRouterApiKey || "");
+  const [showAiApiKey, setShowAiApiKey] = useState<boolean>(false);
+  const [aiRouterModel, setAiRouterModel] = useState<string>(initialSettings?.aiRouterModel || "gemini/gemini-3.8-flash");
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [fetchingModels, setFetchingModels] = useState<boolean>(false);
+  const [testingAi, setTestingAi] = useState<boolean>(false);
+  const [savingAiSettings, setSavingAiSettings] = useState<boolean>(false);
+  const [togglingAi, setTogglingAi] = useState<boolean>(false);
+  const [aiNotice, setAiNotice] = useState<{
+    type: "success" | "error";
+    title?: string;
+    message: string;
+  } | null>(null);
+
+  // Auto-dismiss floating in-card banner after 4 seconds
+  useEffect(() => {
+    if (!aiNotice) return;
+    const timer = setTimeout(() => {
+      setAiNotice(null);
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [aiNotice]);
+  const [aiHeartbeat, setAiHeartbeat] = useState<{
+    checked: boolean;
+    isConnected: boolean;
+    latencyMs?: number;
+    error?: string;
+  }>({ checked: false, isConnected: false });
 
   // Database Tab States
   const [activeDbInfo, setActiveDbInfo] = useState<{
@@ -180,6 +235,61 @@ export function AdminClient({
   const [loading, setLoading] = useState(false);
   const [alertMsg, setAlertMsg] = useState<{ text: string; isError: boolean } | null>(null);
 
+  // Auto-dismiss alert notification banner after 5 seconds
+  useEffect(() => {
+    if (!alertMsg) return;
+    const timer = setTimeout(() => {
+      setAlertMsg(null);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [alertMsg]);
+
+  // Background Theme state and persistence (R6)
+  const [currentBgTheme, setCurrentBgTheme] = useState<string>(
+    initialSettings?.bgTheme || "warm-zinc"
+  );
+
+  const applyBgTheme = (themeId: string) => {
+    document.documentElement.setAttribute("data-bg-theme", themeId);
+    // Remove obsolete inline styles to let CSS variables cascade cleanly
+    document.documentElement.style.removeProperty("--canvas");
+    document.documentElement.style.removeProperty("--surface");
+  };
+
+  useEffect(() => {
+    try {
+      localStorage.removeItem("app_bg_theme");
+    } catch {
+      // Safe fallback
+    }
+    const activeTheme = initialSettings?.bgTheme || "warm-zinc";
+    setCurrentBgTheme(activeTheme);
+    applyBgTheme(activeTheme);
+  }, [initialSettings?.bgTheme]);
+
+  const handleSelectBgTheme = async (themeId: BgTheme) => {
+    setCurrentBgTheme(themeId);
+    applyBgTheme(themeId);
+
+    const preset = BG_THEME_PRESETS.find((t) => t.id === themeId);
+    setAlertMsg({
+      text: `Tema latar belakang berhasil diubah ke ${preset?.name || themeId}.`,
+      isError: false,
+    });
+
+    try {
+      const res = await updateBgThemeAction(themeId);
+      if (!res?.success) {
+        setAlertMsg({
+          text: res?.error || "Gagal menyimpan tema latar belakang ke database.",
+          isError: true,
+        });
+      }
+    } catch {
+      // Safe fallback
+    }
+  };
+
   useEffect(() => {
     const anyModalOpen =
       isTeacherModalOpen ||
@@ -226,10 +336,216 @@ export function AdminClient({
   };
 
   useEffect(() => {
-    if (activeTab === "database") {
+    if (activeTab === "database" && technicalSubTab === "database") {
       loadActiveDbInfo();
     }
-  }, [activeTab]);
+  }, [activeTab, technicalSubTab]);
+
+  const checkAiHealth = async () => {
+    try {
+      const res = await fetch("/api/ai/status", { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        setAiHeartbeat({
+          checked: true,
+          isConnected: Boolean(data.isConnected),
+          latencyMs: data.latencyMs,
+          error: data.error,
+        });
+        if (Array.isArray(data.models) && data.models.length > 0) {
+          setAvailableModels(data.models);
+        }
+      }
+    } catch {
+      setAiHeartbeat({
+        checked: true,
+        isConnected: false,
+        error: "Gagal menghubungi endpoint status AI",
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "database" && technicalSubTab === "ai" && aiEnabled) {
+      checkAiHealth();
+      const interval = setInterval(checkAiHealth, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [activeTab, technicalSubTab, aiEnabled]);
+
+  const handleToggleAi = async () => {
+    if (togglingAi) return;
+
+    if (aiEnabled) {
+      setTogglingAi(true);
+      setAiEnabled(false);
+      setAiNotice(null);
+      try {
+        const res = await updateAiSettingsAction({
+          aiEnabled: false,
+          aiRouterUrl,
+          aiRouterApiKey: aiRouterApiKey.trim() || null,
+          aiRouterModel,
+        });
+
+        if (res.success) {
+          setAiNotice({
+            type: "success",
+            title: "Integrasi Dinonaktifkan",
+            message: "Pemrosesan berkas OCR dialihkan sepenuhnya ke PaddleOCR lokal.",
+          });
+        } else {
+          setAiNotice({
+            type: "error",
+            title: "Gagal Menonaktifkan",
+            message: res.error || "Gagal menyimpan status penonaktifan AI.",
+          });
+          setAiEnabled(true);
+        }
+      } catch (err: unknown) {
+        setAiNotice({
+          type: "error",
+          title: "Terjadi Kesalahan",
+          message: err instanceof Error ? err.message : "Terjadi kesalahan saat menonaktifkan AI.",
+        });
+        setAiEnabled(true);
+      } finally {
+        setTogglingAi(false);
+      }
+    } else {
+      setAiEnabled(true);
+      setAiNotice(null);
+    }
+  };
+
+  const handleTestAiConnection = async () => {
+    if (!aiEnabled) return;
+    setTestingAi(true);
+    setAiNotice(null);
+    try {
+      const res = await testAiConnectionAction({
+        enabled: true,
+        baseUrl: aiRouterUrl,
+        apiKey: aiRouterApiKey.trim() || null,
+        model: aiRouterModel,
+      });
+
+      if (res.success && res.result) {
+        const modelCount = res.result.models?.length ?? 0;
+        setAiNotice({
+          type: res.result.isConnected ? "success" : "error",
+          title: res.result.isConnected
+            ? `Koneksi Berhasil (${res.result.latencyMs} ms)`
+            : "Koneksi Gagal",
+          message: res.result.isConnected
+            ? modelCount > 0
+              ? `${modelCount} model aktif terdeteksi di 9router.`
+              : "Gateway 9router siap menerima permintaan inferensi."
+            : res.result.error || "Pastikan proses 9router aktif.",
+        });
+        if (res.result.models && res.result.models.length > 0) {
+          setAvailableModels(res.result.models);
+        }
+        setAiHeartbeat({
+          checked: true,
+          isConnected: res.result.isConnected,
+          latencyMs: res.result.latencyMs,
+          error: res.result.error,
+        });
+      } else {
+        setAiNotice({
+          type: "error",
+          title: "Koneksi Gagal",
+          message: res.error || "Gagal menguji koneksi 9router.",
+        });
+      }
+    } catch (err: unknown) {
+      setAiNotice({
+        type: "error",
+        title: "Koneksi Gagal",
+        message: err instanceof Error ? err.message : "Terjadi kesalahan saat menguji koneksi.",
+      });
+    } finally {
+      setTestingAi(false);
+    }
+  };
+
+  const handleFetchModels = async () => {
+    if (!aiEnabled) return;
+    setFetchingModels(true);
+    setAiNotice(null);
+    try {
+      const res = await testAiConnectionAction({
+        enabled: true,
+        baseUrl: aiRouterUrl,
+        apiKey: aiRouterApiKey.trim() || null,
+        model: aiRouterModel,
+      });
+
+      if (res.success && res.result?.isConnected && res.result.models) {
+        setAvailableModels(res.result.models);
+        if (res.result.models.length > 0 && !res.result.models.includes(aiRouterModel)) {
+          setAiRouterModel(res.result.models[0]);
+        }
+        setAiNotice({
+          type: "success",
+          title: "Model Diperbarui",
+          message: `Berhasil memuat ${res.result.models.length} model aktif dari 9router.`,
+        });
+      } else {
+        setAiNotice({
+          type: "error",
+          title: "Gagal Mengambil Model",
+          message: res.result?.error || res.error || "Gagal mengambil daftar model dari 9router.",
+        });
+      }
+    } catch (err: unknown) {
+      setAiNotice({
+        type: "error",
+        title: "Gagal Mengambil Model",
+        message: err instanceof Error ? err.message : "Gagal mengambil daftar model.",
+      });
+    } finally {
+      setFetchingModels(false);
+    }
+  };
+
+  const handleSaveAiSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingAiSettings(true);
+    setAiNotice(null);
+    try {
+      const res = await updateAiSettingsAction({
+        aiEnabled,
+        aiRouterUrl,
+        aiRouterApiKey: aiRouterApiKey.trim() || null,
+        aiRouterModel,
+      });
+
+      if (res.success) {
+        setAiNotice({
+          type: "success",
+          title: "Pengaturan Tersimpan",
+          message: "Konfigurasi 9router berhasil diperbarui.",
+        });
+        checkAiHealth();
+      } else {
+        setAiNotice({
+          type: "error",
+          title: "Gagal Menyimpan",
+          message: res.error || "Gagal menyimpan konfigurasi AI.",
+        });
+      }
+    } catch (err: unknown) {
+      setAiNotice({
+        type: "error",
+        title: "Gagal Menyimpan",
+        message: err instanceof Error ? err.message : "Gagal menyimpan konfigurasi AI.",
+      });
+    } finally {
+      setSavingAiSettings(false);
+    }
+  };
 
   const handleFieldChange = (
     field: "host" | "port" | "user" | "password" | "database" | "ssl",
@@ -375,6 +691,49 @@ export function AdminClient({
     }
   };
 
+  const handleMigrateAndApplyAllInOne = async () => {
+    setApplyLoading(true);
+    setMigrationLoading(true);
+    setMigrationLogs(["==> Memulai proses migrasi dan pengalihan database remote..."]);
+    setMigrationResult(null);
+
+    try {
+      const config = getRemoteConfig();
+      const res = await migrateAndApplyDatabaseAction(config, {
+        copyExistingData: copyDataOption,
+        dropExistingTables: dropTablesOption,
+      });
+
+      setMigrationResult(res);
+      if (res.logs && res.logs.length > 0) {
+        setMigrationLogs(res.logs);
+      }
+
+      if (res.success && res.applied) {
+        setIsApplyModalOpen(false);
+        setAlertMsg({
+          text: "Migrasi berhasil dan database remote kini aktif sebagai database utama aplikasi!",
+          isError: false,
+        });
+        await loadActiveDbInfo();
+        router.refresh();
+      } else {
+        setAlertMsg({
+          text: `Gagal menyelesaikan migrasi/pengalihan: ${res.error || "Cek log terminal"}`,
+          isError: true,
+        });
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Terjadi kesalahan saat migrasi.";
+      setMigrationResult({ success: false, error: msg });
+      setMigrationLogs((prev) => [...prev, `✗ Error tidak terduga: ${msg}`]);
+      setAlertMsg({ text: msg, isError: true });
+    } finally {
+      setApplyLoading(false);
+      setMigrationLoading(false);
+    }
+  };
+
   const handleApplyActiveDatabase = async () => {
     setApplyLoading(true);
     try {
@@ -432,6 +791,32 @@ export function AdminClient({
     }
   };
 
+  const handleUpdateIdentity = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!appNameInput.trim()) return;
+    setIdentityLoading(true);
+    setAlertMsg(null);
+    try {
+      const res = await updateSystemIdentityAction({
+        appName: appNameInput,
+        footerText: footerTextInput,
+      });
+      if (!res.success) throw new Error(res.error);
+      setAlertMsg({
+        text: `Identitas sekolah dan teks footer berhasil diperbarui.`,
+        isError: false,
+      });
+      router.refresh();
+    } catch (err: unknown) {
+      setAlertMsg({
+        text: err instanceof Error ? err.message : "Gagal menyimpan identitas sistem.",
+        isError: true,
+      });
+    } finally {
+      setIdentityLoading(false);
+    }
+  };
+
   const handleUpdateAppName = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!appNameInput.trim()) return;
@@ -452,6 +837,52 @@ export function AdminClient({
       });
     } finally {
       setAppNameLoading(false);
+    }
+  };
+
+  const handleAdminChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (
+      !adminNewPassword ||
+      adminNewPassword.length < 6 ||
+      adminNewPassword !== adminConfirmPassword
+    ) {
+      return;
+    }
+
+    setAdminPasswordLoading(true);
+    try {
+      const res = await updateAdminSelfPasswordAction({
+        newPassword: adminNewPassword,
+        confirmPassword: adminConfirmPassword,
+      });
+
+      if (!res.success) {
+        setAlertMsg({
+          text: res.error || "Gagal memperbarui kata sandi admin.",
+          isError: true,
+        });
+        setAdminPasswordLoading(false);
+        return;
+      }
+
+      setAlertMsg({
+        text: "Kata sandi admin berhasil diperbarui. Mengalihkan ke halaman login...",
+        isError: false,
+      });
+
+      setAdminNewPassword("");
+      setAdminConfirmPassword("");
+
+      setTimeout(() => {
+        window.location.href = res.redirectUrl || "/login";
+      }, 1000);
+    } catch (err: unknown) {
+      setAlertMsg({
+        text: err instanceof Error ? err.message : "Terjadi kesalahan saat memperbarui kata sandi.",
+        isError: true,
+      });
+      setAdminPasswordLoading(false);
     }
   };
 
@@ -677,7 +1108,7 @@ export function AdminClient({
   );
 
   return (
-    <div className="min-h-screen flex flex-col bg-[var(--canvas)] text-[var(--ink)] pb-12">
+    <div className="min-h-screen flex flex-col bg-[var(--canvas)] text-[var(--ink)]">
       {/* Navbar */}
       <header className="sticky top-0 z-30 px-4 sm:px-6 py-3.5 border-b border-[var(--border)] bg-[var(--surface)] shadow-xs">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
@@ -692,27 +1123,25 @@ export function AdminClient({
                 className="w-9 h-9 sm:w-10 sm:h-10 object-contain shrink-0"
               />
             ) : (
-              <div className="p-2 rounded-xl bg-[var(--primary-light)] text-[var(--primary)] shadow-xs flex items-center justify-center shrink-0">
+              <div className="p-2 rounded-xl bg-[var(--primary)]/15 text-[var(--primary)] shadow-xs flex items-center justify-center shrink-0">
                 <ShieldCheck className="w-5 h-5" />
               </div>
             )}
             <div>
               <h1 className="text-base sm:text-lg font-bold font-heading text-[var(--ink)]">
-                Panel Superadmin
+                Superadmin
               </h1>
-              <p className="text-xs text-[var(--ink-muted)]">
-                Admin: {superadminName} &bull; Manajemen Multi-Kelas &amp; Wali Kelas
-              </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
             <Link
               href="/dashboard"
-              className="touch-target inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+              className="touch-target inline-flex items-center justify-center p-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-[var(--ink-muted)] hover:text-[var(--ink)] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+              title="Buka Dashboard"
+              aria-label="Buka Dashboard"
             >
-              <School className="w-4 h-4 text-[var(--accent-slate)]" />
-              <span>Buka Dashboard</span>
+              <School className="w-4 h-4" aria-hidden="true" />
             </Link>
             <ThemeToggle />
             <form action={logoutAction}>
@@ -720,8 +1149,9 @@ export function AdminClient({
                 type="submit"
                 className="touch-target inline-flex items-center justify-center p-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:bg-red-50 dark:hover:bg-red-950/40 text-[var(--ink-muted)] hover:text-red-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
                 title="Keluar"
+                aria-label="Keluar"
               >
-                <LogOut className="w-4 h-4" />
+                <LogOut className="w-4 h-4" aria-hidden="true" />
               </button>
             </form>
           </div>
@@ -729,69 +1159,85 @@ export function AdminClient({
       </header>
 
       {/* Main */}
-      <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 py-6 space-y-6">
+      <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 py-6 pb-24 md:pb-6 space-y-6">
+        {/* Closable Popup Notification Banner (R2) */}
         {alertMsg && (
           <div
-            className={`p-3.5 rounded-xl border text-sm font-semibold ${
+            role="alert"
+            aria-live="polite"
+            className={`fixed top-20 right-4 sm:right-6 z-[60] max-w-md w-[calc(100%-2rem)] sm:w-auto flex items-center justify-between gap-3 p-3.5 sm:p-4 rounded-xl border shadow-xl backdrop-blur-md text-sm font-semibold transition-all duration-200 animate-in fade-in slide-in-from-top-2 ${
               alertMsg.isError
                 ? "bg-[var(--status-alpa-bg)] text-[var(--status-alpa-fg)] border-[var(--status-alpa-border)]"
                 : "bg-[var(--status-success-bg)] text-[var(--status-success-fg)] border-[var(--status-success-border)]"
             }`}
           >
-            {alertMsg.text}
+            <div className="flex items-center gap-2.5">
+              {alertMsg.isError ? (
+                <AlertCircle className="w-5 h-5 shrink-0 text-[var(--status-alpa-fg)]" aria-hidden="true" />
+              ) : (
+                <CheckCircle2 className="w-5 h-5 shrink-0 text-[var(--status-success-fg)]" aria-hidden="true" />
+              )}
+              <span>{alertMsg.text}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setAlertMsg(null)}
+              className="touch-target inline-flex items-center justify-center p-1.5 -mr-1 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 text-current transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-current"
+              title="Tutup notifikasi"
+              aria-label="Tutup notifikasi"
+            >
+              <X className="w-4 h-4" aria-hidden="true" />
+            </button>
           </div>
         )}
 
-        {/* Overview Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          <div className="card-paper p-4 sm:p-5 rounded-2xl">
-            <div className="flex items-center gap-1.5 mb-2">
-              <span className="w-2 h-2 rounded-full bg-[var(--primary)]" />
-              <span className="text-xs font-semibold text-[var(--ink-muted)]">Total Kelas</span>
+        {/* Overview Stats (R3) */}
+        <div className="flex overflow-x-auto snap-x snap-mandatory gap-2.5 pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:overflow-visible no-scrollbar">
+          <div className="min-w-[140px] sm:min-w-0 flex-1 sm:w-full snap-start shrink-0 sm:shrink card-paper px-3.5 py-3 sm:p-5 rounded-xl sm:rounded-2xl">
+            <div className="flex items-center gap-1.5 mb-1.5 sm:mb-2">
+              <span className="w-2 h-2 rounded-full bg-[var(--primary)] shrink-0" />
+              <span className="text-xs font-semibold text-[var(--ink-muted)] truncate">Total Kelas</span>
             </div>
-            <p className="text-3xl font-extrabold font-heading text-[var(--ink)]">
+            <p className="text-xl sm:text-3xl font-extrabold font-heading text-[var(--ink)]">
               {initialClasses.length}
             </p>
-            <p className="text-xs text-[var(--ink-muted)] mt-1">Kelas terdaftar</p>
           </div>
 
-          <div className="card-paper p-4 sm:p-5 rounded-2xl">
-            <div className="flex items-center gap-1.5 mb-2">
-              <span className="w-2 h-2 rounded-full bg-[var(--accent-slate)]" />
-              <span className="text-xs font-semibold text-[var(--ink-muted)]">Total Wali Kelas</span>
+          <div className="min-w-[140px] sm:min-w-0 flex-1 sm:w-full snap-start shrink-0 sm:shrink card-paper px-3.5 py-3 sm:p-5 rounded-xl sm:rounded-2xl">
+            <div className="flex items-center gap-1.5 mb-1.5 sm:mb-2">
+              <span className="w-2 h-2 rounded-full bg-[var(--accent-slate)] shrink-0" />
+              <span className="text-xs font-semibold text-[var(--ink-muted)] truncate">Total Wali Kelas</span>
             </div>
-            <p className="text-3xl font-extrabold font-heading text-[var(--ink)]">
+            <p className="text-xl sm:text-3xl font-extrabold font-heading text-[var(--ink)]">
               {initialTeachers.length}
             </p>
-            <p className="text-xs text-[var(--ink-muted)] mt-1">Guru berwenang</p>
           </div>
 
-          <div className="card-paper p-4 sm:p-5 rounded-2xl">
-            <div className="flex items-center gap-1.5 mb-2">
-              <span className="w-2 h-2 rounded-full bg-[var(--status-success-fg)]" />
-              <span className="text-xs font-semibold text-[var(--ink-muted)]">Total Siswa Aktif</span>
+          <div className="min-w-[140px] sm:min-w-0 flex-1 sm:w-full snap-start shrink-0 sm:shrink card-paper px-3.5 py-3 sm:p-5 rounded-xl sm:rounded-2xl">
+            <div className="flex items-center gap-1.5 mb-1.5 sm:mb-2">
+              <span className="w-2 h-2 rounded-full bg-[var(--status-success-fg)] shrink-0" />
+              <span className="text-xs font-semibold text-[var(--ink-muted)] truncate">Total Siswa Aktif</span>
             </div>
-            <p className="text-3xl font-extrabold font-heading text-[var(--ink)]">
+            <p className="text-xl sm:text-3xl font-extrabold font-heading text-[var(--ink)]">
               {totalStudentsOverall}
             </p>
-            <p className="text-xs text-[var(--ink-muted)] mt-1">Seluruh kelas</p>
           </div>
 
-          <div className="card-paper p-4 sm:p-5 rounded-2xl">
-            <div className="flex items-center gap-1.5 mb-2">
-              <span className="w-2 h-2 rounded-full bg-amber-600" />
-              <span className="text-xs font-semibold text-[var(--ink-muted)]">Total Ketidakhadiran</span>
+          <div className="min-w-[140px] sm:min-w-0 flex-1 sm:w-full snap-start shrink-0 sm:shrink card-paper px-3.5 py-3 sm:p-5 rounded-xl sm:rounded-2xl">
+            <div className="flex items-center gap-1.5 mb-1.5 sm:mb-2">
+              <span className="w-2 h-2 rounded-full bg-amber-600 shrink-0" />
+              <span className="text-xs font-semibold text-[var(--ink-muted)] truncate">Total Ketidakhadiran</span>
             </div>
-            <p className="text-3xl font-extrabold font-heading text-[var(--ink)]">
+            <p className="text-xl sm:text-3xl font-extrabold font-heading text-[var(--ink)]">
               {totalAbsencesOverall}
             </p>
-            <p className="text-xs text-[var(--ink-muted)] mt-1">Arsip tersimpan</p>
           </div>
         </div>
 
-        {/* Tab Header & Action */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-b border-[var(--border)] pb-2">
-          <div className="flex gap-4 overflow-x-auto">
+        {/* Tab Header & Action (R5 & R6: Responsive Tabs / Mobile Header) */}
+        <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] pb-2">
+          {/* Desktop Tabs (hidden on mobile, visible on desktop) */}
+          <div className="hidden md:flex gap-4 overflow-x-auto">
             <button
               type="button"
               onClick={() => setActiveTab("classes")}
@@ -824,7 +1270,7 @@ export function AdminClient({
               }`}
             >
               <Palette className="w-4 h-4" />
-              <span>Pengaturan Sistem &amp; Tema</span>
+              <span>Pengaturan Tampilan</span>
             </button>
             <button
               type="button"
@@ -835,12 +1281,21 @@ export function AdminClient({
                   : "border-transparent text-[var(--ink-muted)] hover:text-[var(--ink)]"
               }`}
             >
-              <Database className="w-4 h-4" />
-              <span>Database &amp; Migrasi</span>
+              <Cpu className="w-4 h-4" />
+              <span>Pengaturan Teknis</span>
             </button>
           </div>
 
-          <div>
+          {/* Mobile Current Section Title (hidden on desktop, visible on mobile) */}
+          <h2 className="md:hidden text-sm font-bold text-[var(--ink)]">
+            {activeTab === "classes" && `Manajemen Kelas (${initialClasses.length})`}
+            {activeTab === "teachers" && `Akun Wali Kelas (${initialTeachers.length})`}
+            {activeTab === "settings" && "Pengaturan Tampilan"}
+            {activeTab === "database" && "Pengaturan Teknis"}
+          </h2>
+
+          {/* Actions */}
+          <div className="shrink-0">
             {activeTab === "classes" && (
               <button
                 type="button"
@@ -848,7 +1303,7 @@ export function AdminClient({
                   setClassSlugInput(generateRandomClassCode(3));
                   setIsClassModalOpen(true);
                 }}
-                className="touch-target inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] text-xs font-bold shadow-xs transition-colors"
+                className="touch-target hidden sm:inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] text-xs font-bold shadow-xs transition-colors"
               >
                 <Plus className="w-4 h-4" />
                 <span>Buat Kelas Baru</span>
@@ -858,20 +1313,20 @@ export function AdminClient({
               <button
                 type="button"
                 onClick={() => setIsTeacherModalOpen(true)}
-                className="touch-target inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] text-xs font-bold shadow-xs transition-colors"
+                className="touch-target hidden sm:inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] text-xs font-bold shadow-xs transition-colors"
               >
                 <Plus className="w-4 h-4" />
                 <span>Tambah Wali Kelas</span>
               </button>
             )}
             {activeTab === "settings" && (
-              <span className="text-xs font-medium text-[var(--ink-muted)]">
-                Pengaturan ini berlaku global ke seluruh website
+              <span className="hidden md:inline text-xs font-medium text-[var(--ink-muted)]">
+                Pengaturan tampilan identitas, tema warna, dan latar belakang
               </span>
             )}
             {activeTab === "database" && (
-              <span className="text-xs font-medium text-[var(--ink-muted)]">
-                Koneksi remote, tes konektivitas, migrasi skema, &amp; alihkan database utama
+              <span className="hidden md:inline text-xs font-medium text-[var(--ink-muted)]">
+                Integrasi AI, koneksi basis data, migrasi skema, &amp; alihkan sistem
               </span>
             )}
           </div>
@@ -895,7 +1350,21 @@ export function AdminClient({
                 </thead>
                 <tbody className="divide-y divide-[var(--border)]">
                   {initialClasses.map((c) => (
-                    <tr key={c.id} className="hover:bg-[var(--canvas-subtle)] transition-colors">
+                    <tr
+                      key={c.id}
+                      onClick={(e) => {
+                        if ((e.target as HTMLElement).closest("a, button, input, select, textarea, [role='button']")) return;
+                        setEditingClass(c);
+                        setEditClassName(c.name);
+                        setEditClassSlug(c.slug);
+                        setEditClassYear(c.academicYear);
+                        setEditClassPeriod(c.periodTitle);
+                        setEditClassTeacherId(c.waliKelasId);
+                        setEditClassActive(c.isActive);
+                      }}
+                      className="hover:bg-[var(--canvas-subtle)] transition-colors cursor-pointer"
+                      title={`Klik baris untuk edit pengaturan kelas ${c.name}`}
+                    >
                       <td className="px-4 py-3 font-bold text-[var(--ink)]">
                         {c.name}
                       </td>
@@ -947,8 +1416,9 @@ export function AdminClient({
                               setEditClassTeacherId(c.waliKelasId);
                               setEditClassActive(c.isActive);
                             }}
-                            className="p-1.5 rounded text-[var(--ink-muted)] hover:text-[var(--ink)] hover:bg-[var(--canvas-subtle)]"
-                            title="Edit Pengaturan Kelas"
+                            className="touch-target p-2 rounded-lg text-[var(--ink-muted)] hover:text-[var(--ink)] hover:bg-[var(--canvas-subtle)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                            title={`Edit Pengaturan Kelas ${c.name}`}
+                            aria-label={`Edit pengaturan kelas ${c.name}`}
                           >
                             <Edit2 className="w-4 h-4" />
                           </button>
@@ -978,7 +1448,22 @@ export function AdminClient({
                 </thead>
                 <tbody className="divide-y divide-[var(--border)]">
                   {initialTeachers.map((t) => (
-                    <tr key={t.id} className="hover:bg-[var(--canvas-subtle)] transition-colors">
+                    <tr
+                      key={t.id}
+                      onClick={(e) => {
+                        if ((e.target as HTMLElement).closest("a, button, input, select, textarea, [role='button']")) return;
+                        setEditingTeacher(t);
+                        setEditTeacherName(t.displayName);
+                        setEditTeacherPassword("");
+                        setEditTeacherPasswordConfirm("");
+                        setShowEditTeacherPassword(false);
+                        setShowEditTeacherPasswordConfirm(false);
+                        setEditTeacherActive(t.isActive);
+                        setEditTeacherClassId(t.assignedClassId || null);
+                      }}
+                      className="hover:bg-[var(--canvas-subtle)] transition-colors cursor-pointer"
+                      title={`Klik baris untuk edit data wali kelas ${t.displayName}`}
+                    >
                       <td className="px-4 py-3 font-bold text-[var(--ink)]">
                         {t.displayName}
                       </td>
@@ -987,24 +1472,24 @@ export function AdminClient({
                       </td>
                       <td className="px-4 py-3">
                         {t.assignedClassName ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border bg-[var(--primary-light)] text-[var(--primary)] border-[var(--border)]">
+                          <span className="font-semibold text-xs text-[var(--ink)] whitespace-nowrap">
                             {t.assignedClassName}
                           </span>
                         ) : (
-                          <span className="text-[11px] text-[var(--ink-muted)] italic">
+                          <span className="text-[11px] text-[var(--ink-muted)] italic whitespace-nowrap">
                             Belum ditugaskan
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-[11px] font-medium text-[var(--ink-muted)]">
+                      <td className="px-4 py-3 text-[11px] font-medium text-[var(--ink-muted)] whitespace-nowrap">
                         {t.role === "wali_kelas" ? "Wali Kelas" : t.role === "superadmin" ? "Superadmin" : t.role}
                       </td>
                       <td className="px-4 py-3 text-center">
                         <span
-                          className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                          className={`font-semibold text-xs whitespace-nowrap ${
                             t.isActive
-                              ? "bg-[var(--status-success-bg)] text-[var(--status-success-fg)] border-[var(--status-success-border)]"
-                              : "bg-[var(--status-alpa-bg)] text-[var(--status-alpa-fg)] border-[var(--status-alpa-border)]"
+                              ? "text-[var(--status-success-fg)]"
+                              : "text-[var(--status-alpa-fg)]"
                           }`}
                         >
                           {t.isActive ? "Aktif" : "Nonaktif"}
@@ -1023,8 +1508,9 @@ export function AdminClient({
                             setEditTeacherActive(t.isActive);
                             setEditTeacherClassId(t.assignedClassId || null);
                           }}
-                          className="p-1.5 rounded text-[var(--ink-muted)] hover:text-[var(--primary)]"
-                          title="Edit Data &amp; Kelas Wali Kelas"
+                          className="touch-target p-2 rounded-lg text-[var(--ink-muted)] hover:text-[var(--primary)] hover:bg-[var(--canvas-subtle)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                          title={`Edit Data Wali Kelas ${t.displayName}`}
+                          aria-label={`Edit data dan kelas wali kelas ${t.displayName}`}
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
@@ -1039,42 +1525,79 @@ export function AdminClient({
 
         {activeTab === "settings" && (
           <div className="space-y-6">
+            {/* Section 1: Identitas Sistem & Teks Footer */}
             <div className="card-paper p-6 rounded-2xl space-y-4">
               <div className="border-b border-[var(--border)] pb-3">
                 <h2 className="text-base font-bold font-heading text-[var(--ink)] flex items-center gap-2">
                   <School className="w-5 h-5 text-[var(--primary)]" />
-                  <span>Identitas Nama Sekolah / Aplikasi</span>
+                  <span>Identitas Sistem &amp; Teks Footer</span>
                 </h2>
                 <p className="text-xs text-[var(--ink-muted)] mt-0.5">
-                  Nama ini tampil pada judul tab browser (metadata halaman) di seluruh aplikasi.
+                  Atur nama resmi instansi sekolah serta catatan hak cipta footer yang tampil di seluruh aplikasi.
                 </p>
               </div>
 
-              <form onSubmit={handleUpdateAppName} className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3">
-                <div className="flex-1">
-                  <label htmlFor="app-name-input" className="block text-xs font-semibold text-[var(--ink-muted)] mb-1">
-                    Nama Sekolah / Sistem
-                  </label>
-                  <input
-                    id="app-name-input"
-                    type="text"
-                    required
-                    minLength={2}
-                    maxLength={120}
-                    value={appNameInput}
-                    onChange={(e) => setAppNameInput(e.target.value)}
-                    placeholder="Contoh: Sistem Presensi SMK Negeri 1"
-                    className="w-full px-3.5 py-2 text-sm rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
-                  />
+              <form onSubmit={handleUpdateIdentity} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="app-name-input" className="block text-xs font-semibold text-[var(--ink)] mb-1">
+                      Nama Sekolah / Sistem
+                    </label>
+                    <input
+                      id="app-name-input"
+                      type="text"
+                      required
+                      minLength={2}
+                      maxLength={120}
+                      value={appNameInput}
+                      onChange={(e) => setAppNameInput(e.target.value)}
+                      placeholder="Contoh: Sistem Presensi SMK Negeri 1"
+                      className="w-full px-3.5 py-2 text-sm rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                    />
+                    <p className="text-[11px] text-[var(--ink-muted)] mt-1">
+                      Tampil di header navigasi, halaman login, dan judul tab browser.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label htmlFor="footer-text-input" className="block text-xs font-semibold text-[var(--ink)] mb-1">
+                      Teks Footer &amp; Catatan Hak Cipta
+                    </label>
+                    <input
+                      id="footer-text-input"
+                      type="text"
+                      maxLength={255}
+                      value={footerTextInput}
+                      onChange={(e) => setFooterTextInput(e.target.value)}
+                      placeholder="Contoh: SMK Negeri 1 Surabaya - Dibuat untuk kenyamanan bersama"
+                      className="w-full px-3.5 py-2 text-sm rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                    />
+                    <p className="text-[11px] text-[var(--ink-muted)] mt-1">
+                      Jika dikosongkan, sistem otomatis menggunakan teks bawaan aplikasi.
+                    </p>
+                  </div>
                 </div>
-                <button
-                  type="submit"
-                  disabled={appNameLoading || !appNameInput.trim()}
-                  className="touch-target inline-flex items-center justify-center gap-1.5 px-5 py-2 rounded-xl bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] text-xs font-bold shadow-xs disabled:opacity-40 transition-colors"
-                >
-                  {appNameLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                  <span>Simpan Nama</span>
-                </button>
+
+                {/* Live Preview Box */}
+                <div className="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--canvas-subtle)] space-y-1">
+                  <span className="text-[10px] font-bold text-[var(--ink-muted)] uppercase tracking-wider block">
+                    Pratinjau Langsung (Live Preview) Footer:
+                  </span>
+                  <p className="text-xs text-[var(--ink-muted)] font-mono">
+                    &copy; {new Date().getFullYear()} {footerTextInput.trim() || initialSettings?.footerText || "Sistem Surat Izin & Ketidakhadiran Siswa."}
+                  </p>
+                </div>
+
+                <div className="flex justify-end pt-1">
+                  <button
+                    type="submit"
+                    disabled={identityLoading || !appNameInput.trim()}
+                    className="touch-target inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] text-xs font-bold shadow-xs disabled:opacity-40 transition-colors cursor-pointer"
+                  >
+                    {identityLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                    <span>Simpan Perubahan Identitas</span>
+                  </button>
+                </div>
               </form>
             </div>
 
@@ -1160,16 +1683,13 @@ export function AdminClient({
               </div>
             </div>
 
-            {/* Section 2: 5 Curated Color Themes */}
+            {/* Section 2: Tema Warna */}
             <div className="card-paper p-6 rounded-2xl space-y-4">
               <div className="border-b border-[var(--border)] pb-3">
                 <h2 className="text-base font-bold font-heading text-[var(--ink)] flex items-center gap-2">
                   <Palette className="w-5 h-5 text-[var(--primary)]" />
-                  <span>Tema Warna Web Keseluruhan (5 Pilihan Terkurasi)</span>
+                  <span>Tema Warna</span>
                 </h2>
-                <p className="text-xs text-[var(--ink-muted)] mt-0.5">
-                  Pilih salah satu palet di bawah ini. Seluruh website (Login, Dashboard, Portal Wali Murid) akan otomatis menyesuaikan seketika baik mode terang maupun gelap.
-                </p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-1">
@@ -1198,15 +1718,11 @@ export function AdminClient({
                               {preset.name}
                             </span>
                           </div>
-                          <span
-                            className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
-                              isSelected
-                                ? "bg-[var(--primary)] text-white border-transparent"
-                                : "bg-[var(--canvas-subtle)] text-[var(--ink-muted)] border-[var(--border)]"
-                            }`}
-                          >
-                            {isSelected ? "Aktif" : preset.badge}
-                          </span>
+                          {isSelected && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-[var(--primary)] text-white">
+                              Aktif
+                            </span>
+                          )}
                         </div>
                         <p className="text-xs text-[var(--ink-muted)] leading-relaxed mb-3">
                           {preset.description}
@@ -1242,14 +1758,524 @@ export function AdminClient({
                 })}
               </div>
             </div>
+
+            {/* Section 3: Tema Latar Belakang (5 Pilihan Terkurasi) */}
+            <div className="card-paper p-6 rounded-2xl space-y-4">
+              <div className="border-b border-[var(--border)] pb-3">
+                <h2 className="text-base font-bold font-heading text-[var(--ink)] flex items-center gap-2">
+                  <Palette className="w-5 h-5 text-[var(--primary)]" />
+                  <span>Tema Latar Belakang</span>
+                </h2>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-1">
+                {BG_THEME_PRESETS.map((bgPreset) => {
+                  const isSelected = currentBgTheme === bgPreset.id;
+                  return (
+                    <button
+                      key={bgPreset.id}
+                      type="button"
+                      onClick={() => handleSelectBgTheme(bgPreset.id)}
+                      className={`touch-target text-left p-4 rounded-2xl border-2 transition-all flex flex-col justify-between cursor-pointer ${
+                        isSelected
+                          ? "border-[var(--primary)] bg-[var(--primary-light)]/40 ring-2 ring-[var(--primary)]/30 shadow-sm"
+                          : "border-[var(--border)] bg-[var(--surface)] hover:border-[var(--border-strong)] hover:bg-[var(--canvas-subtle)]"
+                      }`}
+                    >
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="w-5 h-5 rounded-full border border-black/10 shadow-xs inline-block shrink-0"
+                              style={{ backgroundColor: bgPreset.lightCanvasHex }}
+                            />
+                            <span className="font-bold text-sm text-[var(--ink)] font-heading">
+                              {bgPreset.name}
+                            </span>
+                          </div>
+                          {isSelected && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-[var(--primary)] text-white">
+                              Aktif
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-[var(--ink-muted)] leading-relaxed mb-3">
+                          {bgPreset.description}
+                        </p>
+                      </div>
+
+                      {/* Swatches preview */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[var(--border)] mt-auto">
+                        <span className="text-[10px] text-[var(--ink-muted)] font-medium">Palet:</span>
+                        <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1" title="Mode Terang: Kanvas & Kartu">
+                            <span
+                              className="w-4 h-4 rounded-md shadow-xs border border-black/15"
+                              style={{ backgroundColor: bgPreset.lightCanvasHex }}
+                              title="Kanvas (Terang)"
+                            />
+                            <span
+                              className="w-4 h-4 rounded-md shadow-xs border border-black/15"
+                              style={{ backgroundColor: bgPreset.lightSurfaceHex }}
+                              title="Kartu (Terang)"
+                            />
+                          </div>
+                          <span className="text-[var(--border-strong)] opacity-30 text-xs">&bull;</span>
+                          <div className="flex items-center gap-1" title="Mode Gelap: Kanvas & Kartu">
+                            <span
+                              className="w-4 h-4 rounded-md shadow-xs border border-white/20"
+                              style={{ backgroundColor: bgPreset.darkCanvasHex }}
+                              title="Kanvas (Gelap)"
+                            />
+                            <span
+                              className="w-4 h-4 rounded-md shadow-xs border border-white/20"
+                              style={{ backgroundColor: bgPreset.darkSurfaceHex }}
+                              title="Kartu (Gelap)"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Section 4: Keamanan Akun Admin */}
+            <div className="card-paper p-6 rounded-2xl space-y-4">
+              <div className="border-b border-[var(--border)] pb-3">
+                <h2 className="text-base font-bold font-heading text-[var(--ink)] flex items-center gap-2">
+                  <Lock className="w-5 h-5 text-[var(--primary)]" />
+                  <span>Keamanan Akun Admin</span>
+                </h2>
+                <p className="text-xs text-[var(--ink-muted)] mt-0.5">
+                  Ganti kata sandi akun login Superadmin. Setelah kata sandi diperbarui, sesi Anda akan otomatis diakhiri dan dialihkan ke halaman login.
+                </p>
+              </div>
+
+              <form onSubmit={handleAdminChangePassword} className="space-y-4 max-w-xl">
+                <div>
+                  <label
+                    htmlFor="admin-new-password"
+                    className="block text-xs font-bold text-[var(--ink)] mb-1"
+                  >
+                    Kata Sandi Baru
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="admin-new-password"
+                      type={showAdminNewPassword ? "text" : "password"}
+                      value={adminNewPassword}
+                      onChange={(e) => setAdminNewPassword(e.target.value)}
+                      placeholder="Masukkan kata sandi baru (min. 6 karakter)"
+                      className="w-full pl-3 pr-10 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                      autoComplete="new-password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowAdminNewPassword(!showAdminNewPassword)}
+                      className="touch-target absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-[var(--ink-muted)] hover:text-[var(--ink)] cursor-pointer rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                      title={showAdminNewPassword ? "Sembunyikan password" : "Lihat password"}
+                      aria-label={showAdminNewPassword ? "Sembunyikan kata sandi baru" : "Tampilkan kata sandi baru"}
+                    >
+                      {showAdminNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  {adminNewPassword.length > 0 && adminNewPassword.length < 6 && (
+                    <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1 font-medium">
+                      <AlertCircle className="w-3.5 h-3.5" /> Minimal 6 karakter (saat ini {adminNewPassword.length}/6)
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="admin-confirm-password"
+                    className="block text-xs font-bold text-[var(--ink)] mb-1"
+                  >
+                    Ketik Ulang Kata Sandi Baru
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="admin-confirm-password"
+                      type={showAdminConfirmPassword ? "text" : "password"}
+                      value={adminConfirmPassword}
+                      onChange={(e) => setAdminConfirmPassword(e.target.value)}
+                      placeholder="Ketik ulang kata sandi baru"
+                      className="w-full pl-3 pr-10 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                      autoComplete="new-password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowAdminConfirmPassword(!showAdminConfirmPassword)}
+                      className="touch-target absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-[var(--ink-muted)] hover:text-[var(--ink)] cursor-pointer rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                      title={showAdminConfirmPassword ? "Sembunyikan konfirmasi password" : "Lihat konfirmasi password"}
+                      aria-label={showAdminConfirmPassword ? "Sembunyikan konfirmasi kata sandi" : "Tampilkan konfirmasi kata sandi"}
+                    >
+                      {showAdminConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+
+                  {/* Realtime verification feedback */}
+                  {adminConfirmPassword.length > 0 && (
+                    <div className="mt-1.5">
+                      {adminNewPassword === adminConfirmPassword ? (
+                        <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                          <Check className="w-3.5 h-3.5" /> Kata sandi cocok
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-red-500 dark:text-red-400 font-semibold flex items-center gap-1">
+                          <AlertCircle className="w-3.5 h-3.5" /> Kata sandi belum cocok
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    disabled={
+                      adminPasswordLoading ||
+                      !adminNewPassword ||
+                      adminNewPassword.length < 6 ||
+                      adminNewPassword !== adminConfirmPassword
+                    }
+                    className="touch-target inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] text-xs font-bold shadow-xs disabled:opacity-40 transition-colors cursor-pointer"
+                  >
+                    {adminPasswordLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                    <span>Perbarui Kata Sandi &amp; Keluar</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+
           </div>
         )}
 
-        {/* Tab 4: Database & Migrasi */}
+        {/* Tab 4: Pengaturan Teknis (AI & Database) */}
         {activeTab === "database" && (
           <div className="space-y-6">
-            {/* Card 1: Status Database Aktif Saat Ini */}
-            <div className="card-paper p-6 rounded-2xl space-y-4">
+            {/* Segmented Sub-Tab Switcher (Centered, borderless pill, clean spacing) */}
+            <div className="flex items-center justify-center py-2 mb-6">
+              <div
+                role="tablist"
+                aria-label="Kategori Pengaturan Teknis"
+                className="inline-flex p-1.5 rounded-full bg-[var(--canvas-subtle)] shadow-xs"
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  id="tech-tab-ai"
+                  aria-selected={technicalSubTab === "ai"}
+                  aria-controls="tech-panel-ai"
+                  onClick={() => setTechnicalSubTab("ai")}
+                  className={`touch-target flex items-center gap-2 px-5 py-2 rounded-full text-xs transition-all ${
+                    technicalSubTab === "ai"
+                      ? "bg-[var(--surface)] text-[var(--ink)] font-bold shadow-sm"
+                      : "text-[var(--ink-muted)] hover:text-[var(--ink)] font-medium"
+                  }`}
+                >
+                  <Cpu className="w-4 h-4" />
+                  <span>Integrasi AI</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  id="tech-tab-database"
+                  aria-selected={technicalSubTab === "database"}
+                  aria-controls="tech-panel-database"
+                  onClick={() => setTechnicalSubTab("database")}
+                  className={`touch-target flex items-center gap-2 px-5 py-2 rounded-full text-xs transition-all ${
+                    technicalSubTab === "database"
+                      ? "bg-[var(--surface)] text-[var(--ink)] font-bold shadow-sm"
+                      : "text-[var(--ink-muted)] hover:text-[var(--ink)] font-medium"
+                  }`}
+                >
+                  <Database className="w-4 h-4" />
+                  <span>Manajemen Basis Data</span>
+                </button>
+              </div>
+            </div>
+
+            {/* ============================================================= */}
+            {/* SUBTAB 1: INTEGRASI AI                                        */}
+            {/* ============================================================= */}
+            {technicalSubTab === "ai" && (
+              <div
+                role="tabpanel"
+                id="tech-panel-ai"
+                aria-labelledby="tech-tab-ai"
+                className="space-y-6"
+              >
+                <section aria-labelledby="section-ai-heading">
+              <div className="card-paper p-6 rounded-2xl space-y-5">
+                <div className="flex items-center justify-between gap-4 border-b border-[var(--border)] pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-xl bg-[var(--primary)]/15 text-[var(--primary)] shrink-0">
+                      <Cpu className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h2 id="section-ai-heading" className="text-base font-bold font-heading text-[var(--ink)]">
+                        Integrasi AI
+                      </h2>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2.5 shrink-0">
+                    <span className={`text-xs font-semibold ${aiEnabled ? "text-[var(--primary)]" : "text-[var(--ink-muted)]"}`}>
+                      {aiEnabled ? "Aktif" : "Nonaktif"}
+                    </span>
+                    <div className="flex items-center min-h-[44px]">
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={aiEnabled}
+                        aria-label="Aktifkan Integrasi 9Router"
+                        disabled={togglingAi}
+                        onClick={handleToggleAi}
+                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border transition-all duration-200 ease-in-out focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] focus-visible:outline-offset-2 ${
+                          aiEnabled
+                            ? "bg-[var(--primary)] border-[var(--primary)]"
+                            : "bg-[var(--canvas-subtle)] border-[var(--border-strong)]"
+                        } ${togglingAi ? "opacity-50 cursor-not-allowed" : ""}`}
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                            aiEnabled ? "translate-x-5" : "translate-x-0.5"
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+              {/* Floating Notification saat AI Nonaktif */}
+              {aiNotice && !aiEnabled && (
+                <div
+                  role="alert"
+                  aria-live="polite"
+                  className={`p-3 rounded-xl border text-xs flex items-start justify-between gap-3 shadow-xs ${
+                    aiNotice.type === "success"
+                      ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200"
+                      : "bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-800 text-red-900 dark:text-red-200"
+                  }`}
+                >
+                  <div className="flex items-start gap-2.5">
+                    {aiNotice.type === "success" ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                    )}
+                    <div>
+                      {aiNotice.title && <p className="font-bold leading-tight">{aiNotice.title}</p>}
+                      <p className={aiNotice.title ? "mt-0.5 opacity-90" : "font-medium"}>{aiNotice.message}</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAiNotice(null)}
+                    className="p-1 -mr-1 -mt-1 rounded-lg opacity-60 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/5 transition-opacity cursor-pointer"
+                    aria-label="Tutup notifikasi"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
+              {/* Form Konfigurasi (Hanya tampil jika toggle aktif) */}
+              {aiEnabled && (
+                <form onSubmit={handleSaveAiSettings} className="space-y-4">
+                  {/* Grid Input: URL Endpoint & API Key */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label htmlFor="ai-url-input" className="block text-xs font-semibold text-[var(--ink)] mb-1">
+                        URL Endpoint 9router
+                      </label>
+                      <input
+                        id="ai-url-input"
+                        type="url"
+                        required
+                        value={aiRouterUrl}
+                        onChange={(e) => setAiRouterUrl(e.target.value)}
+                        placeholder="http://127.0.0.1:20128/v1"
+                        className="w-full px-3.5 py-2 text-xs rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                      />
+                      <p className="text-[11px] text-[var(--ink-muted)] mt-1">
+                        Standar gateway lokal: <code className="bg-[var(--canvas-subtle)] px-1 rounded">http://127.0.0.1:20128/v1</code>
+                      </p>
+                    </div>
+
+                    <div>
+                      <label htmlFor="ai-key-input" className="block text-xs font-semibold text-[var(--ink)] mb-1">
+                        API Key 9router
+                      </label>
+                      <div className="relative">
+                        <input
+                          id="ai-key-input"
+                          type={showAiApiKey ? "text" : "password"}
+                          value={aiRouterApiKey}
+                          onChange={(e) => setAiRouterApiKey(e.target.value)}
+                          placeholder="sk-..."
+                          className="w-full pr-10 pl-3.5 py-2 text-xs rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowAiApiKey(!showAiApiKey)}
+                          tabIndex={-1}
+                          className="touch-target absolute right-1 top-1/2 -translate-y-1/2 p-1.5 text-[var(--ink-muted)] hover:text-[var(--ink)]"
+                          aria-label={showAiApiKey ? "Sembunyikan API key" : "Lihat API key"}
+                        >
+                          {showAiApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                      <p className="text-[11px] text-[var(--ink-muted)] mt-1">
+                        Opsional jika 9router lokal tidak memerlukan autentikasi.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Tombol Uji Koneksi & Status Dot (Tepat di bawah URL & API Key) */}
+                  <div className="flex flex-wrap items-center gap-3 pt-0.5">
+                    <button
+                      type="button"
+                      onClick={handleTestAiConnection}
+                      disabled={testingAi}
+                      className="touch-target inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-xs font-semibold text-[var(--ink)] disabled:opacity-40 transition-colors cursor-pointer"
+                    >
+                      {testingAi ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Play className="w-3.5 h-3.5 text-[var(--primary)]" />
+                      )}
+                      <span>Uji Koneksi</span>
+                    </button>
+
+                    <div
+                      className="inline-flex items-center gap-2 text-xs font-mono text-[var(--ink-muted)] px-1"
+                      title={aiHeartbeat.isConnected ? `Terhubung (${aiHeartbeat.latencyMs} ms)` : "Belum terhubung"}
+                    >
+                      <span
+                        className={`w-2 h-2 rounded-full transition-colors ${
+                          aiHeartbeat.isConnected ? "bg-emerald-500" : "bg-neutral-400 dark:bg-neutral-600"
+                        }`}
+                      />
+                      <span>
+                        {aiHeartbeat.isConnected
+                          ? `${aiHeartbeat.latencyMs} ms (Terhubung)`
+                          : "Belum terhubung / Offline"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Pilihan Model */}
+                  <div className="space-y-1.5 pt-1">
+                    <label htmlFor="ai-model-input" className="block text-xs font-semibold text-[var(--ink)]">
+                      Pilihan Model
+                    </label>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      {availableModels.length > 0 ? (
+                        <select
+                          id="ai-model-input"
+                          value={aiRouterModel}
+                          onChange={(e) => setAiRouterModel(e.target.value)}
+                          className="flex-1 px-3.5 py-2 text-xs rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                        >
+                          {availableModels.map((m) => (
+                            <option key={m} value={m}>
+                              {m}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          id="ai-model-input"
+                          type="text"
+                          value={aiRouterModel}
+                          onChange={(e) => setAiRouterModel(e.target.value)}
+                          placeholder="gemini/gemini-2.5-flash"
+                          className="flex-1 px-3.5 py-2 text-xs rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                        />
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={handleFetchModels}
+                        disabled={fetchingModels}
+                        className="touch-target inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-xs font-semibold text-[var(--ink)] disabled:opacity-40 transition-colors cursor-pointer"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${fetchingModels ? "animate-spin" : "text-[var(--primary)]"}`} />
+                        <span>Ambil Model dari 9router</span>
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-[var(--ink-muted)]">
+                      Direkomendasikan model multimodal (contoh: <code className="bg-[var(--canvas-subtle)] px-1 rounded">gemini/gemini-2.5-flash</code>).
+                    </p>
+                  </div>
+
+                  {/* Floating In-Card Popup Banner Notification */}
+                  {aiNotice && (
+                    <div
+                      role="alert"
+                      aria-live="polite"
+                      className={`p-3 rounded-xl border text-xs flex items-start justify-between gap-3 shadow-xs ${
+                        aiNotice.type === "success"
+                          ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200"
+                          : "bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-800 text-red-900 dark:text-red-200"
+                      }`}
+                    >
+                      <div className="flex items-start gap-2.5">
+                        {aiNotice.type === "success" ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                        ) : (
+                          <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                        )}
+                        <div>
+                          {aiNotice.title && <p className="font-bold leading-tight">{aiNotice.title}</p>}
+                          <p className={aiNotice.title ? "mt-0.5 opacity-90" : "font-medium"}>{aiNotice.message}</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setAiNotice(null)}
+                        className="p-1 -mr-1 -mt-1 rounded-lg opacity-60 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/5 transition-opacity cursor-pointer"
+                        aria-label="Tutup notifikasi"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Action Buttons (Footer: Hanya Simpan Pengaturan) */}
+                  <div className="flex items-center justify-end pt-3 border-t border-[var(--border)]">
+                    <button
+                      type="submit"
+                      disabled={savingAiSettings}
+                      className="touch-target inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] text-xs font-bold shadow-xs disabled:opacity-40 transition-colors cursor-pointer"
+                    >
+                      {savingAiSettings ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                      <span>Simpan Pengaturan</span>
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </section>
+        </div>
+      )}
+
+      {/* ============================================================= */}
+      {/* SUBTAB 2: MANAJEMEN BASIS DATA (DATABASE)                     */}
+      {/* ============================================================= */}
+      {technicalSubTab === "database" && (
+        <div
+          role="tabpanel"
+          id="tech-panel-database"
+          aria-labelledby="tech-tab-database"
+          className="space-y-6"
+        >
+          {/* Card 1: Status Database Aktif Saat Ini */}
+          <div className="card-paper p-6 rounded-2xl space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--border)] pb-3">
                 <div>
                   <h2 className="text-base font-bold font-heading text-[var(--ink)] flex items-center gap-2">
@@ -1275,43 +2301,52 @@ export function AdminClient({
 
               {activeDbInfo ? (
                 <div className="space-y-4">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span
-                      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
-                        activeDbInfo.isLocal
-                          ? "bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-900"
-                          : "bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-950/60 dark:text-purple-300 dark:border-purple-900"
-                      }`}
-                    >
-                      <HardDrive className="w-3.5 h-3.5" />
-                      {activeDbInfo.isLocal ? "Database Lokal (Server Ini)" : "Database Remote Aktif"}
-                    </span>
-
-                    <span
-                      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
-                        activeDbInfo.isConnected
-                          ? "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-900"
-                          : "bg-red-100 text-red-800 border-red-200 dark:bg-red-950/60 dark:text-red-300 dark:border-red-900"
-                      }`}
-                    >
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs py-2.5 px-4 rounded-xl bg-[var(--canvas-subtle)] border border-[var(--border)]">
+                    <div className="flex items-center gap-2">
                       <span
-                        className={`w-2 h-2 rounded-full ${
-                          activeDbInfo.isConnected ? "bg-emerald-500 animate-pulse" : "bg-red-500"
+                        className={`w-2 h-2 rounded-full shrink-0 ${
+                          activeDbInfo.isConnected ? "bg-emerald-500" : "bg-red-500"
                         }`}
                       />
-                      {activeDbInfo.isConnected ? "Terhubung (Online)" : "Gagal Terhubung (Offline)"}
+                      <span
+                        className={`font-bold ${
+                          activeDbInfo.isConnected
+                            ? "text-emerald-700 dark:text-emerald-400"
+                            : "text-red-700 dark:text-red-400"
+                        }`}
+                      >
+                        {activeDbInfo.isConnected ? "Online" : "Offline"}
+                      </span>
+                    </div>
+
+                    <span className="text-[var(--border-strong)] opacity-40">&bull;</span>
+
+                    <span className="font-semibold text-[var(--ink)]">
+                      {activeDbInfo.isLocal ? "Database MariaDB Lokal" : "Database Remote Aktif"}
+                    </span>
+
+                    <span className="text-[var(--border-strong)] opacity-40">&bull;</span>
+
+                    <span className="font-mono text-[var(--ink-muted)]">
+                      {activeDbInfo.host}:{activeDbInfo.port}
                     </span>
 
                     {activeDbInfo.latencyMs !== undefined && (
-                      <span className="text-xs font-mono px-2.5 py-1 rounded-lg bg-[var(--canvas-subtle)] border border-[var(--border)] text-[var(--ink-muted)]">
-                        Latensi: {activeDbInfo.latencyMs} ms
-                      </span>
+                      <>
+                        <span className="text-[var(--border-strong)] opacity-40">&bull;</span>
+                        <span className="font-mono text-[var(--ink-muted)]">
+                          {activeDbInfo.latencyMs} ms
+                        </span>
+                      </>
                     )}
 
                     {activeDbInfo.serverVersion && (
-                      <span className="text-xs font-mono px-2.5 py-1 rounded-lg bg-[var(--canvas-subtle)] border border-[var(--border)] text-[var(--ink-muted)]">
-                        Versi: {activeDbInfo.serverVersion}
-                      </span>
+                      <>
+                        <span className="text-[var(--border-strong)] opacity-40">&bull;</span>
+                        <span className="font-mono text-[var(--ink-muted)] truncate max-w-[240px]" title={activeDbInfo.serverVersion}>
+                          {activeDbInfo.serverVersion}
+                        </span>
+                      </>
                     )}
                   </div>
 
@@ -1366,7 +2401,7 @@ export function AdminClient({
                       <button
                         type="button"
                         onClick={() => setIsRevertModalOpen(true)}
-                        className="touch-target inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-xs cursor-pointer transition-colors whitespace-nowrap shrink-0"
+                        className="touch-target inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-purple-300 dark:border-purple-800 bg-white dark:bg-purple-900/60 hover:bg-purple-50 dark:hover:bg-purple-900 text-purple-900 dark:text-purple-200 text-xs font-bold shadow-xs cursor-pointer transition-colors whitespace-nowrap shrink-0"
                       >
                         <ArrowRightLeft className="w-4 h-4" />
                         <span>Kembalikan ke Database Lokal</span>
@@ -1589,10 +2624,10 @@ export function AdminClient({
                   />
                   <div>
                     <span className="text-xs font-bold text-red-600 dark:text-red-400 block">
-                      Hapus &amp; buat ulang tabel (DROP TABLES IF EXISTS)
+                      Hapus &amp; buat ulang tabel (DROP TABLES)
                     </span>
                     <span className="text-[11px] text-[var(--ink-muted)] block">
-                      Gunakan ini hanya jika Anda ingin mereset total database remote ke kondisi bersih. Data lama di remote akan terhapus.
+                      Mereset seluruh data kelas dan absensi ke kondisi bersih di remote. Akun Superadmin lokal dijamin tetap tersimpan aman sehingga Anda tidak akan terkunci.
                     </span>
                   </div>
                 </label>
@@ -1603,7 +2638,7 @@ export function AdminClient({
                 <button
                   type="button"
                   onClick={handleTestConnection}
-                  disabled={testDbLoading || migrationLoading || (!remoteHost && !remoteUri)}
+                  disabled={testDbLoading || migrationLoading || applyLoading || (!remoteHost && !remoteUri)}
                   className="touch-target inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-xs font-bold text-[var(--ink)] transition-colors cursor-pointer shadow-xs disabled:opacity-40"
                 >
                   {testDbLoading ? (
@@ -1611,31 +2646,21 @@ export function AdminClient({
                   ) : (
                     <Wifi className="w-4 h-4 text-[var(--primary)]" />
                   )}
-                  <span>Tes Koneksi Remote</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleRunMigration}
-                  disabled={testDbLoading || migrationLoading || (!remoteHost && !remoteUri)}
-                  className="touch-target inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] text-xs font-bold transition-colors cursor-pointer shadow-xs disabled:opacity-40"
-                >
-                  {migrationLoading ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Play className="w-4 h-4" />
-                  )}
-                  <span>Jalankan Migrasi Skema &amp; Salin Data</span>
+                  <span>Uji Koneksi Saja</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setIsApplyModalOpen(true)}
-                  disabled={testDbLoading || migrationLoading || (!remoteHost && !remoteUri)}
-                  className="touch-target inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors cursor-pointer shadow-xs disabled:opacity-40"
+                  disabled={testDbLoading || migrationLoading || applyLoading || (!remoteHost && !remoteUri)}
+                  className="touch-target inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white text-xs font-bold transition-colors cursor-pointer shadow-xs disabled:opacity-40"
                 >
-                  <ArrowRightLeft className="w-4 h-4" />
-                  <span>Jadikan Database Utama Aplikasi</span>
+                  {migrationLoading || applyLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <ArrowRightLeft className="w-4 h-4" />
+                  )}
+                  <span>Migrasi &amp; Aktifkan Database Remote</span>
                 </button>
               </div>
 
@@ -1708,10 +2733,107 @@ export function AdminClient({
                   ))}
                 </div>
               )}
+              {/* Safe bottom margin inside technical tab */}
+              <div className="pb-6" />
             </div>
           </div>
         )}
+      </div>
+    )}
+
+        {/* Floating Action Button (FAB) on Mobile for Classes and Teachers */}
+        {(activeTab === "classes" || activeTab === "teachers") && (
+          <button
+            type="button"
+            onClick={() => {
+              if (activeTab === "classes") {
+                setClassSlugInput(generateRandomClassCode(3));
+                setIsClassModalOpen(true);
+              } else {
+                setIsTeacherModalOpen(true);
+              }
+            }}
+            className="touch-target md:hidden fixed bottom-20 right-4 z-40 w-12 h-12 rounded-full flex items-center justify-center bg-[var(--primary)] text-white shadow-lg hover:bg-[var(--primary-hover)] active:scale-95 transition-all border border-white/10"
+            aria-label={activeTab === "classes" ? "Buat Kelas Baru" : "Tambah Wali Kelas"}
+            title={activeTab === "classes" ? "Buat Kelas Baru" : "Tambah Wali Kelas"}
+          >
+            <Plus className="w-6 h-6" />
+          </button>
+        )}
+
+        {/* Safe bottom spacer for mobile navigation clearance */}
+        <div className="h-28 md:hidden pointer-events-none" aria-hidden="true" />
       </main>
+
+      {/* 4-Tab Bottom Navigation Bar on Mobile (R5 & R6) */}
+      <nav
+        aria-label="Navigasi Bawah Admin"
+        className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-[var(--surface)] border-t border-[var(--border)] shadow-lg px-3 py-1.5 pb-[calc(env(safe-area-inset-bottom)+0.35rem)] flex items-center justify-around gap-1"
+      >
+        <button
+          type="button"
+          onClick={() => setActiveTab("classes")}
+          aria-label="Manajemen Kelas"
+          aria-current={activeTab === "classes" ? "page" : undefined}
+          title="Manajemen Kelas"
+          className={`touch-target flex-1 flex flex-col items-center justify-center py-2 rounded-xl transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] ${
+            activeTab === "classes"
+              ? "text-[var(--primary)] bg-[var(--primary)]/15 font-bold shadow-xs"
+              : "text-[var(--ink-muted)] hover:text-[var(--ink)] hover:bg-[var(--canvas-subtle)]"
+          }`}
+        >
+          <School className="w-5 h-5" />
+          <span className="sr-only">Manajemen Kelas</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("teachers")}
+          aria-label="Akun Wali Kelas"
+          aria-current={activeTab === "teachers" ? "page" : undefined}
+          title="Akun Wali Kelas"
+          className={`touch-target flex-1 flex flex-col items-center justify-center py-2 rounded-xl transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] ${
+            activeTab === "teachers"
+              ? "text-[var(--primary)] bg-[var(--primary)]/15 font-bold shadow-xs"
+              : "text-[var(--ink-muted)] hover:text-[var(--ink)] hover:bg-[var(--canvas-subtle)]"
+          }`}
+        >
+          <Users className="w-5 h-5" />
+          <span className="sr-only">Akun Wali Kelas</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("settings")}
+          aria-label="Pengaturan Tampilan"
+          aria-current={activeTab === "settings" ? "page" : undefined}
+          title="Pengaturan Tampilan"
+          className={`touch-target flex-1 flex flex-col items-center justify-center py-2 rounded-xl transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] ${
+            activeTab === "settings"
+              ? "text-[var(--primary)] bg-[var(--primary)]/15 font-bold shadow-xs"
+              : "text-[var(--ink-muted)] hover:text-[var(--ink)] hover:bg-[var(--canvas-subtle)]"
+          }`}
+        >
+          <Palette className="w-5 h-5" />
+          <span className="sr-only">Pengaturan Tampilan</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("database")}
+          aria-label="Pengaturan Teknis"
+          aria-current={activeTab === "database" ? "page" : undefined}
+          title="Pengaturan Teknis"
+          className={`touch-target flex-1 flex flex-col items-center justify-center py-2 rounded-xl transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] ${
+            activeTab === "database"
+              ? "text-[var(--primary)] bg-[var(--primary)]/15 font-bold shadow-xs"
+              : "text-[var(--ink-muted)] hover:text-[var(--ink)] hover:bg-[var(--canvas-subtle)]"
+          }`}
+        >
+          <Cpu className="w-5 h-5" />
+          <span className="sr-only">Pengaturan Teknis</span>
+        </button>
+      </nav>
 
       {isTeacherModalOpen && (
         <div
@@ -2301,26 +3423,26 @@ export function AdminClient({
         </div>
       )}
 
-      {/* Modal Konfirmasi: Jadikan Database Utama */}
+      {/* Modal Konfirmasi: Migrasi & Aktifkan Database Remote */}
       {isApplyModalOpen && (
         <div
           role="dialog"
           aria-modal="true"
           aria-labelledby="apply-db-modal-title"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs"
           onClick={(e) => {
-            if (e.target === e.currentTarget && !applyLoading) setIsApplyModalOpen(false);
+            if (e.target === e.currentTarget && !applyLoading && !migrationLoading) setIsApplyModalOpen(false);
           }}
         >
           <div className="card-paper p-6 rounded-2xl w-full max-w-lg space-y-4">
             <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
               <h3 id="apply-db-modal-title" className="text-base font-bold font-heading text-[var(--ink)] flex items-center gap-2">
-                <ArrowRightLeft className="w-5 h-5 text-emerald-600" />
-                <span>Jadikan Database Utama Aplikasi</span>
+                <ArrowRightLeft className="w-5 h-5 text-emerald-600 shrink-0" />
+                <span>Konfirmasi Migrasi &amp; Pengalihan Database</span>
               </h3>
               <button
                 type="button"
-                onClick={() => !applyLoading && setIsApplyModalOpen(false)}
+                onClick={() => !applyLoading && !migrationLoading && setIsApplyModalOpen(false)}
                 className="touch-target inline-flex items-center justify-center p-1 rounded text-[var(--ink-muted)] hover:text-[var(--ink)] cursor-pointer"
                 aria-label="Tutup dialog"
               >
@@ -2330,26 +3452,47 @@ export function AdminClient({
 
             <div className="space-y-3 text-xs text-[var(--ink)]">
               <p>
-                Anda akan mengganti database operasional aplikasi menjadi server remote berikut:
+                Aplikasi akan menyiapkan skema tabel pada server database remote berikut dan langsung menjadikannya database utama:
               </p>
 
               <div className="p-3 rounded-xl bg-[var(--canvas-subtle)] border border-[var(--border)] space-y-1 font-mono text-xs">
-                <div><span className="text-[var(--ink-muted)]">Host:</span> {remoteHost || parseDbUrl(remoteUri).host || "127.0.0.1"}</div>
-                <div><span className="text-[var(--ink-muted)]">Port:</span> {remotePort || parseDbUrl(remoteUri).port || 3306}</div>
-                <div><span className="text-[var(--ink-muted)]">Database:</span> {remoteDatabase || parseDbUrl(remoteUri).database || "-"}</div>
-                <div><span className="text-[var(--ink-muted)]">User:</span> {remoteUser || parseDbUrl(remoteUri).user || "root"}</div>
+                <div><span className="text-[var(--ink-muted)]">Target Host:</span> {remoteHost || parseDbUrl(remoteUri).host || "127.0.0.1"}:{remotePort || parseDbUrl(remoteUri).port || 3306}</div>
+                <div><span className="text-[var(--ink-muted)]">Nama Database:</span> {remoteDatabase || parseDbUrl(remoteUri).database || "-"}</div>
+                <div><span className="text-[var(--ink-muted)]">User Kredensial:</span> {remoteUser || parseDbUrl(remoteUri).user || "root"}</div>
               </div>
 
-              <div className="p-3 rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/40 dark:border-amber-900 text-amber-900 dark:text-amber-200">
-                <span className="font-bold block mb-1">Catatan Penting:</span>
-                File konfigurasi <code className="font-mono font-bold">.env</code> akan diperbarui dan service aplikasi <code className="font-mono font-bold">surat-ijin</code> akan dimuat ulang seketika (~350ms). Pastikan Anda sudah menjalankan migrasi skema agar tabel siap digunakan.
+              <div className="p-3 rounded-xl bg-[var(--surface)] border border-[var(--border)] space-y-1.5 text-xs">
+                <div className="font-bold text-[var(--ink)]">Ringkasan Konfigurasi:</div>
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-[var(--ink-muted)]">Salin Seluruh Data Lokal:</span>
+                  <span className="font-semibold text-[var(--ink)]">
+                    {copyDataOption ? "Ya (Guru, Kelas, Siswa, Absensi)" : "Hanya Struktur Tabel"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-[var(--ink-muted)]">Reset Tabel (DROP TABLES):</span>
+                  <span className={`font-semibold ${dropTablesOption ? "text-red-600 dark:text-red-400" : "text-[var(--ink)]"}`}>
+                    {dropTablesOption ? "Ya (Data lama direset)" : "Tidak (Aman)"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-[11px] pt-1 border-t border-[var(--border)]">
+                  <span className="text-[var(--ink-muted)]">Proteksi Akun Superadmin:</span>
+                  <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                    ✓ Terjamin Aman (Tidak Akan Terkunci)
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl border border-emerald-200 bg-emerald-50 dark:bg-emerald-950/30 dark:border-emerald-900 text-emerald-900 dark:text-emerald-200">
+                <span className="font-bold block mb-0.5">Otomatis &amp; Cepat:</span>
+                File konfigurasi <code className="font-mono font-bold">.env</code> akan diperbarui dan service aplikasi <code className="font-mono font-bold">surat-ijin</code> akan dimuat ulang seketika (~350ms) setelah migrasi berhasil.
               </div>
             </div>
 
             <div className="flex justify-end gap-2 pt-2 border-t border-[var(--border)]">
               <button
                 type="button"
-                disabled={applyLoading}
+                disabled={applyLoading || migrationLoading}
                 onClick={() => setIsApplyModalOpen(false)}
                 className="touch-target px-4 py-2 rounded-xl border border-[var(--border)] text-xs font-bold hover:bg-[var(--canvas-subtle)] cursor-pointer disabled:opacity-50"
               >
@@ -2357,16 +3500,20 @@ export function AdminClient({
               </button>
               <button
                 type="button"
-                disabled={applyLoading}
-                onClick={handleApplyActiveDatabase}
+                disabled={applyLoading || migrationLoading}
+                onClick={handleMigrateAndApplyAllInOne}
                 className="touch-target inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs cursor-pointer disabled:opacity-50 transition-colors"
               >
-                {applyLoading ? (
+                {applyLoading || migrationLoading ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
                   <Check className="w-4 h-4" />
                 )}
-                <span>{applyLoading ? "Menerapkan & Merestart..." : "Ya, Jadikan Database Utama"}</span>
+                <span>
+                  {applyLoading || migrationLoading
+                    ? "Memproses Migrasi & Mengalihkan..."
+                    : "Konfirmasi & Alihkan Sekarang"}
+                </span>
               </button>
             </div>
           </div>
@@ -2429,7 +3576,7 @@ export function AdminClient({
                 type="button"
                 disabled={revertLoading}
                 onClick={handleRevertToLocal}
-                className="touch-target inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-xs cursor-pointer disabled:opacity-50 transition-colors"
+                className="touch-target inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white text-xs font-bold shadow-xs cursor-pointer disabled:opacity-50 transition-colors"
               >
                 {revertLoading ? (
                   <Loader2 className="w-4 h-4 animate-spin" />

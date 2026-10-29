@@ -30,7 +30,16 @@ import { logoutAction } from "@/actions/auth";
 import { deleteAttendanceAction } from "@/actions/attendance";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { StatCard } from "@/components/stat-card";
-import { MonthlyBarChart } from "@/components/monthly-bar-chart";
+import dynamic from "next/dynamic";
+const MonthlyBarChart = dynamic(
+  () => import("@/components/monthly-bar-chart").then((mod) => mod.MonthlyBarChart),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-64 animate-pulse rounded-2xl bg-neutral-100 dark:bg-neutral-800" />
+    ),
+  }
+);
 import { LetterLightboxModal } from "@/components/letter-lightbox-modal";
 import { AttendanceFormModal } from "@/components/attendance-form-modal";
 import { ParentPortalSettingsModal } from "@/components/parent-portal-settings-modal";
@@ -40,6 +49,7 @@ import { MobileFilterDrawer } from "@/components/mobile-filter-drawer";
 import { exportAttendancePdf } from "@/lib/export-pdf";
 import { exportAttendanceExcel } from "@/lib/export-excel";
 import { computeDynamicDashboardMetrics } from "@/lib/attendance-stats";
+import { useConfirmDialog } from "@/components/confirm-dialog-provider";
 
 interface DashboardClientProps {
   initialData: DashboardData;
@@ -58,6 +68,7 @@ export function DashboardClient({
 }: DashboardClientProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const { confirm: confirmDialog, alert: alertDialog } = useConfirmDialog();
 
   const [data, setData] = useState<DashboardData>(initialData);
   const [teacherDisplayName, setTeacherDisplayName] = useState(user.displayName);
@@ -102,21 +113,40 @@ export function DashboardClient({
   };
 
   const handleDelete = async (record: AttendanceRecordWithStudent) => {
-    if (confirm(`Yakin ingin menghapus catatan ketidakhadiran ${record.studentName} pada ${record.attendanceDate}?`)) {
-      try {
-        const res = await deleteAttendanceAction(record.id);
-        if (res.success) {
-          setData((prev) => ({
-            ...prev,
-            records: prev.records.filter((r) => r.id !== record.id),
-          }));
-        } else {
-          alert(res.error || "Gagal menghapus data ketidakhadiran.");
-        }
-        router.refresh();
-      } catch (err) {
-        console.error("Gagal menghapus data ketidakhadiran:", err);
+    const confirmed = await confirmDialog({
+      title: "Hapus Catatan Ketidakhadiran?",
+      message: `Yakin ingin menghapus catatan ketidakhadiran ${record.studentName} pada ${record.attendanceDate}? Tindakan ini tidak dapat dibatalkan.`,
+      confirmText: "Hapus Catatan",
+      cancelText: "Batal",
+      variant: "danger",
+    });
+
+    if (!confirmed) return;
+
+    try {
+      const res = await deleteAttendanceAction(record.id);
+      if (res.success) {
+        setData((prev) => ({
+          ...prev,
+          records: prev.records.filter((r) => r.id !== record.id),
+        }));
+      } else {
+        await alertDialog({
+          title: "Gagal Menghapus",
+          message: res.error || "Gagal menghapus data ketidakhadiran.",
+          confirmText: "Tutup",
+          variant: "danger",
+        });
       }
+      router.refresh();
+    } catch (err) {
+      console.error("Gagal menghapus data ketidakhadiran:", err);
+      await alertDialog({
+        title: "Kesalahan Sistem",
+        message: "Terjadi kesalahan saat memproses permintaan hapus data.",
+        confirmText: "Tutup",
+        variant: "danger",
+      });
     }
   };
 
@@ -194,7 +224,7 @@ export function DashboardClient({
                 className="w-9 h-9 sm:w-10 sm:h-10 object-contain shrink-0"
               />
             ) : (
-              <div className="p-2 rounded-xl bg-[var(--primary-light)] text-[var(--primary)] shadow-xs flex items-center justify-center shrink-0">
+              <div className="p-2 rounded-xl bg-[var(--primary)]/15 text-[var(--primary)] shadow-xs flex items-center justify-center shrink-0">
                 <School className="w-5 h-5" />
               </div>
             )}
@@ -206,7 +236,7 @@ export function DashboardClient({
                       aria-label="Pilih kelas"
                       value={currentClassId}
                       onChange={(e) => handleClassChange(parseInt(e.target.value, 10))}
-                      className="text-base sm:text-lg font-bold font-heading bg-transparent border-b border-dashed border-[var(--ink-muted)] pr-6 cursor-pointer text-[var(--ink)] focus:outline-none"
+                      className="text-base sm:text-lg font-bold font-heading bg-transparent border-b border-dashed border-[var(--ink-muted)] pr-6 cursor-pointer text-[var(--ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:rounded-md"
                     >
                       {classesList.map((c) => (
                         <option key={c.id} value={c.id}>
@@ -636,7 +666,13 @@ export function DashboardClient({
                         return (
                           <tr
                             key={r.id}
-                            className="hover:bg-[var(--canvas-subtle)] transition-colors"
+                            onClick={(e) => {
+                              if ((e.target as HTMLElement).closest("a, button, input, select, textarea, [role='button']")) return;
+                              setEditRecord(r);
+                              setIsFormModalOpen(true);
+                            }}
+                            className="hover:bg-[var(--canvas-subtle)] transition-colors cursor-pointer"
+                            title={`Klik baris untuk edit catatan ${r.studentName}`}
                           >
                             <td className="px-4 py-3 text-center text-[var(--ink-subtle)] font-mono">
                               {idx + 1}
@@ -699,7 +735,7 @@ export function DashboardClient({
                                     setEditRecord(r);
                                     setIsFormModalOpen(true);
                                   }}
-                                  className="touch-target p-1.5 rounded text-[var(--ink-muted)] hover:text-[var(--primary)] hover:bg-[var(--canvas-subtle)]"
+                                  className="touch-target p-1.5 rounded text-[var(--ink-muted)] hover:text-[var(--primary)] hover:bg-[var(--canvas-subtle)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
                                   title="Edit Data"
                                   aria-label={`Edit catatan ${r.studentName}`}
                                 >
@@ -708,7 +744,7 @@ export function DashboardClient({
                                 <button
                                   type="button"
                                   onClick={() => handleDelete(r)}
-                                  className="touch-target p-1.5 rounded text-[var(--ink-muted)] hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
+                                  className="touch-target p-1.5 rounded text-[var(--ink-muted)] hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-500"
                                   title="Hapus Data"
                                   aria-label={`Hapus catatan ${r.studentName}`}
                                 >
@@ -742,7 +778,13 @@ export function DashboardClient({
                     return (
                       <div
                         key={r.id}
-                        className={`p-3.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-2xs space-y-2.5 transition-all ${statusBorderClass}`}
+                        onClick={(e) => {
+                          if ((e.target as HTMLElement).closest("a, button, input, select, textarea, [role='button']")) return;
+                          setEditRecord(r);
+                          setIsFormModalOpen(true);
+                        }}
+                        className={`p-3.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-2xs space-y-2.5 transition-all cursor-pointer hover:border-[var(--border-strong)] ${statusBorderClass}`}
+                        title={`Klik kartu untuk edit catatan ${r.studentName}`}
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="space-y-0.5">
@@ -802,7 +844,7 @@ export function DashboardClient({
                                 setEditRecord(r);
                                 setIsFormModalOpen(true);
                               }}
-                              className="touch-target inline-flex items-center justify-center w-10 h-10 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink-muted)] hover:text-[var(--primary)] hover:bg-[var(--canvas-subtle)]"
+                              className="touch-target inline-flex items-center justify-center w-11 h-11 min-w-[44px] min-h-[44px] rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink-muted)] hover:text-[var(--primary)] hover:bg-[var(--canvas-subtle)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
                               aria-label={`Edit catatan ${r.studentName}`}
                             >
                               <Edit2 className="w-4 h-4" />
@@ -810,7 +852,7 @@ export function DashboardClient({
                             <button
                               type="button"
                               onClick={() => handleDelete(r)}
-                              className="touch-target inline-flex items-center justify-center w-10 h-10 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40"
+                              className="touch-target inline-flex items-center justify-center w-11 h-11 min-w-[44px] min-h-[44px] rounded-lg border border-[var(--border)] bg-[var(--surface)] text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-500"
                               aria-label={`Hapus catatan ${r.studentName}`}
                             >
                               <Trash2 className="w-4 h-4" />
@@ -1038,10 +1080,11 @@ export function DashboardClient({
       >
         <button
           type="button"
+          aria-current="page"
           onClick={() => {
             window.scrollTo({ top: 0, behavior: "smooth" });
           }}
-          className="touch-target flex-1 flex flex-col items-center justify-center py-1 text-[var(--primary)] font-bold transition-colors"
+          className="touch-target flex-1 flex flex-col items-center justify-center py-1 text-[var(--primary)] font-bold transition-colors rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
         >
           <ClipboardCheck className="w-5 h-5 mb-0.5" />
           <span className="text-[10px] leading-tight">Presensi</span>
@@ -1050,7 +1093,7 @@ export function DashboardClient({
         <button
           type="button"
           onClick={() => setIsRosterModalOpen(true)}
-          className="touch-target flex-1 flex flex-col items-center justify-center py-1 text-[var(--ink-muted)] hover:text-[var(--ink)] transition-colors"
+          className="touch-target flex-1 flex flex-col items-center justify-center py-1 text-[var(--ink-muted)] hover:text-[var(--ink)] transition-colors rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
         >
           <Users className="w-5 h-5 mb-0.5" />
           <span className="text-[10px] leading-tight">Siswa</span>
@@ -1059,7 +1102,7 @@ export function DashboardClient({
         <button
           type="button"
           onClick={() => setIsSettingsModalOpen(true)}
-          className="touch-target flex-1 flex flex-col items-center justify-center py-1 text-[var(--ink-muted)] hover:text-[var(--ink)] transition-colors"
+          className="touch-target flex-1 flex flex-col items-center justify-center py-1 text-[var(--ink-muted)] hover:text-[var(--ink)] transition-colors rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
         >
           <Share2 className="w-5 h-5 mb-0.5" />
           <span className="text-[10px] leading-tight">Portal</span>
@@ -1068,7 +1111,7 @@ export function DashboardClient({
         <button
           type="button"
           onClick={() => setIsProfileModalOpen(true)}
-          className="touch-target flex-1 flex flex-col items-center justify-center py-1 text-[var(--ink-muted)] hover:text-[var(--ink)] transition-colors"
+          className="touch-target flex-1 flex flex-col items-center justify-center py-1 text-[var(--ink-muted)] hover:text-[var(--ink)] transition-colors rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
         >
           <UserCheck className="w-5 h-5 mb-0.5" />
           <span className="text-[10px] leading-tight">Profil</span>

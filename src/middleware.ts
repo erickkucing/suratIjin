@@ -2,8 +2,22 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { jwtVerify } from "jose";
 
+const DEFAULT_FALLBACK_SECRET = "surat_ijin_super_secret_jwt_key_2026_modern_academic_system";
+
+if (
+  process.env.NODE_ENV === "production" &&
+  process.env.NEXT_PHASE !== "phase-production-build"
+) {
+  const secret = process.env.JWT_SECRET;
+  if (!secret || secret === DEFAULT_FALLBACK_SECRET) {
+    throw new Error(
+      "SECURITY ERROR: In production, a unique and random JWT_SECRET must be configured in environment variables."
+    );
+  }
+}
+
 const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "surat_ijin_super_secret_jwt_key_2026_modern_academic_system"
+  process.env.JWT_SECRET || DEFAULT_FALLBACK_SECRET
 );
 
 export async function middleware(request: NextRequest) {

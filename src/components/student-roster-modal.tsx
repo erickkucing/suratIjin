@@ -15,6 +15,10 @@ import {
   Loader2,
   AlertCircle,
   Download,
+  Camera,
+  ScanLine,
+  RotateCcw,
+  CheckCircle2,
 } from "lucide-react";
 import { Student } from "@/db/schema";
 import {
@@ -29,6 +33,7 @@ import {
 import { exportStudentRosterExcel, downloadStudentImportTemplate } from "@/lib/export-excel";
 import { toTitleCase } from "@/lib/string-utils";
 import { useBottomSheetGesture } from "@/hooks/use-bottom-sheet";
+import { useConfirmDialog } from "@/components/confirm-dialog-provider";
 
 interface StudentRosterModalProps {
   isOpen: boolean;
@@ -52,23 +57,29 @@ export function StudentRosterModal({
   const [activeTab, setActiveTab] = useState<"list" | "add" | "bulk">("list");
   const [search, setSearch] = useState("");
 
-  // Single Add
   const [newName, setNewName] = useState("");
   const [newNis, setNewNis] = useState("");
 
-  // Bulk Add (Text / Excel)
-  const [bulkMode, setBulkMode] = useState<"file" | "text">("file");
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  const [bulkMode, setBulkMode] = useState<"file" | "scan" | "text">("file");
   const [bulkText, setBulkText] = useState("");
   const [excelStudents, setExcelStudents] = useState<{ name: string; nis?: string }[]>([]);
   const [excelFileName, setExcelFileName] = useState<string | null>(null);
 
-  // Edit Single
+  const [ocrStudents, setOcrStudents] = useState<{ name: string; nis?: string }[]>([]);
+  const [ocrFileName, setOcrFileName] = useState<string | null>(null);
+  const [ocrPagesProcessed, setOcrPagesProcessed] = useState<number>(1);
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanProgressStep, setScanProgressStep] = useState<string>("");
+
   const [editingStudentId, setEditingStudentId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
   const [editNis, setEditNis] = useState("");
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ text: string; isError: boolean } | null>(null);
+  const { confirm: confirmDialog } = useConfirmDialog();
 
   // Delete All Students Confirmation
   const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
@@ -76,21 +87,30 @@ export function StudentRosterModal({
   const [isDeletingAll, setIsDeletingAll] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const ocrFileInputRef = useRef<HTMLInputElement>(null);
+  const ocrCameraInputRef = useRef<HTMLInputElement>(null);
 
   const { sheetRef, sheetStyle, touchHandlers } = useBottomSheetGesture({
     isOpen,
     onClose,
+    onExpand: () => setIsExpanded(true),
   });
 
   useEffect(() => {
     if (isOpen) {
       setActiveTab("list");
       setSearch("");
+      setIsExpanded(false);
       setNewName("");
       setNewNis("");
       setBulkText("");
       setExcelStudents([]);
       setExcelFileName(null);
+      setOcrStudents([]);
+      setOcrFileName(null);
+      setOcrPagesProcessed(1);
+      setIsScanning(false);
+      setScanProgressStep("");
       setEditingStudentId(null);
       setMessage(null);
       setShowDeleteAllModal(false);
@@ -295,6 +315,161 @@ export function StudentRosterModal({
     }
   };
 
+  const handleOcrFileSelect = async (file?: File) => {
+    if (!file) return;
+
+    if (file.size > 15 * 1024 * 1024) {
+      setMessage({
+        text: "Ukuran file terlalu besar. Maksimal 15 MB.",
+        isError: true,
+      });
+      return;
+    }
+
+    setIsScanning(true);
+    setMessage(null);
+    setOcrFileName(file.name);
+    setScanProgressStep("Menyiapkan dokumen...");
+
+    try {
+      let uploadFile = file;
+
+      // Convert HEIC/HEIF images on the client if necessary
+      if (
+        file.name.toLowerCase().endsWith(".heic") ||
+        file.name.toLowerCase().endsWith(".heif") ||
+        file.type.includes("heic")
+      ) {
+        setScanProgressStep("Mengonversi format foto HEIC ke JPG...");
+        try {
+          const { heicTo } = await import("heic-to");
+          const blob = await heicTo({
+            blob: file,
+            type: "image/jpeg",
+            quality: 0.92,
+          });
+          uploadFile = new File([blob], file.name.replace(/\.heic$/i, ".jpg"), {
+            type: "image/jpeg",
+          });
+        } catch (heicErr) {
+          console.warn("HEIC client conversion failed, continuing with raw file:", heicErr);
+        }
+      } else if (file.type.startsWith("image/") && file.size > 2 * 1024 * 1024) {
+        // Compress very large camera photos to speed up network transfer
+        setScanProgressStep("Mengompres resolusi foto kamera...");
+        try {
+          const imageCompression = (await import("browser-image-compression")).default;
+          const compressedBlob = await imageCompression(file, {
+            maxSizeMB: 2,
+            maxWidthOrHeight: 2500,
+            useWebWorker: true,
+          });
+          uploadFile = new File([compressedBlob], file.name, { type: file.type });
+        } catch (compErr) {
+          console.warn("Client compression skipped:", compErr);
+        }
+      }
+
+      setScanProgressStep("Menganalisis baris tabel dan nama siswa menggunakan PaddleOCR...");
+      const formData = new FormData();
+      formData.append("classId", String(classId));
+      formData.append("file", uploadFile);
+
+      const res = await fetch("/api/ocr/roster", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal memindai formulir siswa.");
+      }
+
+      if (!data.students || data.students.length === 0) {
+        setMessage({
+          text: "Tidak ditemukan daftar nama siswa pada dokumen tersebut. Pastikan teks tabel atau tulisan cetak terbaca jelas.",
+          isError: true,
+        });
+        setOcrStudents([]);
+        return;
+      }
+
+      setOcrStudents(data.students);
+      setOcrPagesProcessed(data.pagesProcessed || 1);
+      setMessage({
+        text: `Berhasil memindai ${data.students.length} siswa${
+          data.pagesProcessed > 1 ? ` dari ${data.pagesProcessed} halaman PDF` : ""
+        }. Anda dapat mengoreksi typo atau melengkapi data pada tabel di bawah sebelum menyimpan.`,
+        isError: false,
+      });
+    } catch (err: unknown) {
+      console.error("OCR client error:", err);
+      setMessage({
+        text: err instanceof Error ? err.message : "Gagal memproses dokumen dengan OCR.",
+        isError: true,
+      });
+      setOcrStudents([]);
+    } finally {
+      setIsScanning(false);
+      setScanProgressStep("");
+    }
+  };
+
+  const handleOcrStudentChange = (index: number, field: "name" | "nis", value: string) => {
+    setOcrStudents((prev) => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], [field]: value };
+      return copy;
+    });
+  };
+
+  const handleOcrRemoveStudent = (index: number) => {
+    setOcrStudents((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleOcrAddStudent = () => {
+    setOcrStudents((prev) => [...prev, { name: "", nis: "" }]);
+  };
+
+  const handleConfirmOcrImport = async () => {
+    const validStudents = ocrStudents
+      .map((s) => ({
+        name: toTitleCase(s.name.trim()),
+        nis: s.nis && s.nis.trim() ? s.nis.trim() : undefined,
+      }))
+      .filter((s) => s.name.length >= 2);
+
+    if (validStudents.length === 0) {
+      setMessage({
+        text: "Masukkan minimal 1 nama siswa dengan panjang minimal 2 karakter.",
+        isError: true,
+      });
+      return;
+    }
+
+    setLoading(true);
+    setMessage(null);
+    try {
+      const res = await bulkImportStudentsAction(classId, validStudents);
+      if (!res.success) throw new Error(res.error);
+      setMessage({
+        text: res.message || `Berhasil mengimpor ${validStudents.length} siswa ke kelas.`,
+        isError: false,
+      });
+      setOcrStudents([]);
+      setOcrFileName(null);
+      onSuccess();
+      setActiveTab("list");
+    } catch (err: unknown) {
+      setMessage({
+        text: err instanceof Error ? err.message : "Gagal mengimpor daftar siswa.",
+        isError: true,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSaveEdit = async (studentId: number) => {
     if (!editName.trim()) return;
     setLoading(true);
@@ -330,21 +505,29 @@ export function StudentRosterModal({
   };
 
   const handleDeleteStudent = async (student: Student) => {
-    if (confirm(`Yakin ingin menghapus siswa "${student.name}" secara permanen? Data ketidakhadiran terkait juga akan terhapus.`)) {
-      setLoading(true);
-      try {
-        const res = await deleteStudentAction(student.id);
-        if (!res.success) throw new Error(res.error);
-        setMessage({ text: res.message || "Siswa berhasil dihapus.", isError: false });
-        onSuccess();
-      } catch (err: unknown) {
-        setMessage({
-          text: err instanceof Error ? err.message : "Gagal menghapus siswa.",
-          isError: true,
-        });
-      } finally {
-        setLoading(false);
-      }
+    const confirmed = await confirmDialog({
+      title: "Hapus Siswa Permanen?",
+      message: `Yakin ingin menghapus siswa "${student.name}" secara permanen? Seluruh data catatan ketidakhadiran terkait juga akan terhapus. Tindakan ini tidak dapat dibatalkan.`,
+      confirmText: "Hapus Siswa",
+      cancelText: "Batal",
+      variant: "danger",
+    });
+
+    if (!confirmed) return;
+
+    setLoading(true);
+    try {
+      const res = await deleteStudentAction(student.id);
+      if (!res.success) throw new Error(res.error);
+      setMessage({ text: res.message || "Siswa berhasil dihapus.", isError: false });
+      onSuccess();
+    } catch (err: unknown) {
+      setMessage({
+        text: err instanceof Error ? err.message : "Gagal menghapus siswa.",
+        isError: true,
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -403,7 +586,9 @@ export function StudentRosterModal({
         ref={sheetRef}
         style={sheetStyle}
         {...touchHandlers}
-        className="relative w-full max-w-2xl max-h-[84dvh] sm:max-h-[85vh] rounded-t-3xl sm:rounded-2xl rounded-b-none sm:rounded-b-2xl bg-[var(--surface)] text-[var(--ink)] shadow-2xl border-t border-x sm:border border-[var(--border)] overflow-hidden flex flex-col"
+        className={`relative w-full max-w-2xl min-h-0 rounded-t-3xl sm:rounded-2xl rounded-b-none sm:rounded-b-2xl bg-[var(--surface)] text-[var(--ink)] shadow-2xl border-t border-x sm:border border-[var(--border)] overflow-hidden flex flex-col modal-bottom-sheet ${
+          isExpanded ? "max-h-[83dvh] expanded" : "max-h-[68dvh]"
+        } sm:max-h-[85vh]`}
       >
         {/* Mobile Tactile Drag Handle */}
         <div data-drag-handle className="sm:hidden flex justify-center pt-3 pb-2 touch-none cursor-grab active:cursor-grabbing bg-[var(--canvas-subtle)]">
@@ -411,7 +596,7 @@ export function StudentRosterModal({
         </div>
 
         {/* Header */}
-        <div className="flex items-center justify-between px-5 sm:px-6 py-3.5 sm:py-4 border-b border-[var(--border)] bg-[var(--canvas-subtle)] shrink-0">
+        <div data-sheet-header className="flex items-center justify-between px-5 sm:px-6 py-3.5 sm:py-4 border-b border-[var(--border)] bg-[var(--canvas-subtle)] shrink-0 touch-none select-none">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-[var(--primary-light)] text-[var(--primary)] shadow-xs shrink-0">
               <Users className="w-5 h-5" />
@@ -428,14 +613,6 @@ export function StudentRosterModal({
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="touch-target inline-flex items-center justify-center p-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-[var(--ink-muted)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
-            aria-label="Tutup dialog"
-          >
-            <X className="w-5 h-5" />
-          </button>
         </div>
 
         {/* Tab Navigation */}
@@ -471,12 +648,19 @@ export function StudentRosterModal({
                 : "border-transparent text-[var(--ink-muted)] hover:text-[var(--ink)]"
             }`}
           >
-            Impor Massal (Excel / Teks)
+            Impor Massal
           </button>
         </div>
 
         {/* Body */}
-        <div className="p-4 sm:p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:pb-6 overflow-y-auto space-y-4 flex-1">
+        <div
+          onScroll={(e) => {
+            if (!isExpanded && e.currentTarget.scrollTop > 18) {
+              setIsExpanded(true);
+            }
+          }}
+          className="p-4 sm:p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:pb-6 overflow-y-auto min-h-0 space-y-4 flex-1"
+        >
           {message && (
             <div
               className={`p-3 rounded-xl border text-sm font-medium ${
@@ -502,12 +686,19 @@ export function StudentRosterModal({
                 />
                 <button
                   type="button"
-                  onClick={handleExportRoster}
-                  className="touch-target inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-xs font-semibold text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] shrink-0"
-                  title="Unduh Daftar Siswa ke Excel (.xlsx)"
+                  onClick={() => {
+                    setActiveTab("bulk");
+                    setBulkMode("scan");
+                    setTimeout(() => {
+                      ocrCameraInputRef.current?.click();
+                    }, 60);
+                  }}
+                  className="touch-target inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[var(--primary)]/30 bg-[var(--primary-light)]/40 hover:bg-[var(--primary-light)] text-xs font-semibold text-[var(--primary)] hover:border-[var(--primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] shrink-0 transition-colors shadow-2xs"
+                  title="Pindai Formulir dengan Kamera (OCR)"
+                  aria-label="Pindai formulir dengan kamera"
                 >
-                  <FileSpreadsheet className="w-4 h-4 text-[var(--status-success-fg)]" />
-                  <span className="hidden sm:inline">Export Excel</span>
+                  <Camera className="w-4 h-4 text-[var(--primary)]" />
+                  <span className="hidden sm:inline">Pindai Kamera</span>
                 </button>
                 {studentsList.length > 0 && (
                   <button
@@ -536,11 +727,21 @@ export function StudentRosterModal({
                     return (
                       <div
                         key={st.id}
+                        onClick={(e) => {
+                          if (isEditing) return;
+                          if ((e.target as HTMLElement).closest("a, button, input, select, textarea, [role='button']")) return;
+                          setEditingStudentId(st.id);
+                          setEditName(st.name);
+                          setEditNis(st.nis || "");
+                        }}
                         className={`flex items-center justify-between p-3 transition-colors ${
+                          !isEditing ? "cursor-pointer" : ""
+                        } ${
                           st.isActive
                             ? "bg-[var(--surface)] hover:bg-[var(--canvas-subtle)]"
                             : "bg-amber-50/50 dark:bg-amber-950/20 opacity-75"
                         }`}
+                        title={!isEditing ? `Klik baris untuk edit nama/NIS ${st.name}` : undefined}
                       >
                         {isEditing ? (
                           <div className="flex-1 flex items-center gap-2 mr-2">
@@ -561,16 +762,18 @@ export function StudentRosterModal({
                               type="button"
                               onClick={() => handleSaveEdit(st.id)}
                               disabled={loading}
-                              className="p-1.5 rounded bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)]"
+                              className="touch-target min-h-[38px] min-w-[38px] p-2 rounded-lg bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
                               title="Simpan"
+                              aria-label="Simpan perubahan data siswa"
                             >
                               <Check className="w-4 h-4" />
                             </button>
                             <button
                               type="button"
                               onClick={() => setEditingStudentId(null)}
-                              className="p-1.5 rounded border border-[var(--border)] text-[var(--ink-muted)] hover:text-[var(--ink)]"
+                              className="touch-target min-h-[38px] min-w-[38px] p-2 rounded-lg border border-[var(--border)] text-[var(--ink-muted)] hover:text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--border-strong)]"
                               title="Batal"
+                              aria-label="Batal edit data siswa"
                             >
                               <X className="w-4 h-4" />
                             </button>
@@ -605,7 +808,7 @@ export function StudentRosterModal({
                                 setEditName(st.name);
                                 setEditNis(st.nis || "");
                               }}
-                              className="touch-target p-1.5 text-[var(--ink-muted)] hover:text-[var(--primary)] rounded"
+                              className="touch-target p-1.5 text-[var(--ink-muted)] hover:text-[var(--primary)] rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
                               title="Edit Nama/NIS"
                               aria-label={`Edit ${st.name}`}
                             >
@@ -614,7 +817,7 @@ export function StudentRosterModal({
                             <button
                               type="button"
                               onClick={() => handleToggleArchive(st)}
-                              className="touch-target p-1.5 text-[var(--ink-muted)] hover:text-amber-600 rounded"
+                              className="touch-target p-1.5 text-[var(--ink-muted)] hover:text-amber-600 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
                               title={st.isActive ? "Arsipkan Siswa" : "Aktifkan Siswa"}
                               aria-label={st.isActive ? `Arsipkan ${st.name}` : `Aktifkan ${st.name}`}
                             >
@@ -623,7 +826,7 @@ export function StudentRosterModal({
                             <button
                               type="button"
                               onClick={() => handleDeleteStudent(st)}
-                              className="touch-target p-1.5 text-[var(--ink-muted)] hover:text-red-600 rounded"
+                              className="touch-target p-1.5 text-[var(--ink-muted)] hover:text-red-600 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-500"
                               title="Hapus Siswa Permanen"
                               aria-label={`Hapus ${st.name}`}
                             >
@@ -686,47 +889,71 @@ export function StudentRosterModal({
           {/* TAB 3: BULK IMPORT (EXCEL / TEXT) */}
           {activeTab === "bulk" && (
             <div className="space-y-4">
-              {/* Mode switch & Template Download */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--border)] pb-2.5">
-                <div className="flex items-center gap-2">
+              {/* Mode switch & Actions */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-[var(--border)] pb-3">
+                <div className="grid grid-cols-3 gap-1 p-1 rounded-xl bg-[var(--canvas-subtle)] border border-[var(--border)] w-full sm:w-auto shrink-0">
                   <button
                     type="button"
                     onClick={() => setBulkMode("file")}
-                    className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${
+                    className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-all text-center flex items-center justify-center gap-1.5 ${
                       bulkMode === "file"
                         ? "bg-[var(--primary)] text-white shadow-xs"
-                        : "bg-[var(--canvas-subtle)] text-[var(--ink-muted)] hover:text-[var(--ink)]"
+                        : "text-[var(--ink-muted)] hover:text-[var(--ink)]"
                     }`}
                   >
-                    Unggah File Excel (.xlsx)
+                    <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" />
+                    <span>Unggah Excel</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBulkMode("scan")}
+                    className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-all text-center flex items-center justify-center gap-1.5 ${
+                      bulkMode === "scan"
+                        ? "bg-[var(--primary)] text-white shadow-xs"
+                        : "text-[var(--ink-muted)] hover:text-[var(--ink)]"
+                    }`}
+                  >
+                    <ScanLine className="w-3.5 h-3.5 shrink-0" />
+                    <span>Foto/PDF</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setBulkMode("text")}
-                    className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${
+                    className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-all text-center flex items-center justify-center gap-1.5 ${
                       bulkMode === "text"
                         ? "bg-[var(--primary)] text-white shadow-xs"
-                        : "bg-[var(--canvas-subtle)] text-[var(--ink-muted)] hover:text-[var(--ink)]"
+                        : "text-[var(--ink-muted)] hover:text-[var(--ink)]"
                     }`}
                   >
-                    Tempel Salinan Teks
+                    <span>Teks</span>
                   </button>
                 </div>
 
                 {bulkMode === "file" && (
-                  <button
-                    type="button"
-                    onClick={() => downloadStudentImportTemplate(classNameTitle)}
-                    className="touch-target inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-[var(--accent-slate)] hover:border-[var(--accent-slate)] transition-all shadow-xs"
-                    title="Unduh format file Excel (.xlsx) kosong untuk impor massal siswa"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    <span>Download Format Excel (.xlsx)</span>
-                  </button>
+                  <div className="flex items-center gap-2 self-start sm:self-auto shrink-0 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={handleExportRoster}
+                      className="touch-target inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-[var(--status-success-fg)] hover:border-[var(--status-success-fg)] transition-all shadow-xs"
+                      title="Unduh daftar siswa saat ini ke file Excel (.xlsx)"
+                    >
+                      <FileSpreadsheet className="w-3.5 h-3.5" />
+                      <span>Export Excel</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => downloadStudentImportTemplate(classNameTitle)}
+                      className="touch-target inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-[var(--accent-slate)] hover:border-[var(--accent-slate)] transition-all shadow-xs"
+                      title="Unduh format file Excel (.xlsx) kosong untuk impor massal siswa"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Format Excel</span>
+                    </button>
+                  </div>
                 )}
               </div>
 
-              {bulkMode === "file" ? (
+              {bulkMode === "file" && (
                 <div className="space-y-3">
                   <div
                     onClick={() => fileInputRef.current?.click()}
@@ -803,7 +1030,213 @@ export function StudentRosterModal({
                     </div>
                   )}
                 </div>
-              ) : (
+              )}
+
+              {bulkMode === "scan" && (
+                <div className="space-y-4">
+                  {/* Hidden inputs for camera capture and file picker */}
+                  <input
+                    ref={ocrCameraInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleOcrFileSelect(file);
+                    }}
+                    className="hidden"
+                  />
+                  <input
+                    ref={ocrFileInputRef}
+                    type="file"
+                    accept=".jpg,.jpeg,.png,.webp,.heic,.heif,.pdf"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleOcrFileSelect(file);
+                    }}
+                    className="hidden"
+                  />
+
+                  {/* State 1: Upload / Capture trigger options */}
+                  {!isScanning && ocrStudents.length === 0 && (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {/* Camera Button */}
+                        <div
+                          onClick={() => ocrCameraInputRef.current?.click()}
+                          className="border-2 border-dashed border-[var(--border)] hover:border-[var(--primary)] rounded-xl p-5 text-center cursor-pointer bg-[var(--canvas-subtle)] hover:bg-[var(--surface)] transition-all group flex flex-col items-center justify-center min-h-[140px]"
+                        >
+                          <div className="w-12 h-12 rounded-xl bg-[var(--primary-light)] text-[var(--primary)] flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform">
+                            <Camera className="w-6 h-6" />
+                          </div>
+                          <p className="text-sm font-bold text-[var(--ink)]">
+                            Ambil Foto Formulir
+                          </p>
+                          <p className="text-xs text-[var(--ink-muted)] mt-1">
+                            Buka kamera ponsel atau laptop langsung
+                          </p>
+                        </div>
+
+                        {/* File Upload Dropzone */}
+                        <div
+                          onClick={() => ocrFileInputRef.current?.click()}
+                          className="border-2 border-dashed border-[var(--border)] hover:border-[var(--primary)] rounded-xl p-5 text-center cursor-pointer bg-[var(--canvas-subtle)] hover:bg-[var(--surface)] transition-all group flex flex-col items-center justify-center min-h-[140px]"
+                        >
+                          <div className="w-12 h-12 rounded-xl bg-[var(--primary-light)] text-[var(--primary)] flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform">
+                            <ScanLine className="w-6 h-6" />
+                          </div>
+                          <p className="text-sm font-bold text-[var(--ink)]">
+                            Pilih File Foto / PDF
+                          </p>
+                          <p className="text-xs text-[var(--ink-muted)] mt-1">
+                            JPG, PNG, WebP, HEIC, atau PDF multi-halaman
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Human-friendly guidance */}
+                      <div className="p-3.5 rounded-xl bg-[var(--canvas-subtle)] border border-[var(--border)] text-xs text-[var(--ink-muted)] space-y-1.5">
+                        <p className="font-semibold text-[var(--ink)]">Panduan Pemindaian Formulir Siswa:</p>
+                        <ul className="list-disc list-inside space-y-1 pl-1">
+                          <li>Ambil foto tegak lurus dari atas dengan pencahayaan terang dan tidak silau.</li>
+                          <li>Sistem otomatis mendeteksi kolom Nama dan NIS dari tabel absensi resmi sekolah.</li>
+                          <li>Dokumen PDF multi-halaman akan dipindai beruntun secara menyeluruh.</li>
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* State 2: Scanning in progress */}
+                  {isScanning && (
+                    <div className="border border-[var(--border)] rounded-2xl p-8 bg-[var(--canvas-subtle)] text-center space-y-3">
+                      <div className="w-12 h-12 rounded-2xl bg-[var(--primary-light)] text-[var(--primary)] flex items-center justify-center mx-auto shadow-xs">
+                        <Loader2 className="w-6 h-6 animate-spin" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-[var(--ink)]">
+                          Sedang Menganalisis Dokumen...
+                        </h4>
+                        <p className="text-xs text-[var(--primary)] font-medium mt-1">
+                          {scanProgressStep || "Menganalisis baris tabel formulir..."}
+                        </p>
+                        <p className="text-[11px] text-[var(--ink-subtle)] mt-2">
+                          File: {ocrFileName || "dokumen"}. Proses membutuhkan beberapa detik tergantung jumlah halaman.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* State 3: Interactive Editable Preview Table */}
+                  {!isScanning && ocrStudents.length > 0 && (
+                    <div className="space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl bg-[var(--canvas-subtle)] border border-[var(--border)]">
+                        <div>
+                          <p className="text-xs font-bold text-[var(--ink)] flex items-center gap-1.5">
+                            <span>Hasil Ekstraksi OCR: {ocrStudents.length} Siswa Terdeteksi</span>
+                            {ocrPagesProcessed > 1 && (
+                              <span className="text-[11px] font-normal text-[var(--ink-muted)]">
+                                ({ocrPagesProcessed} Halaman)
+                              </span>
+                            )}
+                          </p>
+                          <p className="text-[11px] text-[var(--ink-muted)]">
+                            Periksa ejaan nama dan NIS sebelum menyimpan ke kelas.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOcrStudents([]);
+                            setOcrFileName(null);
+                          }}
+                          className="touch-target inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-xs font-medium text-[var(--ink-muted)] hover:text-[var(--ink)] transition-colors self-start sm:self-auto shrink-0"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>Pindai Ulang Dokumen</span>
+                        </button>
+                      </div>
+
+                      {/* Editable Table */}
+                      <div className="border border-[var(--border)] rounded-xl max-h-72 overflow-y-auto divide-y divide-[var(--border)] bg-[var(--surface)]">
+                        <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-[var(--canvas-subtle)] text-[11px] font-bold text-[var(--ink-muted)] border-b border-[var(--border)] sticky top-0 z-10">
+                          <div className="col-span-1 text-center">No</div>
+                          <div className="col-span-4 sm:col-span-3">NIS (Opsional)</div>
+                          <div className="col-span-6 sm:col-span-7">Nama Lengkap Siswa</div>
+                          <div className="col-span-1 text-right">Aksi</div>
+                        </div>
+
+                        {ocrStudents.map((st, i) => (
+                          <div
+                            key={i}
+                            className="grid grid-cols-12 gap-2 px-3 py-2 items-center hover:bg-[var(--canvas-subtle)]/50 transition-colors"
+                          >
+                            <div className="col-span-1 text-center text-xs font-mono text-[var(--ink-subtle)]">
+                              {i + 1}.
+                            </div>
+                            <div className="col-span-4 sm:col-span-3">
+                              <input
+                                type="text"
+                                value={st.nis || ""}
+                                onChange={(e) => handleOcrStudentChange(i, "nis", e.target.value)}
+                                placeholder="NIS"
+                                className="w-full px-2 py-1.5 text-xs font-mono rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                              />
+                            </div>
+                            <div className="col-span-6 sm:col-span-7">
+                              <input
+                                type="text"
+                                value={st.name}
+                                onChange={(e) => handleOcrStudentChange(i, "name", e.target.value)}
+                                placeholder="Nama Lengkap Siswa"
+                                className="w-full px-2 py-1.5 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                                required
+                              />
+                            </div>
+                            <div className="col-span-1 flex justify-end">
+                              <button
+                                type="button"
+                                onClick={() => handleOcrRemoveStudent(i)}
+                                className="touch-target p-1 text-[var(--ink-muted)] hover:text-red-600 rounded transition-colors"
+                                title="Hapus Baris Siswa"
+                                aria-label={`Hapus baris siswa ${st.name || i + 1}`}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Table footer action */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+                        <button
+                          type="button"
+                          onClick={handleOcrAddStudent}
+                          className="touch-target inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-[var(--ink)] transition-colors self-start"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Tambah Baris Siswa</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleConfirmOcrImport}
+                          disabled={loading || ocrStudents.filter((s) => s.name.trim().length >= 2).length === 0}
+                          className="touch-target flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] text-sm font-semibold shadow-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] disabled:opacity-50 transition-colors"
+                        >
+                          {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>
+                            Simpan {ocrStudents.filter((s) => s.name.trim().length >= 2).length} Siswa ke Kelas
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {bulkMode === "text" && (
                 <form onSubmit={handleBulkTextAdd} className="space-y-4">
                   <div>
                     <label htmlFor="bulk-student-text" className="block text-xs font-semibold text-[var(--ink-muted)] mb-1">

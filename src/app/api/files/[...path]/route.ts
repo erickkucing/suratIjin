@@ -5,6 +5,36 @@ import { classes, attendanceRecords } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import path from "path";
 import fs from "fs";
+import { Readable } from "node:stream";
+
+function streamFileResponse(
+  request: NextRequest,
+  fullPath: string,
+  contentType: string,
+  cacheControl: string
+): NextResponse {
+  const stat = fs.statSync(fullPath);
+  const etag = `"${stat.size}-${Math.floor(stat.mtimeMs)}"`;
+
+  if (request.headers.get("if-none-match") === etag) {
+    return new NextResponse(null, { status: 304 });
+  }
+
+  const nodeStream = fs.createReadStream(fullPath);
+  const webStream = Readable.toWeb(nodeStream) as ReadableStream;
+
+  return new NextResponse(webStream, {
+    status: 200,
+    headers: {
+      "Content-Type": contentType,
+      "Content-Length": String(stat.size),
+      "ETag": etag,
+      "Cache-Control": cacheControl,
+      "X-Content-Type-Options": "nosniff",
+      "Content-Disposition": `inline; filename="${encodeURIComponent(path.basename(fullPath))}"`,
+    },
+  });
+}
 
 export async function GET(
   request: NextRequest,
@@ -42,13 +72,12 @@ export async function GET(
         ".ico": "image/x-icon",
       };
       const contentType = contentTypes[ext] || "application/octet-stream";
-      const fileBuffer = fs.readFileSync(fullPath);
-      return new NextResponse(fileBuffer, {
-        headers: {
-          "Content-Type": contentType,
-          "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
-        },
-      });
+      return streamFileResponse(
+        request,
+        fullPath,
+        contentType,
+        "public, max-age=86400, stale-while-revalidate=604800"
+      );
     }
 
     // Authorization logic
@@ -134,7 +163,6 @@ export async function GET(
       });
     }
 
-    const fileBuffer = fs.readFileSync(fullPath);
     const ext = path.extname(fullPath).toLowerCase();
 
     let contentType = "application/octet-stream";
@@ -143,14 +171,7 @@ export async function GET(
     else if (ext === ".png") contentType = "image/png";
     else if (ext === ".pdf") contentType = "application/pdf";
 
-    return new NextResponse(fileBuffer, {
-      status: 200,
-      headers: {
-        "Content-Type": contentType,
-        "Cache-Control": "private, max-age=3600",
-        "X-Content-Type-Options": "nosniff",
-      },
-    });
+    return streamFileResponse(request, fullPath, contentType, "private, max-age=3600");
   } catch (err) {
     console.error("Error serving file:", err);
     return new NextResponse("Internal Server Error", { status: 500 });

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
-import { X, Lock, Unlock, Share2, Eye, EyeOff, Copy, Check, MessageSquare, Loader2, RotateCcw, AlertCircle, RefreshCw } from "lucide-react";
+import { Lock, Unlock, Share2, Eye, EyeOff, Copy, Check, MessageSquare, Loader2, RotateCcw, AlertCircle, RefreshCw } from "lucide-react";
 import QRCode from "qrcode";
 import { ClassItem } from "@/db/schema";
 import { updateParentAccessAction, regenerateClassSlugAction } from "@/actions/class-settings";
@@ -319,7 +319,7 @@ export function ParentPortalSettingsModal({
         ref={sheetRef}
         style={sheetStyle}
         {...touchHandlers}
-        className="relative w-full max-w-lg max-h-[84dvh] sm:max-h-[85vh] rounded-t-3xl sm:rounded-2xl rounded-b-none sm:rounded-b-2xl bg-[var(--surface)] text-[var(--ink)] shadow-2xl border-t border-x sm:border border-[var(--border)] overflow-hidden flex flex-col"
+        className="relative w-full max-w-lg min-h-0 modal-bottom-sheet max-h-[68dvh] sm:max-h-[85vh] rounded-t-3xl sm:rounded-2xl rounded-b-none sm:rounded-b-2xl bg-[var(--surface)] text-[var(--ink)] shadow-2xl border-t border-x sm:border border-[var(--border)] overflow-hidden flex flex-col"
       >
         {/* Mobile Tactile Drag Handle */}
         <div data-drag-handle className="sm:hidden flex justify-center pt-3 pb-2 touch-none cursor-grab active:cursor-grabbing bg-[var(--canvas-subtle)]">
@@ -327,7 +327,7 @@ export function ParentPortalSettingsModal({
         </div>
 
         {/* Header */}
-        <div className="flex items-center justify-between px-5 sm:px-6 py-3.5 sm:py-4 border-b border-[var(--border)] bg-[var(--canvas-subtle)] shrink-0">
+        <div data-sheet-header className="flex items-center justify-between px-5 sm:px-6 py-3.5 sm:py-4 border-b border-[var(--border)] bg-[var(--canvas-subtle)] shrink-0 touch-none select-none">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-[var(--primary-light)] text-[var(--primary)] shadow-xs shrink-0">
               <Share2 className="w-5 h-5" />
@@ -355,18 +355,10 @@ export function ParentPortalSettingsModal({
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="touch-target inline-flex items-center justify-center p-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-[var(--ink-muted)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
-            aria-label="Tutup dialog"
-          >
-            <X className="w-5 h-5" />
-          </button>
         </div>
 
         {/* Body */}
-        <div className="p-4 sm:p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:pb-6 space-y-5 overflow-y-auto flex-1">
+        <div className="p-4 sm:p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:pb-6 space-y-5 overflow-y-auto min-h-0 flex-1">
           {message && (
             <div
               className={`p-3 rounded-xl border text-sm font-medium ${
@@ -407,7 +399,7 @@ export function ParentPortalSettingsModal({
                 readOnly
                 value={portalUrl}
                 onClick={(e) => (e.target as HTMLInputElement).select()}
-                className="w-full px-3 py-2 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] font-mono select-all focus:outline-none"
+                className="w-full px-3 py-2 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] font-mono select-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
               />
               <div className="flex items-center gap-2">
                 <button

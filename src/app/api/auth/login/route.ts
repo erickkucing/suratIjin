@@ -6,9 +6,9 @@ import { eq } from "drizzle-orm";
 import { verifyPassword, createSessionToken, SESSION_COOKIE_NAME } from "@/lib/auth";
 import {
   getClientIp,
-  checkRateLimit,
-  recordFailedAttempt,
-  resetRateLimit,
+  checkDualRateLimit,
+  recordDualFailedAttempt,
+  resetDualRateLimit,
 } from "@/lib/rate-limiter";
 
 const loginSchema = z.object({
@@ -58,11 +58,12 @@ export async function POST(request: Request) {
 
     const { username, password } = parse.data;
 
-    // Rate limiting check
+    // Dual-bucket rate limiting: IP bucket + Account bucket (SEC-FINDING-02)
     const clientIp = await getClientIp(request);
-    const rateLimitKey = `login:${clientIp}:${username.toLowerCase().trim()}`;
+    const ipKey = `login:ip:${clientIp}`;
+    const accountKey = `login:account:${username.toLowerCase().trim()}`;
 
-    const limitCheck = checkRateLimit(rateLimitKey);
+    const limitCheck = checkDualRateLimit(ipKey, accountKey);
     if (limitCheck.isBlocked) {
       return NextResponse.json(
         {
@@ -81,7 +82,7 @@ export async function POST(request: Request) {
     });
 
     if (!user || !user.isActive) {
-      const failStatus = recordFailedAttempt(rateLimitKey);
+      const failStatus = recordDualFailedAttempt(ipKey, accountKey);
       return NextResponse.json(
         {
           success: false,
@@ -100,7 +101,7 @@ export async function POST(request: Request) {
 
     const isValid = await verifyPassword(password, user.passwordHash);
     if (!isValid) {
-      const failStatus = recordFailedAttempt(rateLimitKey);
+      const failStatus = recordDualFailedAttempt(ipKey, accountKey);
       return NextResponse.json(
         {
           success: false,
@@ -117,8 +118,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Reset rate limit counter upon successful credentials
-    resetRateLimit(rateLimitKey);
+    // Reset rate limit counters upon successful credentials
+    resetDualRateLimit(ipKey, accountKey);
 
     const token = await createSessionToken({
       id: user.id,

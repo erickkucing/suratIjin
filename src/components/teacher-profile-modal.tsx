@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { X, User, Lock, Eye, EyeOff, Check, Loader2, UserCheck, School, AlertCircle } from "lucide-react";
+import { User, Lock, Eye, EyeOff, Check, Loader2, UserCheck, School, AlertCircle } from "lucide-react";
 import { UserSessionPayload } from "@/lib/auth";
 import { updateSelfProfileAction } from "@/actions/auth";
 import { toTitleCase } from "@/lib/string-utils";
@@ -25,8 +25,10 @@ export function TeacherProfileModal({
   onSuccess,
 }: TeacherProfileModalProps) {
   const [displayName, setDisplayName] = useState(user.displayName);
+  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [message, setMessage] = useState<{ text: string; isError: boolean } | null>(null);
@@ -44,8 +46,10 @@ export function TeacherProfileModal({
   useEffect(() => {
     if (isOpen) {
       setDisplayName(user.displayName);
+      setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
+      setShowCurrentPassword(false);
       setShowPassword(false);
       setShowConfirmPassword(false);
       setMessage(null);
@@ -97,7 +101,7 @@ export function TeacherProfileModal({
   };
 
   const handleSavePassword = async () => {
-    if (!newPassword || newPassword.length < 6 || newPassword !== confirmPassword) return;
+    if (!currentPassword || !newPassword || newPassword.length < 6 || newPassword !== confirmPassword) return;
     setPasswordLoading(true);
     setSaveStatus("saving");
     setMessage(null);
@@ -105,9 +109,11 @@ export function TeacherProfileModal({
     try {
       const res = await updateSelfProfileAction({
         displayName: displayName.trim() || user.displayName,
+        currentPassword: currentPassword.trim(),
         newPassword: newPassword.trim(),
       });
       if (!res.success) throw new Error(res.error || "Gagal memperbarui kata sandi.");
+      setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
       triggerSaveIndicator();
@@ -140,7 +146,7 @@ export function TeacherProfileModal({
         ref={sheetRef}
         style={sheetStyle}
         {...touchHandlers}
-        className="relative w-full max-w-md max-h-[84dvh] sm:max-h-[85vh] rounded-t-3xl sm:rounded-2xl rounded-b-none sm:rounded-b-2xl bg-[var(--surface)] text-[var(--ink)] shadow-2xl border-t border-x sm:border border-[var(--border)] overflow-hidden flex flex-col"
+        className="relative w-full max-w-md min-h-0 modal-bottom-sheet max-h-[68dvh] sm:max-h-[85vh] rounded-t-3xl sm:rounded-2xl rounded-b-none sm:rounded-b-2xl bg-[var(--surface)] text-[var(--ink)] shadow-2xl border-t border-x sm:border border-[var(--border)] overflow-hidden flex flex-col"
       >
         {/* Mobile Tactile Drag Handle */}
         <div data-drag-handle className="sm:hidden flex justify-center pt-3 pb-2 touch-none cursor-grab active:cursor-grabbing bg-[var(--canvas-subtle)]">
@@ -148,7 +154,7 @@ export function TeacherProfileModal({
         </div>
 
         {/* Header with Live Auto-save Indicator */}
-        <div className="flex items-center justify-between px-5 sm:px-6 py-3.5 sm:py-4 border-b border-[var(--border)] bg-[var(--canvas-subtle)] shrink-0">
+        <div data-sheet-header className="flex items-center justify-between px-5 sm:px-6 py-3.5 sm:py-4 border-b border-[var(--border)] bg-[var(--canvas-subtle)] shrink-0 touch-none select-none">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-[var(--primary-light)] text-[var(--primary)] shadow-xs shrink-0">
               <UserCheck className="w-5 h-5" />
@@ -176,19 +182,11 @@ export function TeacherProfileModal({
                 <span className="hidden sm:inline">Tersimpan</span>
               </span>
             )}
-            <button
-              type="button"
-              onClick={onClose}
-              className="touch-target inline-flex items-center justify-center p-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-[var(--ink-muted)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] cursor-pointer"
-              aria-label="Tutup dialog profil"
-            >
-              <X className="w-5 h-5" />
-            </button>
           </div>
         </div>
 
         {/* Body */}
-        <div className="p-4 sm:p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:pb-6 space-y-5 overflow-y-auto flex-1">
+        <div className="p-4 sm:p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:pb-6 space-y-5 overflow-y-auto min-h-0 flex-1">
           {message && (
             <div
               className={`p-3.5 rounded-xl border text-xs font-semibold ${
@@ -267,6 +265,26 @@ export function TeacherProfileModal({
               <div className="space-y-2.5">
                 <div className="relative">
                   <input
+                    id="profile-current-password"
+                    type={showCurrentPassword ? "text" : "password"}
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    placeholder="Kata sandi saat ini"
+                    className="w-full pl-3 pr-10 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                    className="touch-target absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-[var(--ink-muted)] hover:text-[var(--ink)] cursor-pointer rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                    title={showCurrentPassword ? "Sembunyikan password" : "Lihat password"}
+                    aria-label={showCurrentPassword ? "Sembunyikan kata sandi saat ini" : "Tampilkan kata sandi saat ini"}
+                  >
+                    {showCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+
+                <div className="relative">
+                  <input
                     id="profile-password"
                     type={showPassword ? "text" : "password"}
                     value={newPassword}
@@ -278,8 +296,9 @@ export function TeacherProfileModal({
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="touch-target absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-[var(--ink-muted)] hover:text-[var(--ink)] cursor-pointer"
+                    className="touch-target absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-[var(--ink-muted)] hover:text-[var(--ink)] cursor-pointer rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
                     title={showPassword ? "Sembunyikan password" : "Lihat password"}
+                    aria-label={showPassword ? "Sembunyikan kata sandi" : "Tampilkan kata sandi"}
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -300,8 +319,9 @@ export function TeacherProfileModal({
                       <button
                         type="button"
                         onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                        className="touch-target absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-[var(--ink-muted)] hover:text-[var(--ink)] cursor-pointer"
+                        className="touch-target absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-[var(--ink-muted)] hover:text-[var(--ink)] cursor-pointer rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
                         title={showConfirmPassword ? "Sembunyikan password" : "Lihat password"}
+                        aria-label={showConfirmPassword ? "Sembunyikan konfirmasi kata sandi" : "Tampilkan konfirmasi kata sandi"}
                       >
                         {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
@@ -327,6 +347,7 @@ export function TeacherProfileModal({
                         onClick={handleSavePassword}
                         disabled={
                           passwordLoading ||
+                          !currentPassword ||
                           newPassword.length < 6 ||
                           newPassword !== confirmPassword
                         }

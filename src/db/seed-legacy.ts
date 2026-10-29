@@ -1,5 +1,5 @@
 import { db } from "./index";
-import { users, classes, students, attendanceRecords } from "./schema";
+import { users, classes, students, attendanceRecords, systemSettings } from "./schema";
 import { generateRandomClassCode } from "@/lib/string-utils";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
@@ -64,10 +64,11 @@ export async function seedLegacyData() {
   });
   let wildwinaId = existingWildwina?.id;
   if (!existingWildwina) {
+    const wildwinaHash = await bcrypt.hash("namamu123", 10);
     const [res] = await db.insert(users).values({
       username: "wildwina",
       displayName: "Wildwina (Superadmin)",
-      passwordHash: "$2b$12$occUQovg3h5m5t9dFfKej.vWwZvybKfCFgBJKyq/Mix6MooSsb.Yu",
+      passwordHash: wildwinaHash,
       role: "superadmin",
       isActive: true,
     });
@@ -366,6 +367,25 @@ export async function seedLegacyData() {
   }
 
   console.log(`   Seeded ${insertedCount} attendance records.`);
+
+  // 5. System Settings
+  console.log("5. Seeding System Settings...");
+  const existingSettings = await db.query.systemSettings.findFirst({
+    where: eq(systemSettings.id, 1),
+  });
+  if (!existingSettings) {
+    await db.insert(systemSettings).values({
+      id: 1,
+      appName: "Sistem Surat Izin Siswa",
+      themeColor: "terracotta",
+      bgTheme: "warm-zinc",
+      aiEnabled: false,
+    });
+    console.log("   Created default System Settings");
+  } else {
+    console.log("   System Settings already exists");
+  }
+
   console.log("==> Legacy Migration & Seeding Completed Successfully!\n");
 }
 

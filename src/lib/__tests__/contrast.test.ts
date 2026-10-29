@@ -97,6 +97,12 @@ describe("WCAG 2.2 AA Color Contrast Verification (Warm Terracotta & Slate)", ()
       minRatio: 4.5,
     },
     {
+      name: "Light - Warning Badge Text (#8A4D0E on #FEF4E6)",
+      fg: "#8A4D0E",
+      bg: "#FEF4E6",
+      minRatio: 4.5,
+    },
+    {
       name: "Dark - Primary Ink (#F5EFEA) on Espresso Canvas (#181514)",
       fg: "#F5EFEA",
       bg: "#181514",
@@ -148,6 +154,12 @@ describe("WCAG 2.2 AA Color Contrast Verification (Warm Terracotta & Slate)", ()
       name: "Dark - Sukses Indicator Text (#A3D9A5 on #1C301B)",
       fg: "#A3D9A5",
       bg: "#1C301B",
+      minRatio: 4.5,
+    },
+    {
+      name: "Dark - Warning Badge Text (#FBD38D on #382A15)",
+      fg: "#FBD38D",
+      bg: "#382A15",
       minRatio: 4.5,
     },
     {

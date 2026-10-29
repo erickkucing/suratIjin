@@ -1,13 +1,15 @@
 "use server";
 
+import crypto from "crypto";
 import { z } from "zod";
 import { db } from "@/db";
 import { users, classes } from "@/db/schema";
 import { eq, and, ne } from "drizzle-orm";
-import { getCurrentUser, hashPassword } from "@/lib/auth";
+import { getCurrentUser, hashPassword, SESSION_COOKIE_NAME } from "@/lib/auth";
 import { getAutoAcademicPeriod } from "@/lib/academic-year";
 import { generateUniqueClassSlug } from "@/lib/class-slug";
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 
 const createTeacherSchema = z.object({
   username: z.string().min(3, "Username minimal 3 karakter."),
@@ -127,6 +129,11 @@ const createClassSchema = z.object({
       (val) => !val || /^[a-zA-Z0-9_-]{3,50}$/.test(val),
       "Slug hanya huruf, angka, strip, atau garis bawah (minimal 3 karakter)."
     ),
+  parentPin: z
+    .string()
+    .regex(/^\d{4,6}$/, "PIN harus 4-6 angka.")
+    .optional()
+    .or(z.literal("")),
   academicYear: z.string().default(() => getAutoAcademicPeriod().academicYear),
   periodTitle: z.string().default(() => getAutoAcademicPeriod().periodTitle),
   waliKelasId: z.coerce.number().optional().nullable(),
@@ -146,7 +153,7 @@ export async function createClassAction(inputData: unknown) {
     };
   }
 
-  const { name, slug, academicYear, periodTitle, waliKelasId } = parse.data;
+  const { name, slug, parentPin, academicYear, periodTitle, waliKelasId } = parse.data;
 
   // If slug is provided, check uniqueness; otherwise generate unique 3-char random slug
   const finalSlug = slug && slug.trim().length > 0 ? slug.trim() : await generateUniqueClassSlug();
@@ -159,7 +166,12 @@ export async function createClassAction(inputData: unknown) {
     return { success: false, error: "Slug kelas sudah digunakan." };
   }
 
-  const defaultParentPass = await hashPassword("123456");
+  // Generate secure random 6-digit PIN if not explicitly provided (SEC-FINDING-05)
+  const initialPin =
+    parentPin && parentPin.trim().length > 0
+      ? parentPin.trim()
+      : crypto.randomInt(100000, 999999).toString();
+  const defaultParentPass = await hashPassword(initialPin);
 
   await db.insert(classes).values({
     name: name.trim(),
@@ -173,7 +185,11 @@ export async function createClassAction(inputData: unknown) {
   });
 
   revalidatePath("/admin");
-  return { success: true, message: "Kelas baru berhasil dibuat." };
+  return {
+    success: true,
+    message: `Kelas baru berhasil dibuat. PIN portal orang tua: ${initialPin}`,
+    initialPin,
+  };
 }
 
 export async function updateClassAction(
@@ -223,4 +239,49 @@ export async function updateClassAction(
   revalidatePath(`/portal/${existing.slug}`);
   revalidatePath(`/portal/${slug.trim()}`);
   return { success: true, message: "Data kelas berhasil diperbarui." };
+}
+
+const adminSelfPasswordSchema = z
+  .object({
+    newPassword: z.string().min(6, "Password baru minimal 6 karakter."),
+    confirmPassword: z.string().min(6, "Konfirmasi password minimal 6 karakter."),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: "Konfirmasi kata sandi tidak cocok.",
+    path: ["confirmPassword"],
+  });
+
+export async function updateAdminSelfPasswordAction(inputData: unknown) {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "superadmin") {
+    return { success: false, error: "Hanya Superadmin yang berwenang." };
+  }
+
+  const parse = adminSelfPasswordSchema.safeParse(inputData);
+  if (!parse.success) {
+    return {
+      success: false,
+      error: parse.error.issues[0]?.message || "Input tidak valid.",
+    };
+  }
+
+  const { newPassword } = parse.data;
+  const passwordHash = await hashPassword(newPassword.trim());
+
+  await db
+    .update(users)
+    .set({ passwordHash })
+    .where(eq(users.id, user.id));
+
+  const cookieStore = await cookies();
+  cookieStore.delete(SESSION_COOKIE_NAME);
+
+  revalidatePath("/admin");
+  revalidatePath("/login");
+
+  return {
+    success: true,
+    message: "Kata sandi admin berhasil diperbarui. Silakan login kembali.",
+    redirectUrl: "/login",
+  };
 }

@@ -6,9 +6,9 @@ import { eq } from "drizzle-orm";
 import { verifyPassword, createParentToken, PARENT_COOKIE_PREFIX } from "@/lib/auth";
 import {
   getClientIp,
-  checkRateLimit,
-  recordFailedAttempt,
-  resetRateLimit,
+  checkDualRateLimit,
+  recordDualFailedAttempt,
+  resetDualRateLimit,
 } from "@/lib/rate-limiter";
 
 const unlockSchema = z.object({
@@ -34,11 +34,12 @@ export async function POST(request: Request) {
 
     const { classSlug, password } = parse.data;
 
-    // Rate limiting check
+    // Dual-bucket rate limiting: IP bucket + Class bucket (SEC-FINDING-02)
     const clientIp = await getClientIp(request);
-    const rateLimitKey = `unlock:${clientIp}:${classSlug.toLowerCase().trim()}`;
+    const ipKey = `unlock:ip:${clientIp}`;
+    const classKey = `unlock:class:${classSlug.toLowerCase().trim()}`;
 
-    const limitCheck = checkRateLimit(rateLimitKey);
+    const limitCheck = checkDualRateLimit(ipKey, classKey);
     if (limitCheck.isBlocked) {
       return NextResponse.json(
         {
@@ -69,7 +70,7 @@ export async function POST(request: Request) {
 
     const isValid = await verifyPassword(password, cls.parentPasswordHash);
     if (!isValid) {
-      const failStatus = recordFailedAttempt(rateLimitKey);
+      const failStatus = recordDualFailedAttempt(ipKey, classKey);
       return NextResponse.json(
         {
           success: false,
@@ -86,8 +87,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Reset rate limit counter upon successful password
-    resetRateLimit(rateLimitKey);
+    // Reset rate limit counters upon successful password
+    resetDualRateLimit(ipKey, classKey);
 
     const token = await createParentToken({
       classSlug: cls.slug,

@@ -10,6 +10,7 @@ import path from "path";
 import fs from "fs";
 
 import { generateDateRange } from "@/lib/date-utils";
+import { isValidLetterFilePath } from "@/lib/attendance-security";
 
 /**
  * Helper to safely delete an unused letter file from disk
@@ -113,53 +114,69 @@ export async function createAttendanceAction(inputData: unknown) {
     finalLetterStatus = "Belum";
   }
 
+  // Validate letter file path scope and traversal prevention (SEC-FINDING-01)
+  if (finalFilePath && !isValidLetterFilePath(finalFilePath, classId)) {
+    return {
+      success: false,
+      error: "Akses berkas surat tidak valid untuk kelas ini.",
+    };
+  }
+
   const datesToInsert = generateDateRange(startDate, endDate || undefined);
 
+  const oldFilesToDelete: string[] = [];
   let insertedCount = 0;
-  for (const dateStr of datesToInsert) {
-    // Check if record already exists for this student on this date
-    const existing = await db.query.attendanceRecords.findFirst({
-      where: and(
-        eq(attendanceRecords.classId, classId),
-        eq(attendanceRecords.studentId, studentId),
-        eq(attendanceRecords.attendanceDate, dateStr)
-      ),
-    });
 
-    if (existing) {
-      const oldPath = existing.letterFilePath;
-      // Update existing record
-      await db
-        .update(attendanceRecords)
-        .set({
+  await db.transaction(async (tx) => {
+    for (const dateStr of datesToInsert) {
+      // Check if record already exists for this student on this date
+      const existing = await tx.query.attendanceRecords.findFirst({
+        where: and(
+          eq(attendanceRecords.classId, classId),
+          eq(attendanceRecords.studentId, studentId),
+          eq(attendanceRecords.attendanceDate, dateStr)
+        ),
+      });
+
+      if (existing) {
+        const oldPath = existing.letterFilePath;
+        await tx
+          .update(attendanceRecords)
+          .set({
+            status: finalStatus,
+            infoSource,
+            description,
+            letterFilePath: finalFilePath,
+            letterMimeType: finalMimeType,
+            letterStatus: finalLetterStatus,
+            updatedAt: new Date(),
+          })
+          .where(eq(attendanceRecords.id, existing.id));
+
+        if (oldPath && oldPath !== finalFilePath) {
+          oldFilesToDelete.push(oldPath);
+        }
+      } else {
+        await tx.insert(attendanceRecords).values({
+          classId,
+          studentId,
+          attendanceDate: dateStr,
           status: finalStatus,
           infoSource,
           description,
           letterFilePath: finalFilePath,
           letterMimeType: finalMimeType,
           letterStatus: finalLetterStatus,
-          updatedAt: new Date(),
-        })
-        .where(eq(attendanceRecords.id, existing.id));
-
-      if (oldPath && oldPath !== finalFilePath) {
-        await safeDeleteUnusedLetter(oldPath);
+          createdById: user.id,
+        });
       }
-    } else {
-      await db.insert(attendanceRecords).values({
-        classId,
-        studentId,
-        attendanceDate: dateStr,
-        status: finalStatus,
-        infoSource,
-        description,
-        letterFilePath: finalFilePath,
-        letterMimeType: finalMimeType,
-        letterStatus: finalLetterStatus,
-        createdById: user.id,
-      });
+      insertedCount++;
     }
-    insertedCount++;
+  });
+
+  // Safe file cleanups after commit to avoid deleting files on transaction rollback
+  for (const oldPath of oldFilesToDelete) {
+    await safeDeleteUnusedLetter(oldPath);
   }
 
   revalidatePath("/dashboard");
@@ -265,6 +282,17 @@ export async function updateAttendanceAction(inputData: unknown) {
     finalMimeType = null;
   } else if (!finalFilePath) {
     finalLetterStatus = "Belum";
+  }
+
+  // Validate letter file path scope and traversal prevention (SEC-FINDING-01)
+  if (
+    finalFilePath &&
+    !isValidLetterFilePath(finalFilePath, targetClass.id, record.letterFilePath)
+  ) {
+    return {
+      success: false,
+      error: "Akses berkas surat tidak valid untuk kelas ini.",
+    };
   }
 
   const oldFilePath = record.letterFilePath;

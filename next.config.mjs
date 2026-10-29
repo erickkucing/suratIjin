@@ -8,6 +8,15 @@ const customOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(",").map((s) => s.trim())
   : [];
 
+if (process.env.NEXT_PUBLIC_APP_URL) {
+  try {
+    const parsed = new URL(process.env.NEXT_PUBLIC_APP_URL);
+    if (parsed.host && !customOrigins.includes(parsed.host)) {
+      customOrigins.push(parsed.host);
+    }
+  } catch {}
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   outputFileTracingRoot: __dirname,

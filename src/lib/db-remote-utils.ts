@@ -52,14 +52,14 @@ export function parseDbUrl(uri: string): RemoteDbConfig {
  */
 export function buildDbUrl(config: RemoteDbConfig): string {
   if (config.connectionUri && (!config.host || !config.database)) {
-    return config.connectionUri;
+    return config.connectionUri.replace(/[\r\n\0]/g, "").trim();
   }
 
-  const host = config.host || "127.0.0.1";
+  const host = (config.host || "127.0.0.1").replace(/[\r\n\0]/g, "").trim();
   const port = config.port || 3306;
   const user = encodeURIComponent(config.user || "");
   const password = encodeURIComponent(config.password || "");
-  const database = config.database || "";
+  const database = (config.database || "").replace(/[\r\n\0]/g, "").trim();
   const auth = user ? `${user}:${password}@` : "";
   const sslQuery = config.ssl ? "?ssl=true" : "";
 

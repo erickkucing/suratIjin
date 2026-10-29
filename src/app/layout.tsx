@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Nunito, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { getSystemSettings } from "@/lib/system-settings";
+import { ConfirmDialogProvider } from "@/components/confirm-dialog-provider";
 
 const nunito = Nunito({
   subsets: ["latin"],
@@ -55,6 +56,7 @@ export default async function RootLayout({
     <html
       lang="id"
       data-theme={settings.themeColor}
+      data-bg-theme={settings.bgTheme || "warm-zinc"}
       className={`${nunito.variable} ${plusJakartaSans.variable}`}
       suppressHydrationWarning
     >
@@ -67,15 +69,15 @@ export default async function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               html, body {
-                font-family: var(--font-jakarta), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                background-color: #FBF7F2;
-                color: #231F1E;
+                font-family: var(--font-jakarta, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+                background-color: var(--canvas, #f5efeb);
+                color: var(--ink, #231f1e);
                 overflow-x: hidden;
                 max-width: 100%;
               }
               html.dark, html.dark body {
-                background-color: #181514;
-                color: #F5EFEA;
+                background-color: var(--canvas, #171413);
+                color: var(--ink, #f5efea);
               }
             `,
           }}
@@ -90,12 +92,15 @@ export default async function RootLayout({
                 } else {
                   document.documentElement.classList.remove('dark');
                 }
+                localStorage.removeItem('app_bg_theme');
               } catch (_) {}
             `,
           }}
         />
       </head>
-      <body>{children}</body>
+      <body>
+        <ConfirmDialogProvider>{children}</ConfirmDialogProvider>
+      </body>
     </html>
   );
 }

@@ -9,7 +9,8 @@ import { revalidatePath } from "next/cache";
 import path from "path";
 import fs from "fs";
 import sharp from "sharp";
-import { ThemeColor } from "@/lib/system-settings";
+import { ThemeColor, BgTheme, invalidateSystemSettingsCache } from "@/lib/system-settings";
+import { testAiRouterConnection, AiRouterConfig } from "@/lib/ai-router";
 
 const validThemes: [ThemeColor, ...ThemeColor[]] = [
   "terracotta",
@@ -19,8 +20,42 @@ const validThemes: [ThemeColor, ...ThemeColor[]] = [
   "burgundy",
 ];
 
+const validBgThemes: [BgTheme, ...BgTheme[]] = [
+  "warm-zinc",
+  "clean-slate",
+  "subtle-cream",
+  "deep-charcoal",
+  "nordic-cool",
+];
+
+function revalidateSettings() {
+  invalidateSystemSettingsCache();
+  try {
+    revalidatePath("/", "layout");
+  } catch {
+    // In unit test or offline environment, revalidatePath may not have a request store
+  }
+}
+
 const updateThemeSchema = z.object({
   themeColor: z.enum(validThemes),
+});
+
+const updateBgThemeSchema = z.object({
+  bgTheme: z.enum(validBgThemes),
+});
+
+const updateSystemIdentitySchema = z.object({
+  appName: z
+    .string()
+    .trim()
+    .min(2, "Nama aplikasi minimal 2 karakter.")
+    .max(120, "Nama aplikasi maksimal 120 karakter."),
+  footerText: z
+    .string()
+    .trim()
+    .max(255, "Teks footer maksimal 255 karakter.")
+    .optional(),
 });
 
 const updateAppNameSchema = z.object({
@@ -30,6 +65,75 @@ const updateAppNameSchema = z.object({
     .min(2, "Nama aplikasi minimal 2 karakter.")
     .max(120, "Nama aplikasi maksimal 120 karakter."),
 });
+
+export async function updateSystemIdentityAction(input: {
+  appName: string;
+  footerText?: string;
+}) {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "superadmin") {
+    return { success: false, error: "Hanya Superadmin yang berwenang mengubah identitas sistem." };
+  }
+
+  const parse = updateSystemIdentitySchema.safeParse(input);
+  if (!parse.success) {
+    return {
+      success: false,
+      error: parse.error.issues[0]?.message || "Data identitas sistem tidak valid.",
+    };
+  }
+
+  const appName = parse.data.appName;
+  const footerText = parse.data.footerText?.trim() || "Sistem Surat Izin & Ketidakhadiran Siswa.";
+
+  await db
+    .insert(systemSettings)
+    .values({
+      id: 1,
+      appName,
+      footerText,
+      updatedById: user.id,
+    })
+    .onDuplicateKeyUpdate({
+      set: {
+        appName,
+        footerText,
+        updatedById: user.id,
+      },
+    });
+
+  revalidateSettings();
+  return { success: true, appName, footerText };
+}
+
+export async function updateFooterTextAction(footerText: string) {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "superadmin") {
+    return { success: false, error: "Hanya Superadmin yang berwenang mengubah teks footer." };
+  }
+
+  const sanitized = footerText.trim() || "Sistem Surat Izin & Ketidakhadiran Siswa.";
+  if (sanitized.length > 255) {
+    return { success: false, error: "Teks footer maksimal 255 karakter." };
+  }
+
+  await db
+    .insert(systemSettings)
+    .values({
+      id: 1,
+      footerText: sanitized,
+      updatedById: user.id,
+    })
+    .onDuplicateKeyUpdate({
+      set: {
+        footerText: sanitized,
+        updatedById: user.id,
+      },
+    });
+
+  revalidateSettings();
+  return { success: true, footerText: sanitized };
+}
 
 export async function updateAppNameAction(appName: string) {
   const user = await getCurrentUser();
@@ -59,7 +163,7 @@ export async function updateAppNameAction(appName: string) {
       },
     });
 
-  revalidatePath("/", "layout");
+  revalidateSettings();
   return { success: true, appName: parse.data.appName };
 }
 
@@ -88,7 +192,36 @@ export async function updateThemeAction(themeColor: string) {
       },
     });
 
-  revalidatePath("/", "layout");
+  revalidateSettings();
+  return { success: true };
+}
+
+export async function updateBgThemeAction(bgTheme: string) {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "superadmin") {
+    return { success: false, error: "Hanya Superadmin yang berwenang mengubah tema latar belakang." };
+  }
+
+  const parse = updateBgThemeSchema.safeParse({ bgTheme });
+  if (!parse.success) {
+    return { success: false, error: "Pilihan tema latar belakang tidak valid." };
+  }
+
+  await db
+    .insert(systemSettings)
+    .values({
+      id: 1,
+      bgTheme: parse.data.bgTheme,
+      updatedById: user.id,
+    })
+    .onDuplicateKeyUpdate({
+      set: {
+        bgTheme: parse.data.bgTheme,
+        updatedById: user.id,
+      },
+    });
+
+  revalidateSettings();
   return { success: true };
 }
 
@@ -146,7 +279,7 @@ export async function uploadLogoAction(formData: FormData) {
       },
     });
 
-  revalidatePath("/", "layout");
+  revalidateSettings();
   return { success: true, logoUrl: relativeUrl };
 }
 
@@ -170,6 +303,80 @@ export async function removeLogoAction() {
       },
     });
 
-  revalidatePath("/", "layout");
+  revalidateSettings();
   return { success: true };
+}
+
+const updateAiSettingsSchema = z.object({
+  aiEnabled: z.boolean(),
+  aiRouterUrl: z.string().trim().url("Format URL endpoint 9router tidak valid."),
+  aiRouterApiKey: z.string().trim().nullable().optional(),
+  aiRouterModel: z.string().trim().min(1, "Nama model tidak boleh kosong."),
+});
+
+export async function updateAiSettingsAction(data: {
+  aiEnabled: boolean;
+  aiRouterUrl: string;
+  aiRouterApiKey?: string | null;
+  aiRouterModel: string;
+}) {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "superadmin") {
+    return { success: false, error: "Hanya Superadmin yang berwenang mengubah konfigurasi AI." };
+  }
+
+  const parse = updateAiSettingsSchema.safeParse(data);
+  if (!parse.success) {
+    return {
+      success: false,
+      error: parse.error.issues[0]?.message || "Konfigurasi AI tidak valid.",
+    };
+  }
+
+  const cleanUrl = parse.data.aiRouterUrl.replace(/\/+$/, "");
+  const cleanKey = parse.data.aiRouterApiKey ? parse.data.aiRouterApiKey.trim() : null;
+
+  await db
+    .insert(systemSettings)
+    .values({
+      id: 1,
+      aiEnabled: parse.data.aiEnabled,
+      aiRouterUrl: cleanUrl,
+      aiRouterApiKey: cleanKey,
+      aiRouterModel: parse.data.aiRouterModel,
+      updatedById: user.id,
+    })
+    .onDuplicateKeyUpdate({
+      set: {
+        aiEnabled: parse.data.aiEnabled,
+        aiRouterUrl: cleanUrl,
+        aiRouterApiKey: cleanKey,
+        aiRouterModel: parse.data.aiRouterModel,
+        updatedById: user.id,
+      },
+    });
+
+  revalidateSettings();
+  return {
+    success: true,
+    settings: {
+      aiEnabled: parse.data.aiEnabled,
+      aiRouterUrl: cleanUrl,
+      aiRouterApiKey: cleanKey,
+      aiRouterModel: parse.data.aiRouterModel,
+    },
+  };
+}
+
+export async function testAiConnectionAction(customConfig?: Partial<AiRouterConfig>) {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "superadmin") {
+    return { success: false, error: "Hanya Superadmin yang berwenang menguji koneksi AI." };
+  }
+
+  const result = await testAiRouterConnection(customConfig);
+  return {
+    success: true,
+    result,
+  };
 }
