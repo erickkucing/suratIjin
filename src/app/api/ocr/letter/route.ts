@@ -138,9 +138,15 @@ export async function POST(request: NextRequest) {
         processingTimeSeconds?: number;
         device?: string;
         deviceName?: string;
+        gpuFallbackError?: string;
       }>(ocrCacheKey);
 
-      if (cachedResult && cachedResult.detected) {
+      const isStaleFallback =
+        cachedResult?.device === "cpu" ||
+        Boolean(cachedResult?.gpuFallbackError) ||
+        (typeof cachedResult?.deviceName === "string" && cachedResult.deviceName.toLowerCase().includes("cpu"));
+
+      if (cachedResult && cachedResult.detected && !isStaleFallback) {
         return NextResponse.json({
           success: true,
           detected: cachedResult.detected,
@@ -304,6 +310,11 @@ export async function POST(request: NextRequest) {
 
     // Cache the successfully analyzed and sanitized OCR result (TTL 24 hours = 86400s)
     try {
+      const isCpuFallback =
+        data?.device === "cpu" ||
+        Boolean(data?.gpu_fallback_error) ||
+        (typeof data?.device_name === "string" && data.device_name.toLowerCase().includes("cpu"));
+      const ttl = isCpuFallback ? 30 : 86400;
       await setCache(
         ocrCacheKey,
         {
@@ -311,8 +322,9 @@ export async function POST(request: NextRequest) {
           processingTimeSeconds: data?.processing_time_seconds ?? 0,
           device: data?.device,
           deviceName: data?.device_name,
+          gpuFallbackError: data?.gpu_fallback_error,
         },
-        86400
+        ttl
       );
     } catch (cacheErr) {
       console.warn("[Letter OCR] Redis setCache failed:", cacheErr);

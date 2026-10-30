@@ -204,9 +204,16 @@ export async function POST(request: NextRequest) {
         processingTimeSeconds?: number;
         device?: string;
         deviceName?: string;
+        gpuFallbackError?: string;
       }>(ocrCacheKey);
 
-      if (cachedResult && Array.isArray(cachedResult.students)) {
+      // If cached result was recorded during CPU fallback, ignore it so live GPU can process it
+      const isStaleFallback =
+        cachedResult?.device === "cpu" ||
+        Boolean(cachedResult?.gpuFallbackError) ||
+        (typeof cachedResult?.deviceName === "string" && cachedResult.deviceName.toLowerCase().includes("cpu"));
+
+      if (cachedResult && Array.isArray(cachedResult.students) && !isStaleFallback) {
         return NextResponse.json({
           success: true,
           pagesProcessed: cachedResult.pagesProcessed || 1,
@@ -327,9 +334,14 @@ export async function POST(request: NextRequest) {
       gpuFallbackError: data.gpu_fallback_error,
     };
 
-    // Save to Redis cache for 24 hours (86400 seconds)
+    // Save to Redis cache: Cache healthy GPU/normal results for 24h, but short-lived (30s) for temporary fallbacks
     try {
-      await setCache(ocrCacheKey, responsePayload, 86400);
+      const isCpuFallback =
+        data.device === "cpu" ||
+        Boolean(data.gpu_fallback_error) ||
+        (typeof data.device_name === "string" && data.device_name.toLowerCase().includes("cpu"));
+      const ttl = isCpuFallback ? 30 : 86400;
+      await setCache(ocrCacheKey, responsePayload, ttl);
     } catch (cacheSetErr) {
       console.warn("[Roster OCR] Failed to set Redis cache:", cacheSetErr);
     }
