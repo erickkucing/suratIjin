@@ -381,17 +381,20 @@ Aturan Ketat:
 
   const messages: any[] = [{ role: "system", content: systemPrompt }];
 
-  if (imageBase64) {
-    const promptText = rawLines.length > 0
-      ? `Berikut teks hasil OCR sebagai referensi pembacaan karakter:\n${rawLines.join("\n")}\n\nSilakan ekstrak seluruh nama siswa dan NIS dari baris tabel dokumen di bawah ini:`
-      : `Silakan ekstrak seluruh nama siswa dan NIS dari baris tabel dokumen di bawah ini:`;
-
+  const hasSubstantialText = rawLines.length >= 3;
+  if (hasSubstantialText || !imageBase64) {
+    messages.push({
+      role: "user",
+      content: `Berikut adalah baris-baris teks tabel hasil pemindaian OCR:\n\n${rawLines.join("\n")}\n\nSilakan ekstrak seluruh nama siswa dan NIS dari baris tabel di atas sesuai instruksi.`,
+    });
+  } else {
+    // Fallback to multimodal vision only when OCR extracted text is scarce or empty
     messages.push({
       role: "user",
       content: [
         {
           type: "text",
-          text: promptText,
+          text: `Teks OCR minim atau kosong. Silakan baca langsung baris-baris nama siswa dan NIS dari foto/dokumen tabel terlampir sesuai instruksi:`,
         },
         {
           type: "image_url",
@@ -401,15 +404,11 @@ Aturan Ketat:
         },
       ],
     });
-  } else {
-    messages.push({
-      role: "user",
-      content: `Berikut adalah baris-baris teks tabel hasil pemindaian OCR:\n\n${rawLines.join("\n")}`,
-    });
   }
 
+  const timeoutMs = hasSubstantialText || !imageBase64 ? 12000 : 35000;
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 25000);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const res = await fetch(endpoint, {
@@ -456,7 +455,14 @@ Aturan Ketat:
 
     return students.length > 0 ? students : null;
   } catch (err: unknown) {
-    console.warn("[9router AI] Error during roster parse:", err instanceof Error ? err.message : err);
+    const isAbort =
+      err instanceof Error &&
+      (err.name === "AbortError" || err.message.toLowerCase().includes("abort"));
+    if (isAbort) {
+      console.warn(`[9router AI] Roster parse timed out after ${timeoutMs}ms (aborted).`);
+    } else {
+      console.warn("[9router AI] Error during roster parse:", err instanceof Error ? err.message : err);
+    }
     return null;
   } finally {
     clearTimeout(timeoutId);

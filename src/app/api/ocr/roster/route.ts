@@ -298,7 +298,8 @@ export async function POST(request: NextRequest) {
     const aiConfig = await getAiRouterConfig();
     if (aiConfig.enabled) {
       const tAiStart = Date.now();
-      console.log(`[Roster OCR] 9router AI refinement is ENABLED. Querying external AI model (${aiConfig.model})...`);
+      const needsAiVision = students.length === 0;
+      console.log(`[Roster OCR] 9router AI refinement is ENABLED (${aiConfig.model}). Mode: ${needsAiVision ? "vision-fallback (0 students from OCR)" : "text-refinement (lightweight)"}...`);
       try {
         const rawLines: string[] = [];
         if (data.raw_text) {
@@ -306,10 +307,13 @@ export async function POST(request: NextRequest) {
         } else if (students.length > 0) {
           rawLines.push(...students.map((s: { name: string; nis?: string }) => `${s.name} ${s.nis || ""}`));
         }
+
+        // Only send heavy imageBase64 if PaddleOCR couldn't extract any students (vision fallback)
+        // When PaddleOCR already found students or text, pass rawLines only for super fast (<1.5s) inference
         const aiStudents = await parseRosterWithAi({
           rawLines,
-          imageBase64: buffer.toString("base64"),
-          mimeType: file.type || "application/octet-stream",
+          imageBase64: needsAiVision ? buffer.toString("base64") : undefined,
+          mimeType: needsAiVision ? (file.type || "application/octet-stream") : undefined,
         });
 
         if (aiStudents && aiStudents.length > 0) {
