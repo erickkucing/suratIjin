@@ -34,6 +34,8 @@ import {
   HardDrive,
   Cpu,
   Settings,
+  Copy,
+  Globe,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { logoutAction } from "@/actions/auth";
@@ -193,6 +195,7 @@ export function AdminClient({
   const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
   const [revertLoading, setRevertLoading] = useState(false);
   const [isRevertModalOpen, setIsRevertModalOpen] = useState(false);
+  const [copiedUri, setCopiedUri] = useState(false);
 
   // Create Teacher Modal
   const [isTeacherModalOpen, setIsTeacherModalOpen] = useState(false);
@@ -788,6 +791,32 @@ export function AdminClient({
       });
     } finally {
       setRevertLoading(false);
+    }
+  };
+
+  const handleCopyUri = async () => {
+    if (!activeDbInfo?.currentUri) return;
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard) {
+        await navigator.clipboard.writeText(activeDbInfo.currentUri);
+        setCopiedUri(true);
+        setTimeout(() => setCopiedUri(false), 2000);
+      } else {
+        throw new Error("Clipboard unavailable");
+      }
+    } catch {
+      try {
+        const textArea = document.createElement("textarea");
+        textArea.value = activeDbInfo.currentUri;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textArea);
+        setCopiedUri(true);
+        setTimeout(() => setCopiedUri(false), 2000);
+      } catch {
+        // Fallback failed silently
+      }
     }
   };
 
@@ -2377,33 +2406,61 @@ export function AdminClient({
                     </div>
                   </div>
 
-                  <div className="p-3 rounded-xl bg-[var(--surface)] border border-[var(--border)] flex items-center justify-between gap-3">
-                    <div className="overflow-hidden">
-                      <span className="text-[11px] font-semibold text-[var(--ink-muted)] block mb-0.5">
-                        Connection URI Aktif (Password Terenkripsi/Disensor):
-                      </span>
-                      <span className="text-xs font-mono text-[var(--ink)] block truncate">
-                        {activeDbInfo.currentUri}
-                      </span>
+                  <div className="p-4 rounded-xl bg-[var(--surface)] border border-[var(--border)] space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-semibold text-[var(--ink-muted)]">
+                          Connection URI Aktif
+                        </span>
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[var(--canvas-subtle)] text-[var(--ink-muted)] border border-[var(--border)]">
+                          Disensor
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleCopyUri}
+                        className="touch-target inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg border border-[var(--border)] bg-[var(--canvas-subtle)] hover:bg-[var(--border)] text-[var(--ink)] cursor-pointer transition-colors"
+                        title="Salin Connection URI ke Clipboard"
+                      >
+                        {copiedUri ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                            <span className="text-emerald-700 dark:text-emerald-300 font-bold">Tersalin!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5 text-[var(--ink-muted)]" />
+                            <span>Salin URI</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                    <div className="font-mono text-xs text-[var(--ink)] bg-[var(--canvas-subtle)] p-2.5 rounded-lg border border-[var(--border)] break-all select-all">
+                      {activeDbInfo.currentUri}
                     </div>
                   </div>
 
                   {!activeDbInfo.isLocal && (
-                    <div className="p-4 rounded-xl border border-purple-200 bg-purple-50 dark:bg-purple-950/30 dark:border-purple-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div>
-                        <p className="text-xs font-bold text-purple-900 dark:text-purple-300">
-                          Aplikasi saat ini aktif menggunakan Database Remote
-                        </p>
-                        <p className="text-[11px] text-purple-700 dark:text-purple-400 mt-0.5">
-                          Jika sewaktu-waktu database remote mengalami gangguan, Anda dapat beralih kembali ke database lokal dengan satu klik.
-                        </p>
+                    <div className="p-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="flex items-start gap-3">
+                        <div className="p-2 rounded-xl bg-[var(--accent-slate-light)] text-[var(--accent-slate)] shrink-0 mt-0.5">
+                          <Globe className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-[var(--ink)]">
+                            Koneksi Database Remote Aktif
+                          </p>
+                          <p className="text-[11px] text-[var(--ink-muted)] mt-0.5">
+                            Sistem terhubung ke database eksternal. Anda dapat beralih kembali ke basis data lokal kapan saja.
+                          </p>
+                        </div>
                       </div>
                       <button
                         type="button"
                         onClick={() => setIsRevertModalOpen(true)}
-                        className="touch-target inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-purple-300 dark:border-purple-800 bg-white dark:bg-purple-900/60 hover:bg-purple-50 dark:hover:bg-purple-900 text-purple-900 dark:text-purple-200 text-xs font-bold shadow-xs cursor-pointer transition-colors whitespace-nowrap shrink-0"
+                        className="touch-target inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-[var(--border-strong)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-[var(--ink)] text-xs font-bold shadow-xs cursor-pointer transition-colors whitespace-nowrap shrink-0"
                       >
-                        <ArrowRightLeft className="w-4 h-4" />
+                        <ArrowRightLeft className="w-4 h-4 text-[var(--accent-slate)]" />
                         <span>Kembalikan ke Database Lokal</span>
                       </button>
                     </div>
@@ -3534,7 +3591,7 @@ export function AdminClient({
           <div className="card-paper p-6 rounded-2xl w-full max-w-lg space-y-4">
             <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
               <h3 id="revert-db-modal-title" className="text-base font-bold font-heading text-[var(--ink)] flex items-center gap-2">
-                <HardDrive className="w-5 h-5 text-purple-600" />
+                <HardDrive className="w-5 h-5 text-[var(--primary)]" />
                 <span>Kembalikan ke Database Lokal</span>
               </h3>
               <button

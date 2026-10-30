@@ -745,6 +745,78 @@ describe("AdminClient Empirical Verification (R1 - R6)", () => {
         expect(document.documentElement.getAttribute("data-bg-theme")).toBe(preset.id);
       });
     });
+
+    it("renders anti-slop remote database components and supports copying Connection URI", async () => {
+      const mockDbInfo = {
+        success: true,
+        data: {
+          isConnected: true,
+          isLocal: false,
+          host: "192.168.47.20",
+          port: 3306,
+          database: "suratizin-prod",
+          user: "erick",
+          currentUri: "mysql://erick:****@192.168.47.20:3306/suratizin-prod",
+        },
+      };
+
+      const { getCurrentDatabaseInfoAction } = await import("@/actions/database-admin");
+      vi.mocked(getCurrentDatabaseInfoAction).mockResolvedValue(mockDbInfo as any);
+
+      const writeTextMock = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, "clipboard", {
+        value: {
+          writeText: writeTextMock,
+        },
+        configurable: true,
+        writable: true,
+      });
+
+      render(
+        <AdminClient
+          initialClasses={dummyClasses}
+          initialTeachers={dummyTeachers}
+          initialSettings={dummySettings}
+          superadminName="Administrator"
+        />
+      );
+
+      const techTab = screen.getAllByRole("button", { name: /Pengaturan Teknis/i })[0];
+      act(() => {
+        fireEvent.click(techTab);
+      });
+
+      const dbSubTab = screen.getByRole("tab", { name: /Manajemen Basis Data/i });
+      await act(async () => {
+        fireEvent.click(dbSubTab);
+      });
+
+      expect(screen.getByText("Connection URI Aktif")).toBeDefined();
+      expect(screen.getByText("Disensor")).toBeDefined();
+      expect(screen.getByText("mysql://erick:****@192.168.47.20:3306/suratizin-prod")).toBeDefined();
+
+      const copyBtn = screen.getByRole("button", { name: /Salin URI/i });
+      expect(copyBtn).toBeDefined();
+
+      await act(async () => {
+        fireEvent.click(copyBtn);
+      });
+
+      expect(writeTextMock).toHaveBeenCalledWith("mysql://erick:****@192.168.47.20:3306/suratizin-prod");
+      expect(screen.getByText("Tersalin!")).toBeDefined();
+
+      expect(screen.getByText("Koneksi Database Remote Aktif")).toBeDefined();
+      expect(
+        screen.getByText("Sistem terhubung ke database eksternal. Anda dapat beralih kembali ke basis data lokal kapan saja.")
+      ).toBeDefined();
+
+      const revertBtn = screen.getByRole("button", { name: /Kembalikan ke Database Lokal/i });
+      expect(revertBtn).toBeDefined();
+
+      const banner = revertBtn.closest("div[class*='rounded-xl']");
+      expect(banner?.className).not.toContain("purple");
+      expect(revertBtn.className).not.toContain("purple");
+    });
   });
 });
 
