@@ -119,14 +119,31 @@ else
     log_success "Seluruh paket sistem operasi yang dibutuhkan telah tersedia."
 fi
 
-# 4. Tooling Verification (Node.js & npm)
-if ! command -v node >/dev/null 2>&1; then
-    log_error "Node.js tidak terpasang di sistem! Harap pasang Node.js v20+ terlebih dahulu."
-    exit 1
+# 4. Tooling Verification & Automated Node.js v20+ Installation
+if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+    log_info "Node.js atau npm tidak ditemukan. Memasang Node.js v20 LTS otomatis..."
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -qq || true
+    apt-get install -y --no-install-recommends ca-certificates curl gnupg
+    mkdir -p /etc/apt/keyrings
+    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg --yes
+    echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" > /etc/apt/sources.list.d/nodesource.list
+    apt-get update -qq
+    apt-get install -y nodejs
+    log_success "Node.js v20 LTS dan npm berhasil dipasang otomatis."
 fi
-if ! command -v npm >/dev/null 2>&1; then
-    log_error "npm tidak terpasang di sistem! Harap pasang npm terlebih dahulu."
-    exit 1
+
+# Verify minimum version (v20+)
+NODE_MAJOR=$(node -v | tr -d 'v' | cut -d. -f1)
+if [ "$NODE_MAJOR" -lt 20 ]; then
+    log_info "Versi Node.js saat ini ($NODE_MAJOR) di bawah v20. Memperbarui ke Node.js v20 LTS..."
+    export DEBIAN_FRONTEND=noninteractive
+    mkdir -p /etc/apt/keyrings
+    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg --yes
+    echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" > /etc/apt/sources.list.d/nodesource.list
+    apt-get update -qq
+    apt-get install -y nodejs
+    log_success "Node.js berhasil diperbarui ke v20 LTS."
 fi
 
 NODE_VERSION=$(node -v)
