@@ -63,7 +63,7 @@ class TestDeviceDetectionAndFallback(unittest.TestCase):
         self.assertEqual(main._active_device, "gpu")
         self.assertEqual(main._device_name, "NVIDIA GeForce RTX 4090")
         mock_set_dev.assert_called_with("gpu")
-        mock_ocr_cls.assert_called_with(use_angle_cls=False, lang="en", show_log=False, use_gpu=True, rec_batch_num=32, ir_optim=False)
+        mock_ocr_cls.assert_called_with(use_angle_cls=False, lang="en", show_log=False, use_gpu=True, rec_batch_num=8, max_text_length=40, ir_optim=False)
 
     @patch("main.PaddleOCR")
     @patch("main.paddle.set_device")

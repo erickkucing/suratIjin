@@ -51,7 +51,8 @@ except Exception:
 os.environ.setdefault("FLAGS_enable_pir_api", "0")
 os.environ.setdefault("FLAGS_cudnn_exhaustive_search", "0")
 os.environ.setdefault("FLAGS_cudnn_deterministic", "0")
-os.environ.setdefault("FLAGS_conv_workspace_size_limit", "512")
+os.environ.setdefault("FLAGS_conv_workspace_size_limit", "128")
+os.environ.setdefault("FLAGS_fraction_of_gpu_memory_to_use", "0.75")
 
 from fastapi import FastAPI, UploadFile, File, Form, Header, HTTPException, status, Depends
 from fastapi.responses import JSONResponse
@@ -196,7 +197,8 @@ def get_ocr_engine() -> PaddleOCR:
                     lang="en",
                     show_log=False,
                     use_gpu=True,
-                    rec_batch_num=32,
+                    rec_batch_num=8,
+                    max_text_length=40,
                     ir_optim=False
                 )
                 _active_device = "gpu"
@@ -218,7 +220,8 @@ def get_ocr_engine() -> PaddleOCR:
                 lang="en",
                 show_log=False,
                 use_gpu=False,
-                rec_batch_num=32,
+                rec_batch_num=16,
+                max_text_length=40,
                 ir_optim=False,
                 enable_mkldnn=True,
                 cpu_threads=cpu_cores

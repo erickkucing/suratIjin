@@ -8,8 +8,8 @@ import pypdfium2
 
 ROMAN_NUMERALS = {"II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"}
 
-def downscale_image_if_needed(np_img: np.ndarray, max_side: int = 1600) -> np.ndarray:
-    """Downscale very high-resolution images to prevent CPU saturation while preserving text legibility."""
+def downscale_image_if_needed(np_img: np.ndarray, max_side: int = 1200) -> np.ndarray:
+    """Downscale very high-resolution images to prevent GPU OOM on 4GB VRAM while preserving text legibility."""
     if np_img is None:
         return np_img
     h, w = np_img.shape[:2]
@@ -479,11 +479,11 @@ def process_document_bytes(
 
         for page_idx in range(pages_to_process):
             page = pdf.get_page(page_idx)
-            # Render at 1.4 scale (~100-120 DPI) for optimal balance of speed and text crispness
-            bitmap = page.render(scale=1.4)
+            # Render at 1.2 scale (~90-100 DPI) for optimal balance of memory and text crispness
+            bitmap = page.render(scale=1.2)
             pil_img = bitmap.to_pil().convert("RGB")
             np_img = np.array(pil_img)
-            np_img = downscale_image_if_needed(np_img, max_side=1600)
+            np_img = downscale_image_if_needed(np_img, max_side=1200)
 
             ocr_res = ocr_engine.ocr(np_img, cls=False)
             if ocr_res and len(ocr_res) > 0:
@@ -500,7 +500,7 @@ def process_document_bytes(
         pages_processed = 1
         pil_img = Image.open(io.BytesIO(file_bytes)).convert("RGB")
         np_img = np.array(pil_img)
-        np_img = downscale_image_if_needed(np_img, max_side=1600)
+        np_img = downscale_image_if_needed(np_img, max_side=1200)
 
         ocr_res = ocr_engine.ocr(np_img, cls=False)
         if ocr_res and len(ocr_res) > 0:

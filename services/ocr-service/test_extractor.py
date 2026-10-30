@@ -85,13 +85,13 @@ class TestExtractor(unittest.TestCase):
     def test_downscale_image_if_needed(self):
         # 1. Image with dimension larger than max_side
         large_img = np.zeros((3000, 2000, 3), dtype=np.uint8)
-        scaled = downscale_image_if_needed(large_img, max_side=1600)
-        self.assertEqual(scaled.shape[0], 1600)
-        self.assertEqual(scaled.shape[1], 1067)
+        scaled = downscale_image_if_needed(large_img, max_side=1200)
+        self.assertEqual(scaled.shape[0], 1200)
+        self.assertEqual(scaled.shape[1], 800)
 
         # 2. Image already smaller than max_side remains unchanged
         small_img = np.zeros((800, 600, 3), dtype=np.uint8)
-        unchanged = downscale_image_if_needed(small_img, max_side=1600)
+        unchanged = downscale_image_if_needed(small_img, max_side=1200)
         self.assertEqual(unchanged.shape, (800, 600, 3))
 
 if __name__ == "__main__":

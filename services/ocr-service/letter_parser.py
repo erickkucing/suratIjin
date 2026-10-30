@@ -587,10 +587,10 @@ def process_letter_bytes(
         num_pages = min(len(pdf), 3) # Usually letters are 1-2 pages
         for p_idx in range(num_pages):
             page = pdf.get_page(p_idx)
-            bitmap = page.render(scale=1.4)
+            bitmap = page.render(scale=1.2)
             pil_img = bitmap.to_pil().convert("RGB")
             np_img = np.array(pil_img)
-            np_img = downscale_image_if_needed(np_img, max_side=1400)
+            np_img = downscale_image_if_needed(np_img, max_side=1200)
             enhanced = preprocess_image_for_ocr(np_img)
 
             ocr_res = ocr_engine.ocr(enhanced, cls=False)
