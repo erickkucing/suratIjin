@@ -45,6 +45,24 @@ from fastapi.middleware.cors import CORSMiddleware
 import paddle
 from paddleocr import PaddleOCR
 
+# Intercept inference predictor creation to remove fused_conv2d_add_act pass for Pascal GPU (sm_61) compatibility
+try:
+    import paddle.inference as _paddle_infer
+    _orig_create_predictor = _paddle_infer.create_predictor
+
+    def _safe_create_predictor(config):
+        try:
+            config.delete_pass("conv2d_add_act_fuse_pass")
+            config.delete_pass("conv2d_add_fuse_pass")
+            config.switch_ir_optim(False)
+        except Exception:
+            pass
+        return _orig_create_predictor(config)
+
+    _paddle_infer.create_predictor = _safe_create_predictor
+except Exception:
+    pass
+
 from extractor import process_document_bytes
 from letter_parser import process_letter_bytes
 
