@@ -104,7 +104,7 @@ describe("Redis Cache Server UI in Database Subtab", () => {
     fireEvent.click(dbSubTabBtn);
   };
 
-  it("should render Redis Cache Server section under database subtab", async () => {
+  it("should render Redis Cache Server section with configurations hidden when disabled", async () => {
     render(
       <AdminClient
         initialClasses={[]}
@@ -120,7 +120,42 @@ describe("Redis Cache Server UI in Database Subtab", () => {
     const redisHeading = screen.getByRole("heading", { name: /^Redis Cache Server$/i });
     expect(redisHeading).toBeTruthy();
 
-    // Verify structured fields exist with default values
+    // Toggle switch is rendered and off
+    const toggleBtn = screen.getByRole("switch", { name: /Toggle Redis Cache/i });
+    expect(toggleBtn.getAttribute("aria-checked")).toBe("false");
+
+    // When disabled, configuration fields and action buttons are NOT rendered
+    expect(screen.queryByLabelText(/Host \/ Alamat Server Redis/i)).toBeNull();
+    expect(screen.queryByLabelText(/Port Redis/i)).toBeNull();
+    expect(screen.queryByLabelText(/Password Redis \(Opsional\)/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Uji Koneksi$/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Simpan Pengaturan/i })).toBeNull();
+    expect(screen.queryByTitle(/Periksa status koneksi Redis sekarang/i)).toBeNull();
+  });
+
+  it("should reveal configuration fields and status bar when toggle is clicked to enable", async () => {
+    render(
+      <AdminClient
+        initialClasses={[]}
+        initialTeachers={[]}
+        initialSettings={baseSettings}
+        superadminName="Superadmin"
+      />
+    );
+
+    navigateToDatabaseSubtab();
+
+    const toggleBtn = screen.getByRole("switch", { name: /Toggle Redis Cache/i });
+    expect(toggleBtn.getAttribute("aria-checked")).toBe("false");
+
+    // Click to enable
+    await act(async () => {
+      fireEvent.click(toggleBtn);
+    });
+
+    expect(toggleBtn.getAttribute("aria-checked")).toBe("true");
+
+    // Fields and buttons must now be visible with default values
     const hostInput = screen.getByLabelText(/Host \/ Alamat Server Redis/i) as HTMLInputElement;
     expect(hostInput).toBeTruthy();
     expect(hostInput.value).toBe("127.0.0.1");
@@ -133,10 +168,10 @@ describe("Redis Cache Server UI in Database Subtab", () => {
     expect(passInput).toBeTruthy();
     expect(passInput.value).toBe("");
 
-    // Verify action buttons exist
     expect(screen.getByRole("button", { name: /^Uji Koneksi$/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Simpan Pengaturan/i })).toBeTruthy();
     expect(screen.getByTitle(/Periksa status koneksi Redis sekarang/i)).toBeTruthy();
+    expect(screen.getByText("Siap Diuji")).toBeTruthy();
   });
 
   it("should call testRedisConnectionAction and auto-save when Uji Koneksi button is clicked", async () => {
@@ -144,7 +179,10 @@ describe("Redis Cache Server UI in Database Subtab", () => {
       <AdminClient
         initialClasses={[]}
         initialTeachers={[]}
-        initialSettings={baseSettings}
+        initialSettings={{
+          ...baseSettings,
+          redisEnabled: true,
+        }}
         superadminName="Superadmin"
       />
     );
@@ -158,7 +196,7 @@ describe("Redis Cache Server UI in Database Subtab", () => {
 
     expect(redisAdminActions.testRedisConnectionAction).toHaveBeenCalledWith("redis://127.0.0.1:6379");
     expect(redisAdminActions.updateRedisSettingsAction).toHaveBeenCalledWith({
-      redisEnabled: false,
+      redisEnabled: true,
       redisUrl: "redis://127.0.0.1:6379",
     });
     expect(screen.getByText(/Koneksi Berhasil \(2 ms\)/i)).toBeTruthy();
@@ -225,6 +263,7 @@ describe("Redis Cache Server UI in Database Subtab", () => {
         initialTeachers={[]}
         initialSettings={{
           ...baseSettings,
+          redisEnabled: true,
           redisUrl: "redis://:mypassword@127.0.0.1:6379",
         }}
         superadminName="Superadmin"

@@ -5,7 +5,7 @@ test.describe("07. Redis Features, Admin UI & Performance Suite", () => {
     await page.context().clearCookies();
   });
 
-  test("01. Admin UI: Redis section is present under Database subtab with structured fields and non-slop design", async ({
+  test("01. Admin UI: Redis configurations are hidden when toggle is disabled and revealed when enabled", async ({
     page,
   }) => {
     // Login as Superadmin
@@ -28,25 +28,35 @@ test.describe("07. Redis Features, Admin UI & Performance Suite", () => {
     await expect(redisHeading).toContainText("Redis Cache Server");
     await expect(redisHeading).not.toContainText("Opsional");
 
-    // Verify structured fields: Host, Port, Password
+    const toggle = page.getByRole("switch", { name: "Toggle Redis Cache" });
+    const isChecked = (await toggle.getAttribute("aria-checked")) === "true";
+
+    if (isChecked) {
+      // Toggle off to verify hiding
+      await toggle.click();
+      await expect(toggle).toHaveAttribute("aria-checked", "false");
+      await expect(page.locator('text="Redis Dinonaktifkan"')).toBeVisible({ timeout: 5000 });
+    }
+
+    // Verify configuration fields and status bar are hidden when toggle is disabled
     const hostInput = page.locator('#redis-host-input');
+    await expect(hostInput).not.toBeVisible();
+    await expect(page.locator('#redis-port-input')).not.toBeVisible();
+    await expect(page.locator('#redis-password-input')).not.toBeVisible();
+    await expect(page.getByRole("button", { name: "Uji Koneksi", exact: true })).not.toBeVisible();
+
+    // Click toggle to enable
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-checked", "true");
+    await expect(page.locator('text="Redis Diaktifkan"')).toBeVisible({ timeout: 5000 });
+
+    // Verify fields and action buttons appear immediately
     await expect(hostInput).toBeVisible();
-
-    const portInput = page.locator('#redis-port-input');
-    await expect(portInput).toBeVisible();
-
-    const passwordInput = page.locator('#redis-password-input');
-    await expect(passwordInput).toBeVisible();
-
-    // Verify Uji Koneksi & Simpan Pengaturan buttons
-    const testBtn = page.getByRole("button", { name: "Uji Koneksi", exact: true });
-    await expect(testBtn).toBeVisible();
-
-    const saveBtn = page.locator('button:has-text("Simpan Pengaturan")');
-    await expect(saveBtn).toBeVisible();
-
-    // Verify Realtime Status Indicator
-    await expect(page.locator('text="Redis Cache Server"').first()).toBeVisible();
+    await expect(page.locator('#redis-port-input')).toBeVisible();
+    await expect(page.locator('#redis-password-input')).toBeVisible();
+    await expect(page.getByRole("button", { name: "Uji Koneksi", exact: true })).toBeVisible();
+    await expect(page.locator('button:has-text("Simpan Pengaturan")')).toBeVisible();
+    await expect(page.locator('text="Siap Diuji"')).toBeVisible();
   });
 
   test("02. Admin UI: Uji Koneksi works and displays realtime status and latency", async ({
@@ -60,6 +70,13 @@ test.describe("07. Redis Features, Admin UI & Performance Suite", () => {
 
     await page.locator('button:has-text("Pengaturan Teknis")').first().click();
     await page.locator('button:has-text("Manajemen Basis Data")').click();
+
+    const toggle = page.getByRole("switch", { name: "Toggle Redis Cache" });
+    const isChecked = (await toggle.getAttribute("aria-checked")) === "true";
+    if (!isChecked) {
+      await toggle.click();
+      await expect(toggle).toHaveAttribute("aria-checked", "true");
+    }
 
     // Ensure Host & Port are set to localhost redis
     await page.fill('#redis-host-input', '127.0.0.1');
