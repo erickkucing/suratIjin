@@ -343,6 +343,7 @@ async def extract_roster(file: UploadFile = File(...)):
         ocr = get_ocr_engine()
         result = process_document_bytes(file_bytes, filename, ocr)
         elapsed_sec = round(time.time() - t0, 3)
+        print(f"[OCR Timing] {filename} ({len(file_bytes)} B) -> {elapsed_sec}s ({_active_device}: {_device_name}, {result.get('total_students', 0)} students)")
         result["processing_time_seconds"] = elapsed_sec
         result["device"] = _active_device
         result["device_name"] = _device_name
@@ -423,6 +424,7 @@ async def extract_letter(
         ocr = get_ocr_engine()
         result = process_letter_bytes(file_bytes, filename, students_list, ocr)
         elapsed_sec = round(time.time() - t0, 3)
+        print(f"[OCR Timing] {filename} ({len(file_bytes)} B) -> {elapsed_sec}s ({_active_device}: {_device_name}, {result.get('total_students', 0)} students)")
         result["processing_time_seconds"] = elapsed_sec
         result["device"] = _active_device
         result["device_name"] = _device_name

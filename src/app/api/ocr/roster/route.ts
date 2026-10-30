@@ -288,12 +288,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const tStart = Date.now();
     const data = await ocrResponse.json();
     let students = data.students || [];
+    const tOcrMs = Date.now() - tStart;
+    console.log(`[Roster OCR] PaddleOCR returned in ${tOcrMs}ms (engine: ${data.device_name || data.device}, reported: ${data.processing_time_seconds}s, students: ${students.length})`);
 
     // Hybrid AI Assistance: If AI is enabled in System Settings, use AI to intelligently parse/refine the roster
     const aiConfig = await getAiRouterConfig();
     if (aiConfig.enabled) {
+      const tAiStart = Date.now();
+      console.log(`[Roster OCR] 9router AI refinement is ENABLED. Querying external AI model (${aiConfig.model})...`);
       try {
         const rawLines: string[] = [];
         if (data.raw_text) {
@@ -310,8 +315,9 @@ export async function POST(request: NextRequest) {
         if (aiStudents && aiStudents.length > 0) {
           students = aiStudents;
         }
+        console.log(`[Roster OCR] 9router AI refinement completed in ${Date.now() - tAiStart}ms (returned ${students.length} students)`);
       } catch (aiErr) {
-        console.warn("[Roster OCR] AI refinement failed, continuing with PaddleOCR result:", aiErr);
+        console.warn(`[Roster OCR] AI refinement failed after ${Date.now() - tAiStart}ms, continuing with PaddleOCR result:`, aiErr);
       }
     }
 
