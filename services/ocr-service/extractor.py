@@ -14,12 +14,15 @@ HEADER_ROW_PATTERNS = [
     r'kemendikbud|kemdikbud|kemenag',
     r'(?:sd|smp|sma|smk|madrasah|mi|mts|ma)\s+(?:negeri|swasta)',
     r'cabang\s+dinas|uptd|korwil',
-    r'daftar\s+(?:nama|hadir|presensi|absensi|peserta|siswa|murid|nilai)',
+    r'(?:daftar|data)\s+(?:nama\s+)?(?:hadir|presensi|absensi|peserta|siswa|murid|nilai)',
+    r'data\s+nama\s+siswa',
+    r'nama\s+siswa\s+kelas',
     r'rekap(?:itulasi)?\s+(?:kehadiran|absensi|presensi|nilai|siswa)',
     r'tahun\s+(?:ajaran|pelajaran)',
     r'semester\s+(?:ganjil|genap|satu|dua|1|2)',
     r'kurikulum\s+merdeka',
     r'rombongan\s+belajar|rombel',
+    r'kelas\s+(?:xii|xi|x|[0-9]+)\b',
     r'bulan\s*:\s*[a-z]+',
 ]
 
@@ -27,7 +30,7 @@ SIGNATURE_ROW_PATTERNS = [
     r'mengetahui\b',
     r'kepala\s+sekolah\b',
     r'kepsek\b',
-    r'wali\s+kelas\b',
+    r'wali\s*kelas',
     r'guru\s+(?:kelas|mapel|piket|pembimbing|mata\s+pelajaran)\b',
     r'tata\s+usaha\b',
     r'tanda\s+tangan|paraf\b',
@@ -35,6 +38,14 @@ SIGNATURE_ROW_PATTERNS = [
     r'nuptk\.?\s*\d+',
     r'nik\.?\s*\d+',
     r'catatan\s+(?:guru|wali|piket)',
+    r'\b(?:s\.kom|s\.pd|m\.pd|s\.t|s\.si|s\.sos|gr)\.?\b',
+]
+
+FOOTER_ROW_PATTERNS = [
+    r'update\s+per\b',
+    r'\bper\s+\d{1,2}\s+(?:januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember)\b',
+    r'\b\d{1,2}\s+(?:januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember)\s+\d{4}\b',
+    r'\bhalaman\s+\d+',
 ]
 
 SUMMARY_ROW_PATTERNS = [
@@ -136,9 +147,18 @@ def is_noise_text(text: str) -> bool:
         'dinas pendidikan', 'kementerian agama', 'pemerintah kabupaten', 'pemerintah provinsi',
         'pemerintah kota', 'kepala sekolah', 'wali kelas', 'guru kelas', 'tahun ajaran',
         'tahun pelajaran', 'daftar hadir', 'daftar presensi', 'daftar siswa', 'peserta didik',
-        'tanda tangan', 'rekapitulasi', 'kurikulum merdeka'
+        'tanda tangan', 'rekapitulasi', 'kurikulum merdeka', 'data nama siswa', 'update per',
+        'nama siswa kelas'
     ]
     if any(sp in lower for sp in strong_phrases):
+        return True
+
+    # Check for teacher titles / suffixes
+    if re.search(r'\b(?:s\.kom|s\.pd|m\.pd|s\.t|s\.si|s\.sos|gr)\.?\b', lower):
+        return True
+
+    # Check for update / metadata dates
+    if any(re.search(pat, lower) for pat in FOOTER_ROW_PATTERNS):
         return True
 
     # Check token overlap
@@ -187,10 +207,15 @@ def clean_student_name(raw: str) -> Optional[str]:
     return to_title_case(s)
 
 def clean_nis(raw: str) -> Optional[str]:
-    """Extract standard NIS (4-10 digits) or NISN (10 digits) using lookarounds."""
+    """Extract standard NIS (4-10 digits), composite NIS (e.g. 9259/110/066), or NISN."""
     if not raw or not isinstance(raw, str):
         return None
-    match = re.search(r'(?<!\d)(\d{4,10})(?!\d)', raw.strip())
+    cleaned = raw.strip()
+    # Check for composite NIS like 9259 / 110 / 066 or 9259/110/066
+    comp_match = re.search(r'(?<!\d)(\d{2,10}(?:\s*/\s*\d{2,10})+)(?!\d)', cleaned)
+    if comp_match:
+        return re.sub(r'\s*/\s*', '/', comp_match.group(1).strip())
+    match = re.search(r'(?<!\d)(\d{4,10})(?!\d)', cleaned)
     if match:
         return match.group(1)
     return None
@@ -199,7 +224,7 @@ def is_header_or_footer_row(combined_row: str) -> bool:
     """Determine whether a grouped line represents a table title, column header, footer, or summary row."""
     lower = combined_row.lower().strip()
 
-    # Check institutional headers
+    # Check institutional and document headers
     if any(re.search(pat, lower) for pat in HEADER_ROW_PATTERNS):
         return True
 
@@ -209,8 +234,12 @@ def is_header_or_footer_row(combined_row: str) -> bool:
     if has_no and has_name_or_nis:
         return True
 
-    # Check signature / footer
+    # Check signature / footer / wali kelas
     if any(re.search(pat, lower) for pat in SIGNATURE_ROW_PATTERNS):
+        return True
+
+    # Check footer / metadata
+    if any(re.search(pat, lower) for pat in FOOTER_ROW_PATTERNS):
         return True
 
     # Check summary row
@@ -224,6 +253,7 @@ def extract_students_from_ocr_boxes(ocr_results: List) -> List[Dict[str, Optiona
     Coordinate-aware parser:
     Groups text boxes by Y position into horizontal rows, then detects NIS and Name.
     Filters out institutional headers, column headers, signature blocks, and summary rows.
+    Supports composite Nomor Induk (e.g. 9259/110/066).
     """
     if not ocr_results:
         return []
@@ -304,18 +334,41 @@ def extract_students_from_ocr_boxes(ocr_results: List) -> List[Dict[str, Optiona
             continue
 
         nis: Optional[str] = None
+
+        # 1. First check if combined row has an explicit composite NIS like 9259 / 110 / 066
+        comp_match = re.search(r'(?<!\d)(\d{2,10}(?:\s*/\s*\d{2,10})+)(?!\d)', combined_row_text)
+        if comp_match:
+            nis = re.sub(r'\s*/\s*', '/', comp_match.group(1).strip())
+
+        # 2. If not found via slashes, check if multiple trailing digit items form a composite NIS
+        if not nis:
+            digit_items = []
+            for idx, item in enumerate(line):
+                t = item["text"].strip()
+                # Ignore initial index item if it looks like a row number (<= 100)
+                if idx == 0 and re.match(r'^\(?\d{1,2}\)?[\.\)]?$', t):
+                    continue
+                # Match pure digit groups
+                if re.match(r'^\d{2,10}$', t):
+                    digit_items.append(t)
+
+            if len(digit_items) >= 2:
+                # E.g. ['9259', '10', '066'] -> '9259/10/066'
+                nis = "/".join(digit_items)
+            elif len(digit_items) == 1 and len(digit_items[0]) >= 4:
+                nis = digit_items[0]
+
         name_candidates: List[str] = []
 
-        for item in line:
+        for idx, item in enumerate(line):
             t = item["text"].strip()
 
-            # Check if this item is a NIS or contains a NIS
-            cand_nis = clean_nis(t)
-            if cand_nis:
-                if not nis:
-                    nis = cand_nis
-                # Remove NIS digits from candidate text so remaining letters become name
-                t = t.replace(cand_nis, " ").strip()
+            # Strip NIS digits from item if present
+            if nis:
+                for part in nis.split("/"):
+                    if part:
+                        t = re.sub(r'(?<!\d)' + re.escape(part) + r'(?!\d)', ' ', t)
+                t = t.strip()
 
             # Check if remaining text is purely a row number like "1.", "2", "3)", "(1)"
             if re.match(r'^\(?\d+\)?[\.\)]?$', t):
@@ -359,6 +412,7 @@ def process_document_bytes(
     """
     is_pdf = filename.lower().endswith(".pdf") or file_bytes[:5] == b"%PDF-"
     all_students: List[Dict[str, Optional[str]]] = []
+    all_raw_lines: List[str] = []
     pages_processed = 0
 
     if is_pdf:
@@ -373,6 +427,14 @@ def process_document_bytes(
             np_img = np.array(pil_img)
 
             ocr_res = ocr_engine.ocr(np_img, cls=False)
+            if ocr_res and len(ocr_res) > 0:
+                lines_data = ocr_res[0] if isinstance(ocr_res[0], list) and (len(ocr_res[0]) == 0 or isinstance(ocr_res[0][0], list)) else ocr_res
+                for item in lines_data:
+                    if item and len(item) > 1 and item[1]:
+                        txt = str(item[1][0]).strip()
+                        if txt:
+                            all_raw_lines.append(txt)
+
             page_students = extract_students_from_ocr_boxes(ocr_res)
             all_students.extend(page_students)
     else:
@@ -381,6 +443,14 @@ def process_document_bytes(
         np_img = np.array(pil_img)
 
         ocr_res = ocr_engine.ocr(np_img, cls=False)
+        if ocr_res and len(ocr_res) > 0:
+            lines_data = ocr_res[0] if isinstance(ocr_res[0], list) and (len(ocr_res[0]) == 0 or isinstance(ocr_res[0][0], list)) else ocr_res
+            for item in lines_data:
+                if item and len(item) > 1 and item[1]:
+                    txt = str(item[1][0]).strip()
+                    if txt:
+                        all_raw_lines.append(txt)
+
         all_students = extract_students_from_ocr_boxes(ocr_res)
 
     deduped = deduplicate_students(all_students)
@@ -390,5 +460,6 @@ def process_document_bytes(
         "filename": filename,
         "pages_processed": pages_processed,
         "total_students": len(deduped),
-        "students": deduped
+        "students": deduped,
+        "raw_text": "\n".join(all_raw_lines)
     }

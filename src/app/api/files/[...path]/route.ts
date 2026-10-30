@@ -83,23 +83,70 @@ export async function GET(
       if (!fs.existsSync(fullPath)) {
         // On-demand generation for icon variants if the source logo exists
         const base = path.basename(fullPath);
-        const iconMatch = base.match(/^(?:icon-(192|512)|apple-icon)-(\d+)\.png$/);
+        const iconMatch = base.match(/^(?:icon-(192|512)|icon-maskable-(512)|apple-icon)-(\d+)\.png$/);
         if (iconMatch) {
-          const timestamp = iconMatch[2];
+          const timestamp = iconMatch[3];
           const isApple = base.startsWith("apple-icon");
-          const size = isApple ? 180 : parseInt(iconMatch[1], 10);
+          const isMaskable = base.startsWith("icon-maskable-");
           const sourceLogoPath = path.resolve(storageBase, "system", `logo-${timestamp}.png`);
           if (fs.existsSync(sourceLogoPath)) {
             try {
               const sharp = (await import("sharp")).default;
               const sourceBuffer = fs.readFileSync(sourceLogoPath);
-              await sharp(sourceBuffer)
-                .resize(size, size, {
-                  fit: "contain",
-                  background: { r: 0, g: 0, b: 0, alpha: 0 },
+
+              if (isApple) {
+                // 180x180 solid white canvas (#FFFFFF) with 144x144 safe-area inner logo
+                const innerBuffer = await sharp(sourceBuffer)
+                  .resize(144, 144, {
+                    fit: "contain",
+                    background: { r: 255, g: 255, b: 255, alpha: 0 },
+                  })
+                  .png()
+                  .toBuffer();
+
+                await sharp({
+                  create: {
+                    width: 180,
+                    height: 180,
+                    channels: 4,
+                    background: { r: 255, g: 255, b: 255, alpha: 1 },
+                  },
                 })
-                .png({ quality: 90 })
-                .toFile(fullPath);
+                  .composite([{ input: innerBuffer, gravity: "centre" }])
+                  .png({ quality: 90 })
+                  .toFile(fullPath);
+              } else if (isMaskable) {
+                // 512x512 solid white canvas (#FFFFFF) with 410x410 safe-area inner logo
+                const innerBuffer = await sharp(sourceBuffer)
+                  .resize(410, 410, {
+                    fit: "contain",
+                    background: { r: 255, g: 255, b: 255, alpha: 0 },
+                  })
+                  .png()
+                  .toBuffer();
+
+                await sharp({
+                  create: {
+                    width: 512,
+                    height: 512,
+                    channels: 4,
+                    background: { r: 255, g: 255, b: 255, alpha: 1 },
+                  },
+                })
+                  .composite([{ input: innerBuffer, gravity: "centre" }])
+                  .png({ quality: 90 })
+                  .toFile(fullPath);
+              } else {
+                // Standard transparent PWA icon (192 or 512)
+                const size = parseInt(iconMatch[1], 10);
+                await sharp(sourceBuffer)
+                  .resize(size, size, {
+                    fit: "contain",
+                    background: { r: 0, g: 0, b: 0, alpha: 0 },
+                  })
+                  .png({ quality: 90 })
+                  .toFile(fullPath);
+              }
             } catch {
               // Ignore failure, will fall through to 404 below
             }

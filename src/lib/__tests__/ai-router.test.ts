@@ -232,5 +232,42 @@ describe("ai-router library", () => {
       expect(result?.[0].name).toBe("Ahmad Dahlan");
       expect(result?.[0].nis).toBe("1001");
     });
+
+    it("should extract and normalize composite NIS format (e.g. 9259/110/066)", async () => {
+      const mockAiResponse = {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify([
+                { name: "Adrian Manuel Hartono", nis: "9259 / 110 / 066" },
+                { name: "Yohanes Elkan Nathanael", nis: "9509/181/066" },
+              ]),
+            },
+          },
+        ],
+      };
+
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => mockAiResponse,
+      });
+      vi.stubGlobal("fetch", mockFetch);
+
+      const result = await parseRosterWithAi({
+        rawLines: ["1 | Adrian Manuel Hartono | 9259 / 110 / 066"],
+        configOverride: {
+          enabled: true,
+          baseUrl: "http://127.0.0.1:20128/v1",
+          apiKey: "valid-key",
+          model: "gemini/gemini-3.8-flash",
+        },
+      });
+
+      expect(result).not.toBeNull();
+      expect(result?.length).toBe(2);
+      expect(result?.[0].name).toBe("Adrian Manuel Hartono");
+      expect(result?.[0].nis).toBe("9259/110/066");
+      expect(result?.[1].nis).toBe("9509/181/066");
+    });
   });
 });

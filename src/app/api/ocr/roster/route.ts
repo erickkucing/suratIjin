@@ -41,6 +41,49 @@ function isValidFileMagic(buffer: Buffer): boolean {
   return false;
 }
 
+function isNoiseStudentName(name: string): boolean {
+  if (!name || name.trim().length < 2) return true;
+  const lower = name.toLowerCase().trim();
+
+  // Header patterns
+  if (
+    lower.includes("data nama siswa") ||
+    lower.includes("nama siswa kelas") ||
+    lower.includes("daftar hadir") ||
+    lower.includes("daftar siswa") ||
+    lower.includes("daftar presensi") ||
+    lower.includes("rekapitulasi") ||
+    lower.includes("tahun ajaran") ||
+    lower.includes("tahun pelajaran") ||
+    lower.includes("kurikulum merdeka") ||
+    /\bkelas\s+(?:xii|xi|x|[0-9]+)\b/.test(lower)
+  ) {
+    return true;
+  }
+
+  // Wali kelas and teacher titles
+  if (
+    lower.includes("wali kelas") ||
+    lower.includes("guru kelas") ||
+    lower.includes("kepala sekolah") ||
+    /\b(?:s\.kom|s\.pd|m\.pd|s\.t|s\.si|s\.sos|gr)\.?\b/.test(lower)
+  ) {
+    return true;
+  }
+
+  // Footer / update date patterns
+  if (
+    lower.includes("update per") ||
+    /\bper\s+\d{1,2}\s+(?:januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember)\b/.test(lower) ||
+    /\b\d{1,2}\s+(?:januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember)\s+\d{4}\b/.test(lower) ||
+    lower.startsWith("halaman ")
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 export async function POST(request: NextRequest) {
   try {
     let user = await getCurrentUser();
@@ -182,13 +225,15 @@ export async function POST(request: NextRequest) {
     const data = await ocrResponse.json();
     let students = data.students || [];
 
-    // Smart Fallback via 9router AI if enabled and PaddleOCR extracted 0 students
+    // Hybrid AI Assistance: If AI is enabled in System Settings, use AI to intelligently parse/refine the roster
     const aiConfig = await getAiRouterConfig();
-    if (aiConfig.enabled && students.length === 0) {
+    if (aiConfig.enabled) {
       try {
         const rawLines: string[] = [];
         if (data.raw_text) {
           rawLines.push(...data.raw_text.split("\n").map((l: string) => l.trim()).filter(Boolean));
+        } else if (students.length > 0) {
+          rawLines.push(...students.map((s: { name: string; nis?: string }) => `${s.name} ${s.nis || ""}`));
         }
         const aiStudents = await parseRosterWithAi({
           rawLines,
@@ -200,9 +245,17 @@ export async function POST(request: NextRequest) {
           students = aiStudents;
         }
       } catch (aiErr) {
-        console.warn("[Roster OCR] AI fallback failed, continuing with PaddleOCR result:", aiErr);
+        console.warn("[Roster OCR] AI refinement failed, continuing with PaddleOCR result:", aiErr);
       }
     }
+
+    // Layer-3 defense: Filter any accidental noise, headers, wali kelas, or dates, and normalize NIS
+    students = students
+      .filter((s: { name: string; nis?: string }) => !isNoiseStudentName(s.name))
+      .map((s: { name: string; nis?: string }) => ({
+        name: s.name.trim(),
+        nis: s.nis ? s.nis.replace(/\s*\/\s*/g, "/").trim() : undefined,
+      }));
 
     return NextResponse.json({
       success: true,

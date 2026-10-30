@@ -58,6 +58,6 @@ describe("Web App Manifest (PWA)", () => {
     expect(icon512?.src).toBe("/api/files/system/icon-512-1793278901234.png");
 
     const maskable = result.icons?.find((i) => i.purpose === "maskable");
-    expect(maskable?.src).toBe("/api/files/system/icon-512-1793278901234.png");
+    expect(maskable?.src).toBe("/api/files/system/icon-maskable-512-1793278901234.png");
   });
 });

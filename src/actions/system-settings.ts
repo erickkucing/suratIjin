@@ -257,11 +257,13 @@ export async function uploadLogoAction(formData: FormData) {
   const filename = `logo-${timestamp}.png`;
   const icon192Filename = `icon-192-${timestamp}.png`;
   const icon512Filename = `icon-512-${timestamp}.png`;
+  const iconMaskableFilename = `icon-maskable-512-${timestamp}.png`;
   const appleIconFilename = `apple-icon-${timestamp}.png`;
 
   const targetPath = path.resolve(systemDir, filename);
   const icon192Path = path.resolve(systemDir, icon192Filename);
   const icon512Path = path.resolve(systemDir, icon512Filename);
+  const iconMaskablePath = path.resolve(systemDir, iconMaskableFilename);
   const appleIconPath = path.resolve(systemDir, appleIconFilename);
 
   // 1. Resize and convert to high quality PNG for navbar/favicon
@@ -270,7 +272,7 @@ export async function uploadLogoAction(formData: FormData) {
     .png({ quality: 90 })
     .toFile(targetPath);
 
-  // 2. Generate standard PWA icons (transparent background, fit: contain)
+  // 2. Generate standard PWA icons (transparent background, fit: contain, purpose: "any")
   await sharp(buffer)
     .resize(192, 192, {
       fit: "contain",
@@ -287,12 +289,47 @@ export async function uploadLogoAction(formData: FormData) {
     .png({ quality: 90 })
     .toFile(icon512Path);
 
-  // 3. Generate Apple Touch Icon (180x180, transparent background, fit: contain)
-  await sharp(buffer)
-    .resize(180, 180, {
+  // 3. Generate Android Maskable Icon (512x512, solid white background #FFFFFF, 80% safe-area = 410x410)
+  const maskableInnerSize = 410;
+  const maskableInnerBuffer = await sharp(buffer)
+    .resize(maskableInnerSize, maskableInnerSize, {
       fit: "contain",
-      background: { r: 0, g: 0, b: 0, alpha: 0 },
+      background: { r: 255, g: 255, b: 255, alpha: 0 },
     })
+    .png()
+    .toBuffer();
+
+  await sharp({
+    create: {
+      width: 512,
+      height: 512,
+      channels: 4,
+      background: { r: 255, g: 255, b: 255, alpha: 1 },
+    },
+  })
+    .composite([{ input: maskableInnerBuffer, gravity: "centre" }])
+    .png({ quality: 90 })
+    .toFile(iconMaskablePath);
+
+  // 4. Generate Apple Touch Icon (180x180, solid white background #FFFFFF, 80% safe-area = 144x144)
+  const appleInnerSize = 144;
+  const appleInnerBuffer = await sharp(buffer)
+    .resize(appleInnerSize, appleInnerSize, {
+      fit: "contain",
+      background: { r: 255, g: 255, b: 255, alpha: 0 },
+    })
+    .png()
+    .toBuffer();
+
+  await sharp({
+    create: {
+      width: 180,
+      height: 180,
+      channels: 4,
+      background: { r: 255, g: 255, b: 255, alpha: 1 },
+    },
+  })
+    .composite([{ input: appleInnerBuffer, gravity: "centre" }])
     .png({ quality: 90 })
     .toFile(appleIconPath);
 

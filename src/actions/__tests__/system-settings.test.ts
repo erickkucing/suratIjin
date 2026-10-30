@@ -244,11 +244,13 @@ describe("System Identity & Footer Actions", () => {
     const logoPath = path.resolve(systemDir, `logo-${ts}.png`);
     const icon192Path = path.resolve(systemDir, `icon-192-${ts}.png`);
     const icon512Path = path.resolve(systemDir, `icon-512-${ts}.png`);
+    const iconMaskablePath = path.resolve(systemDir, `icon-maskable-512-${ts}.png`);
     const appleIconPath = path.resolve(systemDir, `apple-icon-${ts}.png`);
 
     expect(fs.existsSync(logoPath)).toBe(true);
     expect(fs.existsSync(icon192Path)).toBe(true);
     expect(fs.existsSync(icon512Path)).toBe(true);
+    expect(fs.existsSync(iconMaskablePath)).toBe(true);
     expect(fs.existsSync(appleIconPath)).toBe(true);
 
     // Verify dimensions of generated icons
@@ -260,9 +262,26 @@ describe("System Identity & Footer Actions", () => {
     expect(icon512Meta.width).toBe(512);
     expect(icon512Meta.height).toBe(512);
 
+    const iconMaskableMeta = await sharp(iconMaskablePath).metadata();
+    expect(iconMaskableMeta.width).toBe(512);
+    expect(iconMaskableMeta.height).toBe(512);
+
     const appleIconMeta = await sharp(appleIconPath).metadata();
     expect(appleIconMeta.width).toBe(180);
     expect(appleIconMeta.height).toBe(180);
+
+    // Verify that corner pixel of maskable & apple-icon is solid white (#FFFFFF, alpha = 255)
+    const { data: maskableRaw } = await sharp(iconMaskablePath).raw().toBuffer({ resolveWithObject: true });
+    expect(maskableRaw[0]).toBe(255); // R
+    expect(maskableRaw[1]).toBe(255); // G
+    expect(maskableRaw[2]).toBe(255); // B
+    expect(maskableRaw[3]).toBe(255); // A (fully opaque)
+
+    const { data: appleRaw } = await sharp(appleIconPath).raw().toBuffer({ resolveWithObject: true });
+    expect(appleRaw[0]).toBe(255); // R
+    expect(appleRaw[1]).toBe(255); // G
+    expect(appleRaw[2]).toBe(255); // B
+    expect(appleRaw[3]).toBe(255); // A (fully opaque)
 
     // Test removeLogoAction
     const removeRes = await removeLogoAction();
@@ -274,7 +293,7 @@ describe("System Identity & Footer Actions", () => {
     expect(updatedRow?.logoUrl).toBeNull();
 
     // Clean up created test files
-    [logoPath, icon192Path, icon512Path, appleIconPath].forEach((p) => {
+    [logoPath, icon192Path, icon512Path, iconMaskablePath, appleIconPath].forEach((p) => {
       if (fs.existsSync(p)) fs.unlinkSync(p);
     });
 

@@ -40,6 +40,9 @@ export default async function manifest(): Promise<MetadataRoute.Manifest> {
       const icon512 = isCustomLogoPattern
         ? settings.logoUrl.replace(/logo-(\d+)\.png$/, "icon-512-$1.png")
         : settings.logoUrl;
+      const iconMaskable = isCustomLogoPattern
+        ? settings.logoUrl.replace(/logo-(\d+)\.png$/, "icon-maskable-512-$1.png")
+        : settings.logoUrl;
 
       icons = [
         {
@@ -55,7 +58,7 @@ export default async function manifest(): Promise<MetadataRoute.Manifest> {
           purpose: "any",
         },
         {
-          src: icon512,
+          src: iconMaskable,
           sizes: "512x512",
           type: "image/png",
           purpose: "maskable",

@@ -362,32 +362,36 @@ export async function parseRosterWithAi({
   }
 
   const systemPrompt = `Anda adalah asisten AI ekstraksi data tabel daftar nama siswa sekolah (roster/presensi).
-Tugas Anda mengekstrak baris-baris nama siswa dan NIS (jika ada) dari teks atau gambar dokumen.
+Tugas Anda mengekstrak baris-baris nama siswa dan Nomor Induk/NIS dari teks atau gambar dokumen.
 
 Format output WAJIB array JSON murni tanpa markdown, tanpa teks pengantar:
 [
-  { "name": "Nama Siswa", "nis": "12345" }
+  { "name": "Nama Siswa", "nis": "9259/110/066" }
 ]
 
-Aturan:
-- Jangan sertakan header kolom (seperti "Nama", "NIS", "No", "L/P", "Tanda Tangan").
-- Normalisasikan penulisan nama menjadi Title Case (huruf besar di awal kata).
-- Bersihkan karakter angka urutan di depan nama (misal "1. Budi" -> "Budi").`;
+Aturan Ketat:
+1. JANGAN sertakan judul dokumen / kop formulir (contoh: "DATA NAMA SISWA KELAS...", "TAHUN PELAJARAN...", dsb.).
+2. JANGAN sertakan nama wali kelas, guru, atau gelar kehormatan/akademik (contoh: "Wali Kelas : Erick Kresnamurti, S.Kom. Gr.").
+3. JANGAN sertakan catatan kaki, footer, atau tanggal revisi (contoh: "Update per 02 Desember 2024").
+4. JANGAN sertakan header kolom tabel (seperti "No", "Nama", "L/P", "Nomor Induk", "Keterangan", "Tanda Tangan").
+5. Format NIS: Jika di dokumen terdapat Nomor Induk majemuk bergaris miring (contoh: "9259 / 110 / 066"), simpan format lengkapnya tanpa spasi berlebih ("9259/110/066"). Jika hanya ada angka tunggal (contoh: "9259"), simpan angka tersebut.
+6. Normalisasikan penulisan nama menjadi Title Case (huruf besar di awal setiap kata nama siswa).
+7. Bersihkan angka urut di depan nama (misal "1. Adrian Manuel Hartono" -> "Adrian Manuel Hartono").
+8. Hanya hasilkan data siswa yang sah pada baris tabel.`;
 
   const messages: any[] = [{ role: "system", content: systemPrompt }];
 
-  if (rawLines.length >= 2 || !imageBase64) {
-    messages.push({
-      role: "user",
-      content: `Berikut adalah baris-baris teks tabel hasil pemindaian OCR:\n\n${rawLines.join("\n")}`,
-    });
-  } else {
+  if (imageBase64) {
+    const promptText = rawLines.length > 0
+      ? `Berikut teks hasil OCR sebagai referensi pembacaan karakter:\n${rawLines.join("\n")}\n\nSilakan ekstrak seluruh nama siswa dan NIS dari baris tabel dokumen di bawah ini:`
+      : `Silakan ekstrak seluruh nama siswa dan NIS dari baris tabel dokumen di bawah ini:`;
+
     messages.push({
       role: "user",
       content: [
         {
           type: "text",
-          text: `Teks OCR sangat minim. Silakan ekstrak daftar nama siswa dan NIS langsung dari visual gambar tabel:`,
+          text: promptText,
         },
         {
           type: "image_url",
@@ -397,10 +401,15 @@ Aturan:
         },
       ],
     });
+  } else {
+    messages.push({
+      role: "user",
+      content: `Berikut adalah baris-baris teks tabel hasil pemindaian OCR:\n\n${rawLines.join("\n")}`,
+    });
   }
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 12000);
+  const timeoutId = setTimeout(() => controller.abort(), 25000);
 
   try {
     const res = await fetch(endpoint, {
@@ -434,9 +443,13 @@ Aturan:
     const students: RosterAiStudent[] = [];
     for (const item of parsed) {
       if (item?.name && typeof item.name === "string" && item.name.trim().length >= 2) {
+        let cleanNis = item.nis ? String(item.nis).trim() : undefined;
+        if (cleanNis) {
+          cleanNis = cleanNis.replace(/\s*\/\s*/g, "/");
+        }
         students.push({
           name: item.name.trim(),
-          nis: item.nis ? String(item.nis).trim() : undefined,
+          nis: cleanNis || undefined,
         });
       }
     }
