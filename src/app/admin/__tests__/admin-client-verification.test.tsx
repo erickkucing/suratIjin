@@ -817,6 +817,73 @@ describe("AdminClient Empirical Verification (R1 - R6)", () => {
       expect(banner?.className).not.toContain("purple");
       expect(revertBtn.className).not.toContain("purple");
     });
+
+    it("persists aiEnabled to true on toggle and renders unified database-styled status bar", async () => {
+      const { updateAiSettingsAction, testAiConnectionAction } = await import("@/actions/system-settings");
+      vi.mocked(updateAiSettingsAction).mockClear();
+      vi.mocked(testAiConnectionAction).mockResolvedValue({
+        success: true,
+        result: { isConnected: true, latencyMs: 25, models: ["gemini/gemini-2.5-flash"] },
+      });
+
+      const originalFetch = global.fetch;
+      global.fetch = vi.fn().mockImplementation((url: string) => {
+        if (typeof url === "string" && url.includes("/api/ai/status")) {
+          return Promise.resolve({
+            ok: true,
+            json: () =>
+              Promise.resolve({
+                success: true,
+                isConnected: true,
+                latencyMs: 25,
+                models: ["gemini/gemini-2.5-flash"],
+              }),
+          } as Response);
+        }
+        return Promise.resolve({ ok: false } as Response);
+      });
+
+      render(
+        <AdminClient
+          initialClasses={dummyClasses}
+          initialTeachers={dummyTeachers}
+          initialSettings={{ ...dummySettings, aiEnabled: false }}
+          superadminName="Administrator"
+        />
+      );
+
+      const techTab = screen.getAllByRole("button", { name: /Pengaturan Teknis/i })[0];
+      act(() => {
+        fireEvent.click(techTab);
+      });
+
+      expect(screen.getByText("Gateway 9Router")).toBeDefined();
+      expect(screen.getAllByText("Nonaktif").length).toBeGreaterThanOrEqual(1);
+
+      const aiToggle = screen.getByRole("switch", { name: /Aktifkan Integrasi 9Router/i });
+      expect(aiToggle.getAttribute("aria-checked")).toBe("false");
+
+      await act(async () => {
+        fireEvent.click(aiToggle);
+      });
+
+      expect(updateAiSettingsAction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          aiEnabled: true,
+        })
+      );
+      expect(aiToggle.getAttribute("aria-checked")).toBe("true");
+
+      const periksaStatusBtn = screen.getByRole("button", { name: /Periksa Status/i });
+      expect(periksaStatusBtn).toBeDefined();
+
+      await act(async () => {
+        fireEvent.click(periksaStatusBtn);
+      });
+
+      expect(screen.getByText("Layanan 9Router AI Aktif & Terhubung")).toBeDefined();
+      global.fetch = originalFetch;
+    });
   });
 });
 

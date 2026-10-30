@@ -378,46 +378,49 @@ export function AdminClient({
 
   const handleToggleAi = async () => {
     if (togglingAi) return;
+    setTogglingAi(true);
+    setAiNotice(null);
 
-    if (aiEnabled) {
-      setTogglingAi(true);
-      setAiEnabled(false);
-      setAiNotice(null);
-      try {
-        const res = await updateAiSettingsAction({
-          aiEnabled: false,
-          aiRouterUrl,
-          aiRouterApiKey: aiRouterApiKey.trim() || null,
-          aiRouterModel,
+    const nextState = !aiEnabled;
+    setAiEnabled(nextState);
+
+    try {
+      const res = await updateAiSettingsAction({
+        aiEnabled: nextState,
+        aiRouterUrl,
+        aiRouterApiKey: aiRouterApiKey.trim() || null,
+        aiRouterModel,
+      });
+
+      if (res.success) {
+        setAiNotice({
+          type: "success",
+          title: nextState ? "Integrasi Diaktifkan" : "Integrasi Dinonaktifkan",
+          message: nextState
+            ? "Integrasi 9router berhasil diaktifkan dan disimpan ke database."
+            : "Pemrosesan berkas OCR dialihkan sepenuhnya ke PaddleOCR lokal.",
         });
-
-        if (res.success) {
-          setAiNotice({
-            type: "success",
-            title: "Integrasi Dinonaktifkan",
-            message: "Pemrosesan berkas OCR dialihkan sepenuhnya ke PaddleOCR lokal.",
-          });
-        } else {
-          setAiNotice({
-            type: "error",
-            title: "Gagal Menonaktifkan",
-            message: res.error || "Gagal menyimpan status penonaktifan AI.",
-          });
-          setAiEnabled(true);
+        if (nextState) {
+          checkAiHealth();
         }
-      } catch (err: unknown) {
+        router.refresh();
+      } else {
         setAiNotice({
           type: "error",
-          title: "Terjadi Kesalahan",
-          message: err instanceof Error ? err.message : "Terjadi kesalahan saat menonaktifkan AI.",
+          title: "Gagal Mengubah Status",
+          message: res.error || "Gagal menyimpan status integrasi AI.",
         });
-        setAiEnabled(true);
-      } finally {
-        setTogglingAi(false);
+        setAiEnabled(!nextState);
       }
-    } else {
-      setAiEnabled(true);
-      setAiNotice(null);
+    } catch (err: unknown) {
+      setAiNotice({
+        type: "error",
+        title: "Terjadi Kesalahan",
+        message: err instanceof Error ? err.message : "Terjadi kesalahan saat mengubah status AI.",
+      });
+      setAiEnabled(!nextState);
+    } finally {
+      setTogglingAi(false);
     }
   };
 
@@ -532,6 +535,7 @@ export function AdminClient({
           message: "Konfigurasi 9router berhasil diperbarui.",
         });
         checkAiHealth();
+        router.refresh();
       } else {
         setAiNotice({
           type: "error",
@@ -2078,6 +2082,94 @@ export function AdminClient({
                     </div>
                   </div>
                 </div>
+
+                {/* Status Bar Terpadu Ala Database */}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs py-2.5 px-4 rounded-xl bg-[var(--canvas-subtle)] border border-[var(--border)]">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`w-2 h-2 rounded-full shrink-0 ${
+                        !aiEnabled
+                          ? "bg-neutral-400 dark:bg-neutral-600"
+                          : aiHeartbeat.isConnected
+                          ? "bg-emerald-500"
+                          : "bg-red-500"
+                      }`}
+                    />
+                    <span
+                      className={`font-bold ${
+                        !aiEnabled
+                          ? "text-[var(--ink-muted)]"
+                          : aiHeartbeat.isConnected
+                          ? "text-emerald-700 dark:text-emerald-400"
+                          : "text-red-700 dark:text-red-400"
+                      }`}
+                    >
+                      {!aiEnabled
+                        ? "Nonaktif"
+                        : aiHeartbeat.isConnected
+                        ? "Online"
+                        : "Offline / Belum Terhubung"}
+                    </span>
+                  </div>
+
+                  <span className="text-[var(--border-strong)] opacity-40">&bull;</span>
+                  <span className="font-semibold text-[var(--ink)]">Gateway 9Router</span>
+
+                  <span className="text-[var(--border-strong)] opacity-40">&bull;</span>
+                  <span className="font-mono text-[var(--ink-muted)] truncate max-w-[200px]" title={aiRouterUrl}>
+                    {aiRouterUrl || "http://127.0.0.1:20128/v1"}
+                  </span>
+
+                  {aiEnabled && aiHeartbeat.latencyMs !== undefined && (
+                    <>
+                      <span className="text-[var(--border-strong)] opacity-40">&bull;</span>
+                      <span className="font-mono text-[var(--ink-muted)]">
+                        {aiHeartbeat.latencyMs} ms
+                      </span>
+                    </>
+                  )}
+
+                  {aiRouterModel && (
+                    <>
+                      <span className="text-[var(--border-strong)] opacity-40">&bull;</span>
+                      <span className="font-mono text-[var(--ink-muted)] truncate max-w-[200px]" title={aiRouterModel}>
+                        {aiRouterModel}
+                      </span>
+                    </>
+                  )}
+
+                  <div className="ml-auto flex items-center">
+                    <button
+                      type="button"
+                      onClick={checkAiHealth}
+                      disabled={testingAi || !aiEnabled}
+                      className="touch-target inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-[var(--ink)] cursor-pointer disabled:opacity-50 transition-colors"
+                      title="Periksa status koneksi 9router"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${testingAi ? "animate-spin text-[var(--primary)]" : "text-[var(--ink-muted)]"}`} />
+                      <span>Periksa Status</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Kartu Status Aktif Terhubung Bergaya Soft Slate (Persis Banner Database Remote) */}
+                {aiEnabled && aiHeartbeat.isConnected && (
+                  <div className="p-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 rounded-xl bg-[var(--accent-slate-light)] text-[var(--accent-slate)] shrink-0 mt-0.5">
+                        <Cpu className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-[var(--ink)]">
+                          Layanan 9Router AI Aktif &amp; Terhubung
+                        </p>
+                        <p className="text-[11px] text-[var(--ink-muted)] mt-0.5">
+                          Ekstraksi berkas OCR surat izin saat ini diproses menggunakan model <span className="font-mono font-bold text-[var(--ink)]">{aiRouterModel}</span> ({aiHeartbeat.latencyMs} ms).
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
               {/* Floating Notification saat AI Nonaktif */}
               {aiNotice && !aiEnabled && (
