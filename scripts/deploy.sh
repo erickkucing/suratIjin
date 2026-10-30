@@ -434,27 +434,22 @@ if [ -d "$OCR_DIR" ] && command -v python3 >/dev/null 2>&1; then
             "$OCR_VENV/bin/pip" install "nvidia-cudnn-cu12==8.9.7.29" "nvidia-cublas-cu12" 2>&1 | tail -n 2 || true
         fi
 
-        # Buat symlink libcudnn.so -> libcudnn.so.8 jika belum ada di venv
-        find "$OCR_VENV" -type f \( -name "libcudnn.so*" -o -name "libcudnn_*.so*" \) 2>/dev/null | while read -r so_path; do
+        # Buat symlink libcudnn & libcublas jika belum ada di venv
+        find "$OCR_VENV" -type f \( -name "libcudnn*.so.*" -o -name "libcublas*.so.*" \) 2>/dev/null | while read -r so_path; do
             dir=$(dirname "$so_path")
             fname=$(basename "$so_path")
-            if [[ "$fname" =~ ^libcudnn\.so\.[0-9]+ ]]; then
-                major_ver="${fname#libcudnn.so.}"
-                major_ver="${major_ver%%.*}"
-                [ ! -e "$dir/libcudnn.so.$major_ver" ] && ln -sf "$fname" "$dir/libcudnn.so.$major_ver" 2>/dev/null || true
-                [ ! -e "$dir/libcudnn.so" ] && ln -sf "$fname" "$dir/libcudnn.so" 2>/dev/null || true
-            fi
+            base_so=$(echo "$fname" | sed -E 's/\.so\.[0-9]+.*$/\.so/')
+            major_so=$(echo "$fname" | sed -E 's/(\.so\.[0-9]+).*/\1/')
+            [ ! -e "$dir/$major_so" ] && ln -sf "$fname" "$dir/$major_so" 2>/dev/null || true
+            [ ! -e "$dir/$base_so" ] && ln -sf "$fname" "$dir/$base_so" 2>/dev/null || true
         done
 
         # Daftarkan semua path lib nvidia ke ldconfig sistem
         NVIDIA_PIP_CONF="/etc/ld.so.conf.d/nvidia-paddle-cudnn.conf"
         rm -f "$NVIDIA_PIP_CONF"
-        find "$OCR_VENV" -type f -name "libcudnn*" 2>/dev/null | while read -r so_path; do
+        find "$OCR_VENV" -type f \( -name "libcudnn*" -o -name "libcublas*" \) 2>/dev/null | while read -r so_path; do
             dirname "$so_path"
         done | sort -u > "$NVIDIA_PIP_CONF"
-        find "$OCR_VENV" -type f -name "libcublas*" 2>/dev/null | while read -r so_path; do
-            dirname "$so_path"
-        done | sort -u >> "$NVIDIA_PIP_CONF"
 
         if [ -s "$NVIDIA_PIP_CONF" ]; then
             ldconfig 2>/dev/null || true

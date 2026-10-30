@@ -13,17 +13,30 @@ try:
         _venv_site = os.path.join(_site_parent, "venv")
         if os.path.isdir(_venv_site):
             for _root, _dirs, _files in os.walk(_venv_site):
-                if any(k in _root for k in ["cudnn", "cublas", "nvidia"]) and ("lib" in _dirs or any("libcudnn" in f for f in _files)):
+                if any(k in _root for k in ["cudnn", "cublas", "nvidia"]) and ("lib" in _dirs or any(f.startswith("lib") and ".so" in f for f in _files)):
                     _lib_dir = os.path.join(_root, "lib") if "lib" in _dirs else _root
                     _curr_ld = os.environ.get("LD_LIBRARY_PATH", "")
                     if _lib_dir not in _curr_ld:
                         os.environ["LD_LIBRARY_PATH"] = f"{_lib_dir}:{_curr_ld}" if _curr_ld else _lib_dir
+
+                    # Proactively create unversioned symlinks if missing (e.g. libcublas.so.12 -> libcublas.so)
+                    for f in os.listdir(_lib_dir):
+                        if f.startswith(("libcudnn", "libcublas")) and ".so." in f:
+                            base_so = f.split(".so.")[0] + ".so"
+                            target_link = os.path.join(_lib_dir, base_so)
+                            if not os.path.exists(target_link):
+                                try:
+                                    os.symlink(f, target_link)
+                                except Exception:
+                                    pass
+
                     for _so_name in [
+                        "libcublasLt.so.12", "libcublasLt.so.11", "libcublasLt.so",
+                        "libcublas.so.12", "libcublas.so.11", "libcublas.so",
                         "libcudnn_ops_infer.so.8", "libcudnn_ops_infer.so",
                         "libcudnn_cnn_infer.so.8", "libcudnn_cnn_infer.so",
                         "libcudnn_adv_infer.so.8", "libcudnn_adv_infer.so",
                         "libcudnn.so.8", "libcudnn.so",
-                        "libcublas.so.12", "libcublas.so.11", "libcublas.so"
                     ]:
                         _so_file = os.path.join(_lib_dir, _so_name)
                         if os.path.isfile(_so_file):
@@ -216,12 +229,13 @@ def get_ocr_engine() -> PaddleOCR:
     return _ocr_engine
 
 def prewarm_ocr_engine(ocr: PaddleOCR):
-    """Run a single forward pass with dummy pixels so CUDA kernel compilation and cuDNN workspaces are pre-warmed."""
+    """Run a single forward pass with text pixels so detector and recognizer (cuBLAS matmul) are pre-warmed."""
     try:
         import numpy as np
-        # 64x256 RGB dummy image with high-contrast text-like stripe
+        import cv2
+        # 64x256 RGB dummy image with clear text to trigger both detector and recognizer
         dummy_img = np.full((64, 256, 3), 255, dtype=np.uint8)
-        dummy_img[28:36, 20:236] = 0
+        cv2.putText(dummy_img, "WARMUP", (20, 45), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 0), 2)
         ocr.ocr(dummy_img, cls=False)
         print(f"[OCR Service] Dummy forward pass successful on device: {_active_device}")
     except Exception as e:
