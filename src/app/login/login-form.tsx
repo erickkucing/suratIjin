@@ -35,8 +35,7 @@ export function LoginForm({ nextPath = "/dashboard" }: LoginFormProps) {
         return;
       }
 
-      router.push(data.redirectUrl || nextPath);
-      router.refresh();
+      window.location.href = data.redirectUrl || nextPath;
     } catch {
       try {
         const formData = new FormData();
@@ -47,8 +46,7 @@ export function LoginForm({ nextPath = "/dashboard" }: LoginFormProps) {
           setErrorMessage(res.error || "Gagal masuk. Periksa kembali username dan password.");
           return;
         }
-        router.push(res.redirectUrl || nextPath);
-        router.refresh();
+        window.location.href = res.redirectUrl || nextPath;
       } catch (err: unknown) {
         setErrorMessage(err instanceof Error ? err.message : "Terjadi kesalahan koneksi.");
       }

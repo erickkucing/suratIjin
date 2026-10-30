@@ -38,6 +38,13 @@ export const PARENT_COOKIE_PREFIX = "parent_access_";
 export function resolveCookieSecurity(
   requestOrHeaders?: Headers | Request | { get: (name: string) => string | null } | null
 ): boolean {
+  if (process.env.COOKIE_SECURE === "true") {
+    return true;
+  }
+  if (process.env.COOKIE_SECURE === "false") {
+    return false;
+  }
+
   if (requestOrHeaders) {
     let headerObj: { get: (name: string) => string | null } | null = null;
 
@@ -57,16 +64,18 @@ export function resolveCookieSecurity(
         if (primaryProto === "https") {
           return true;
         }
+        if (primaryProto === "http") {
+          return false;
+        }
       }
     }
   }
 
-  if (process.env.COOKIE_SECURE === "true") {
-    return true;
-  }
-
   if (process.env.NEXT_PUBLIC_APP_URL?.startsWith("https://") === true) {
     return true;
+  }
+  if (process.env.NEXT_PUBLIC_APP_URL?.startsWith("http://") === true) {
+    return false;
   }
 
   return process.env.NODE_ENV === "production";

@@ -382,7 +382,19 @@ for ((j=1; j<=20; j++)); do
 done
 
 if [ "$OCR_PASSED" = true ]; then
+    OCR_HW_INFO=$(python3 -c '
+import sys, json
+try:
+    d = json.loads(sys.argv[1])
+    dev = d.get("device", "cpu").upper()
+    name = d.get("device_name", "CPU")
+    cuda = "Tersedia" if d.get("cuda_available") else "Tidak Tersedia"
+    print(f"{dev} ({name}) | Akselerasi CUDA: {cuda}")
+except Exception:
+    print("CPU")
+' "$(curl -s "$OCR_HEALTH_URL" || true)" 2>/dev/null || echo "CPU")
     log_success "OCR microservice aktif dan merespons sehat (HTTP 200)."
+    log_info "Akselerasi Perangkat Keras OCR: ${OCR_HW_INFO}"
 else
     log_warn "OCR microservice merespons HTTP ${OCR_CODE:-gagal}, periksa: journalctl -u ${OCR_SERVICE_NAME} -n 25 --no-pager"
 fi
@@ -474,6 +486,6 @@ log_success "DEPLOYMENT SELESAI & SUKSES!"
 log_success "Lokasi Instalasi: ${APP_DIR}"
 log_success "Service User: ${APP_USER}:${APP_GROUP}"
 log_success "Aplikasi Surat Izin aktif pada: http://localhost:${PORT} (${MODE_LABEL})"
-log_success "Service OCR aktif pada: http://127.0.0.1:8001 (Status: OK)"
+log_success "Service OCR aktif pada: http://127.0.0.1:8001 (Status: OK | Akselerasi: ${OCR_HW_INFO:-CPU})"
 log_info "Catatan: Integrasi 9router AI secara default nonaktif (mode OCR mandiri aktif)."
 echo "=============================================================================="
