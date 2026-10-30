@@ -27,7 +27,7 @@ log_error() {
     echo -e "${COLOR_ERROR}[$(date +'%Y-%m-%d %H:%M:%S')] [ERROR]${COLOR_RESET} $1" >&2
 }
 
-APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+APP_DIR="$(readlink -f "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)")"
 SERVICE_FILE="/etc/systemd/system/surat-ijin.service"
 
 if [ ! -d "$APP_DIR" ]; then
@@ -36,6 +36,11 @@ if [ ! -d "$APP_DIR" ]; then
 fi
 
 cd "$APP_DIR"
+
+# Pastikan git safe.directory diizinkan untuk direktori instalasi
+if [ -d "$APP_DIR/.git" ]; then
+    git config --global --add safe.directory "$APP_DIR" 2>/dev/null || true
+fi
 
 # 1. Determine Target Mode & Custom Port
 EXPLICIT_MODE="${1:-}"

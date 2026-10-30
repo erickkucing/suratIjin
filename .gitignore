@@ -36,4 +36,6 @@ __pycache__/
 
 dev.db
 .agents/
+.paddleocr/
+.npm/
 

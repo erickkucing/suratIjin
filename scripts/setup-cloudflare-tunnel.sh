@@ -34,7 +34,7 @@ if [ "${EUID:-$(id -u)}" -ne 0 ]; then
     exit 1
 fi
 
-APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+APP_DIR="$(readlink -f "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)")"
 cd "$APP_DIR"
 
 # 2. Detect Local Next.js Backend Port

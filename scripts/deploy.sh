@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Deploy Script: Surat Ijin Next.js (Development Port 3001 / Production Port 80)
+# Deploy Script: Surat Ijin Next.js
+# Production Location: /opt/surat-ijin
+# Dedicated System User: suratijin (Group: suratijin, Supplementary: www-data)
 # Hands-Free, Automated Dependency Provisioning, OCR & Database Self-Healing
 # ==============================================================================
 set -euo pipefail
@@ -30,12 +32,62 @@ log_error() {
 
 # 1. Root Privileges Check
 if [ "${EUID:-$(id -u)}" -ne 0 ]; then
-    log_error "Skrip deployment memerlukan hak akses root. Jalankan dengan sudo atau sebagai root."
+    log_error "Skrip deployment memerlukan hak akses root/sudo (untuk membuat user sistem, konfigurasi systemd, dan folder /opt)."
+    log_info "Silakan jalankan kembali dengan: sudo ./scripts/deploy.sh"
     exit 1
 fi
 
-# 2. Determine App Directory & Target Mode
-APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# 2. Permanent Move to /opt/surat-ijin
+CANONICAL_APP_DIR="/opt/surat-ijin"
+SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Resolve symlinks to find real source path
+REAL_SOURCE_DIR="$(readlink -f "$SOURCE_DIR")"
+REAL_CANONICAL_DIR="$(readlink -f "$CANONICAL_APP_DIR" 2>/dev/null || echo "$CANONICAL_APP_DIR")"
+
+if [ "$REAL_SOURCE_DIR" != "$REAL_CANONICAL_DIR" ]; then
+    log_info "Memindahkan file proyek ke folder produksi resmi: ${CANONICAL_APP_DIR}..."
+    mkdir -p /opt
+    
+    if [ -d "$CANONICAL_APP_DIR" ]; then
+        log_info "Menyinkronkan file ke ${CANONICAL_APP_DIR}..."
+        cp -aT "$SOURCE_DIR" "$CANONICAL_APP_DIR"
+    else
+        log_info "Memindahkan direktori proyek secara permanen ke ${CANONICAL_APP_DIR}..."
+        mv "$SOURCE_DIR" "$CANONICAL_APP_DIR"
+        # Buat symlink di lokasi lama agar script / workspace lama tetap terhubung tanpa galat
+        ln -sf "$CANONICAL_APP_DIR" "$SOURCE_DIR"
+    fi
+    
+    log_success "Berkas proyek kini berada di ${CANONICAL_APP_DIR}."
+    log_info "Melanjutkan eksekusi deployment langsung dari ${CANONICAL_APP_DIR}..."
+    exec "${CANONICAL_APP_DIR}/scripts/deploy.sh" "$@"
+fi
+
+APP_DIR="$CANONICAL_APP_DIR"
+cd "$APP_DIR"
+
+# Pastikan git safe.directory diizinkan untuk direktori instalasi
+if [ -d "$APP_DIR/.git" ]; then
+    git config --global --add safe.directory "$APP_DIR" 2>/dev/null || true
+fi
+
+# 3. Create Dedicated System User 'suratijin'
+APP_USER="suratijin"
+APP_GROUP="suratijin"
+
+if ! id -u "$APP_USER" >/dev/null 2>&1; then
+    log_info "Membuat user sistem khusus '${APP_USER}'..."
+    groupadd -r "$APP_GROUP" 2>/dev/null || true
+    useradd -r -g "$APP_GROUP" -G www-data -d "$APP_DIR" -s /usr/sbin/nologin -c "Surat Ijin App Service User" "$APP_USER"
+    log_success "User sistem '${APP_USER}' berhasil dibuat."
+else
+    # Pastikan grup tambahan www-data terpasang
+    usermod -a -G www-data "$APP_USER" 2>/dev/null || true
+    log_info "User sistem '${APP_USER}' sudah tersedia."
+fi
+
+# 4. Determine Target Mode & Port
 SERVICE_NAME="surat-ijin"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 
@@ -66,10 +118,9 @@ if [ -n "$CUSTOM_PORT" ]; then
 fi
 
 log_info "Memulai deployment aplikasi Surat Ijin: ${MODE_LABEL}"
-log_info "Direktori aplikasi: ${APP_DIR}"
-cd "$APP_DIR"
+log_info "Direktori aplikasi: ${APP_DIR} | User: ${APP_USER}:${APP_GROUP}"
 
-# 3. Automated OS System Packages Check & Installation (Debian/Ubuntu apt)
+# 5. Automated OS System Packages Check & Installation (Debian/Ubuntu apt)
 log_info "Memeriksa kelengkapan paket sistem operasi (OS dependencies)..."
 NEEDED_PKGS=()
 
@@ -119,7 +170,7 @@ else
     log_success "Seluruh paket sistem operasi yang dibutuhkan telah tersedia."
 fi
 
-# 4. Tooling Verification & Automated Node.js v20+ Installation
+# 6. Tooling Verification & Automated Node.js v20+ Installation
 if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
     log_info "Node.js atau npm tidak ditemukan. Memasang Node.js v20 LTS otomatis..."
     export DEBIAN_FRONTEND=noninteractive
@@ -151,7 +202,7 @@ NPM_VERSION=$(npm -v)
 PYTHON_VERSION=$(python3 --version 2>/dev/null || echo "Tidak terpasang")
 log_info "Node.js: ${NODE_VERSION} | npm: ${NPM_VERSION} | Python: ${PYTHON_VERSION}"
 
-# 5. Environment File (.env) & Storage Directory Self-Healing
+# 7. Environment File (.env) & Storage Directory Self-Healing
 if [ ! -f "${APP_DIR}/.env" ]; then
     if [ -f "${APP_DIR}/.env.example" ]; then
         log_info "File .env tidak ditemukan. Menyalin dari .env.example..."
@@ -178,10 +229,21 @@ fi
 
 # Ensure storage directory exists with proper permissions
 mkdir -p "${APP_DIR}/storage/uploads"
-chmod 755 "${APP_DIR}/storage/uploads"
+chmod 775 "${APP_DIR}/storage/uploads"
 log_success "Direktori penyimpanan arsip (${APP_DIR}/storage/uploads) siap."
 
-# 6. Database Service & Schema/Admin Initialization
+# 8. Setup PaddleOCR Cache Directory for Non-Root User
+PADDLE_CACHE_DIR="${APP_DIR}/.paddleocr"
+mkdir -p "$PADDLE_CACHE_DIR"
+
+# Migrasikan model yang sudah ada di /root/.paddleocr agar tidak download ulang
+if [ -d "/root/.paddleocr/whl" ] && [ ! -d "${PADDLE_CACHE_DIR}/whl" ]; then
+    log_info "Memigrasikan cache model PaddleOCR dari /root/.paddleocr ke ${PADDLE_CACHE_DIR}..."
+    cp -a /root/.paddleocr/. "${PADDLE_CACHE_DIR}/" || true
+    log_success "Cache model PaddleOCR berhasil dimigrasikan."
+fi
+
+# 9. Database Service & Schema/Admin Initialization
 log_info "Memeriksa service MariaDB / MySQL..."
 systemctl start mariadb 2>/dev/null || systemctl start mysql 2>/dev/null || true
 systemctl enable mariadb --quiet 2>/dev/null || systemctl enable mysql --quiet 2>/dev/null || true
@@ -191,7 +253,7 @@ if command -v mysql >/dev/null 2>&1; then
     mysql -e "CREATE DATABASE IF NOT EXISTS \`db_suratizin\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null || true
 fi
 
-# 7. Node.js Dependency Installation
+# 10. Node.js Dependency Installation
 log_info "Menginstal dan menyelaraskan dependencies Node.js (npm install)..."
 npm install --prefer-offline --no-audit --no-fund
 log_success "Dependencies Node.js berhasil terpasang."
@@ -208,7 +270,7 @@ else
     fi
 fi
 
-# 8. Setup & Update Python OCR Microservice
+# 11. Setup & Update Python OCR Microservice
 OCR_DIR="${APP_DIR}/services/ocr-service"
 OCR_VENV="${OCR_DIR}/venv"
 OCR_SERVICE_NAME="surat-ijin-ocr"
@@ -221,26 +283,13 @@ if [ -d "$OCR_DIR" ] && command -v python3 >/dev/null 2>&1; then
         python3 -m venv "$OCR_VENV"
     fi
 
-    log_info "Memperbarui pip..."
+    log_info "Memperbarui pip dan memasang modul requirements.txt..."
     "$OCR_VENV/bin/pip" install --quiet --upgrade pip
-
-    if command -v nvidia-smi >/dev/null 2>&1 && [ -f "${OCR_DIR}/requirements-gpu.txt" ]; then
-        log_info "NVIDIA GPU terdeteksi di sistem host. Memasang dependensi GPU (requirements-gpu.txt)..."
-        if "$OCR_VENV/bin/pip" install --quiet -r "${OCR_DIR}/requirements-gpu.txt"; then
-            log_success "Dependensi Python OCR versi GPU berhasil dipasang."
-        else
-            log_warn "Pemasangan dependensi GPU gagal. Melakukan fallback otomatis ke dependensi CPU (requirements.txt)..."
-            "$OCR_VENV/bin/pip" install --quiet -r "${OCR_DIR}/requirements.txt"
-            log_success "Dependensi Python OCR versi CPU berhasil dipasang sebagai fallback."
-        fi
-    else
-        log_info "Memasang dependensi CPU (requirements.txt)..."
-        "$OCR_VENV/bin/pip" install --quiet -r "${OCR_DIR}/requirements.txt"
-        log_success "Dependensi Python OCR terpasang dengan sukses."
-    fi
+    "$OCR_VENV/bin/pip" install --quiet -r "${OCR_DIR}/requirements.txt"
+    log_success "Dependensi Python OCR terpasang dengan sukses."
 
     log_info "Melakukan pra-inisialisasi (pre-warming) model PaddleOCR ke cache lokal..."
-    "$OCR_VENV/bin/python" -c "from paddleocr import PaddleOCR; PaddleOCR(use_angle_cls=False, lang='en', show_log=False)" 2>/dev/null || log_warn "Pre-warming selesai dengan catatan (akan dimuat otomatis saat service aktif)."
+    HOME="${APP_DIR}" PADDLE_HOME="${PADDLE_CACHE_DIR}" "$OCR_VENV/bin/python" -c "from paddleocr import PaddleOCR; PaddleOCR(use_angle_cls=False, lang='en', show_log=False)" 2>/dev/null || log_warn "Pre-warming selesai dengan catatan (akan dimuat otomatis saat service aktif)."
 
     log_info "Memperbarui konfigurasi systemd OCR service (${OCR_SERVICE_FILE})..."
     cat <<EOF > "$OCR_SERVICE_FILE"
@@ -250,9 +299,12 @@ After=network.target
 
 [Service]
 Type=simple
-User=root
+User=${APP_USER}
+Group=${APP_GROUP}
 WorkingDirectory=${OCR_DIR}
 Environment=PYTHONUNBUFFERED=1
+Environment=HOME=${APP_DIR}
+Environment=PADDLE_HOME=${PADDLE_CACHE_DIR}
 ExecStart=${OCR_VENV}/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8001 --workers 1
 Restart=always
 RestartSec=3s
@@ -265,38 +317,44 @@ EOF
 
     systemctl daemon-reload
     systemctl enable "$OCR_SERVICE_NAME" --quiet
-    systemctl restart "$OCR_SERVICE_NAME"
-    log_success "Service ${OCR_SERVICE_NAME} berhasil dikonfigurasi dan direstart."
-
-    # OCR Microservice Healthcheck with retry loop
-    log_info "Menjalankan healthcheck verifikasi kesiapan service OCR pada port 8001..."
-    OCR_HEALTH_URL="http://127.0.0.1:8001/health"
-    OCR_PASSED=false
-    for ((j=1; j<=20; j++)); do
-        OCR_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$OCR_HEALTH_URL" || true)
-        if [ "$OCR_CODE" = "200" ]; then
-            OCR_PASSED=true
-            break
-        fi
-        sleep 2
-    done
-
-    if [ "$OCR_PASSED" = true ]; then
-        OCR_HEALTH_DATA=$(curl -s "$OCR_HEALTH_URL" || true)
-        ACTIVE_DEVICE=$(echo "$OCR_HEALTH_DATA" | grep -o '"device":"[^"]*"' | cut -d'"' -f4 || echo "unknown")
-        DEVICE_NAME=$(echo "$OCR_HEALTH_DATA" | grep -o '"device_name":"[^"]*"' | cut -d'"' -f4 || echo "")
-        log_success "OCR microservice aktif (HTTP 200). Mode perangkat: ${ACTIVE_DEVICE^^} (${DEVICE_NAME:-N/A})."
-    else
-        log_warn "OCR microservice merespons HTTP ${OCR_CODE:-gagal}, periksa: systemctl status ${OCR_SERVICE_NAME}"
-    fi
 fi
 
-# 9. Next.js Production Build
+# 12. Next.js Production Build
 log_info "Mengompilasi aplikasi Next.js (npm run build)..."
 npm run build
 log_success "Kompilasi build Next.js selesai tanpa error."
 
-# 10. Port 80 & Nginx Service Management
+# 13. Apply Permissions & Ownership (Safe for root and non-root deployments)
+log_info "Menyetel kepemilikan berkas ke user '${APP_USER}:${APP_GROUP}' dan mengamankan izin..."
+chown -R "${APP_USER}:${APP_GROUP}" "$APP_DIR"
+chmod -R u=rwX,go=rX "$APP_DIR"
+chmod 775 "${APP_DIR}/storage/uploads"
+chmod 600 "${APP_DIR}/.env"
+chmod -R 775 "$PADDLE_CACHE_DIR"
+chmod +x "${APP_DIR}/scripts/"*.sh 2>/dev/null || true
+log_success "Hak akses berkas terverifikasi aman."
+
+# Restart OCR Service under dedicated user
+systemctl restart "$OCR_SERVICE_NAME"
+log_info "Menjalankan healthcheck verifikasi kesiapan service OCR pada port 8001..."
+OCR_HEALTH_URL="http://127.0.0.1:8001/health"
+OCR_PASSED=false
+for ((j=1; j<=20; j++)); do
+    OCR_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$OCR_HEALTH_URL" || true)
+    if [ "$OCR_CODE" = "200" ]; then
+        OCR_PASSED=true
+        break
+    fi
+    sleep 2
+done
+
+if [ "$OCR_PASSED" = true ]; then
+    log_success "OCR microservice aktif dan merespons sehat (HTTP 200)."
+else
+    log_warn "OCR microservice merespons HTTP ${OCR_CODE:-gagal}, periksa: journalctl -u ${OCR_SERVICE_NAME} -n 25 --no-pager"
+fi
+
+# 14. Port 80 & Nginx Service Management
 if [ "$IS_PROD" = true ]; then
     log_info "Mode Production aktif: Memeriksa konflik port 80 dengan Nginx..."
     if [ -f "/etc/nginx/sites-enabled/suratijin.conf" ]; then
@@ -315,7 +373,7 @@ else
     fi
 fi
 
-# 11. Systemd Service Unit Configuration (Next.js Application)
+# 15. Systemd Service Unit Configuration (Next.js Application)
 log_info "Memperbarui konfigurasi systemd service (${SERVICE_FILE})..."
 cat <<EOF > "$SERVICE_FILE"
 [Unit]
@@ -324,16 +382,20 @@ After=network.target mariadb.service mysql.service
 
 [Service]
 Type=simple
-User=root
+User=${APP_USER}
+Group=${APP_GROUP}
 WorkingDirectory=${APP_DIR}
 Environment=NODE_ENV=production
 Environment=PORT=${PORT}
+Environment=HOME=${APP_DIR}
 EnvironmentFile=${APP_DIR}/.env
-ExecStart=/usr/bin/npm start -- -H 127.0.0.1 -p ${PORT}
+ExecStart=/usr/bin/npm start -- -H 0.0.0.0 -p ${PORT}
 Restart=always
 RestartSec=3s
 KillMode=mixed
 TimeoutStopSec=10
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 
 [Install]
 WantedBy=multi-user.target
@@ -343,9 +405,9 @@ log_info "Memuat ulang konfigurasi systemd dan merestart service ${SERVICE_NAME}
 systemctl daemon-reload
 systemctl enable "$SERVICE_NAME" --quiet
 systemctl restart "$SERVICE_NAME"
-log_success "Service ${SERVICE_NAME} berhasil direstart."
+log_success "Service ${SERVICE_NAME} berhasil direstart di bawah user '${APP_USER}'."
 
-# 12. Post-Deployment Healthcheck (Next.js Application)
+# 16. Post-Deployment Healthcheck (Next.js Application)
 log_info "Menjalankan healthcheck verifikasi respon HTTP aplikasi pada port ${PORT}..."
 HEALTHCHECK_URL="http://127.0.0.1:${PORT}/login"
 MAX_RETRIES=25
@@ -371,6 +433,8 @@ fi
 
 echo "=============================================================================="
 log_success "DEPLOYMENT SELESAI & SUKSES!"
+log_success "Lokasi Instalasi: ${APP_DIR}"
+log_success "Service User: ${APP_USER}:${APP_GROUP}"
 log_success "Aplikasi Surat Izin aktif pada: http://localhost:${PORT} (${MODE_LABEL})"
 log_success "Service OCR aktif pada: http://127.0.0.1:8001 (Status: OK)"
 log_info "Catatan: Integrasi 9router AI secara default nonaktif (mode OCR mandiri aktif)."
