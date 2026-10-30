@@ -411,6 +411,33 @@ if [ -d "$OCR_DIR" ] && command -v python3 >/dev/null 2>&1; then
     fi
 
     if [ "$HAS_NVIDIA_GPU" = true ]; then
+        # Deteksi versi CUDA driver
+        CUDA_DRIVER_VER=$(nvidia-smi 2>/dev/null | grep -o "CUDA Version: [0-9]*\.[0-9]*" | awk '{print $3}' || echo "12.0")
+        CUDA_MAJOR=$(echo "$CUDA_DRIVER_VER" | cut -d. -f1)
+        log_info "Terdeteksi driver NVIDIA dengan dukungan CUDA ${CUDA_DRIVER_VER} (Major: ${CUDA_MAJOR})."
+
+        # Pastikan pustaka cuDNN 8.9 dari NVIDIA terpasang (wajib untuk Paddle dynamic loader libcudnn.so)
+        if [ "$CUDA_MAJOR" = "11" ]; then
+            log_info "Memastikan pustaka cuDNN 8.9 (nvidia-cudnn-cu11) terpasang..."
+            "$OCR_VENV/bin/pip" install --quiet "nvidia-cudnn-cu11==8.9.7.29" || true
+        else
+            log_info "Memastikan pustaka cuDNN 8.9 (nvidia-cudnn-cu12) terpasang..."
+            "$OCR_VENV/bin/pip" install --quiet "nvidia-cudnn-cu12==8.9.7.29" || true
+        fi
+
+        # Registrasi path library nvidia pip ke konfigurasi dynamic linker sistem (/etc/ld.so.conf.d/)
+        NVIDIA_PIP_CONF="/etc/ld.so.conf.d/nvidia-paddle-cudnn.conf"
+        rm -f "$NVIDIA_PIP_CONF"
+        find "$OCR_VENV" -type d -path "*/nvidia/*/lib" 2>/dev/null | sort -u | while read -r lib_path; do
+            if [ -n "$lib_path" ]; then
+                echo "$lib_path" >> "$NVIDIA_PIP_CONF"
+            fi
+        done
+        if [ -f "$NVIDIA_PIP_CONF" ]; then
+            ldconfig 2>/dev/null || true
+            log_success "Path runtime cuDNN & CUDA libraries terdaftar di ldconfig sistem."
+        fi
+
         # Cek apakah paddle sudah compiled with CUDA
         PADDLE_CUDA_OK=false
         if "$OCR_VENV/bin/python" -c "import paddle; assert paddle.is_compiled_with_cuda()" 2>/dev/null; then
@@ -434,6 +461,15 @@ if [ -d "$OCR_DIR" ] && command -v python3 >/dev/null 2>&1; then
             fi
         else
             log_success "paddlepaddle-gpu dengan akselerasi CUDA sudah siap."
+        fi
+
+        # Verifikasi runtime GPU dan cuDNN
+        log_info "Memverifikasi runtime GPU dan cuDNN PaddleOCR..."
+        if "$OCR_VENV/bin/python" -c "import paddle; paddle.device.set_device('gpu:0')" 2>/dev/null; then
+            log_success "Akselerasi GPU dan cuDNN berhasil divalidasi tanpa galat."
+        else
+            log_warn "Uji set_device('gpu:0') mengembalikan catatan (memeriksa detail):"
+            "$OCR_VENV/bin/python" -c "import paddle; paddle.device.set_device('gpu:0')" 2>&1 || true
         fi
     else
         # Jika tidak ada GPU, pastikan paddlepaddle CPU terpasang
@@ -462,6 +498,7 @@ WorkingDirectory=${OCR_DIR}
 Environment=PYTHONUNBUFFERED=1
 Environment=HOME=${APP_DIR}
 Environment=PADDLE_HOME=${PADDLE_CACHE_DIR}
+Environment=LD_LIBRARY_PATH=/usr/local/cuda/lib64:${OCR_VENV}/lib/python3.11/site-packages/nvidia/cudnn/lib:${OCR_VENV}/lib/python3.12/site-packages/nvidia/cudnn/lib:${OCR_VENV}/lib/python3.10/site-packages/nvidia/cudnn/lib:\${LD_LIBRARY_PATH}
 EnvironmentFile=-${APP_DIR}/.env
 ExecStart=${OCR_VENV}/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8001 --workers 1
 Restart=always
