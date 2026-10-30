@@ -190,7 +190,21 @@ initDatabase()
     console.log("Inisialisasi database dan verifikasi akun berhasil!");
     process.exit(0);
   })
-  .catch((err) => {
+  .catch((err: any) => {
     console.error("Gagal menginisialisasi database:", err);
+    if (
+      err &&
+      (err.code === "ER_ACCESS_DENIED_ERROR" ||
+        err.code === "ER_ACCESS_DENIED_NO_PASSWORD_ERROR" ||
+        err.errno === 1698 ||
+        err.errno === 1045)
+    ) {
+      console.error("\n[PETUNJUK PERBAIKAN]");
+      console.error("Kredensial database di .env ditolak oleh MariaDB/MySQL.");
+      console.error("Jalankan skrip deploy dengan hak akses root/sudo agar user dan database dibuat otomatis:");
+      console.error("  sudo ./scripts/deploy.sh");
+      console.error("Atau jalankan skrip provisioning database:");
+      console.error("  sudo node ./scripts/provision-db.mjs");
+    }
     process.exit(1);
   });

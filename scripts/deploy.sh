@@ -248,9 +248,10 @@ log_info "Memeriksa service MariaDB / MySQL..."
 systemctl start mariadb 2>/dev/null || systemctl start mysql 2>/dev/null || true
 systemctl enable mariadb --quiet 2>/dev/null || systemctl enable mysql --quiet 2>/dev/null || true
 
-# Auto-create database if mysql client is available
-if command -v mysql >/dev/null 2>&1; then
-    mysql -e "CREATE DATABASE IF NOT EXISTS \`db_suratizin\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null || true
+# Auto-provisioning database & kredensial user MariaDB (mengatasi error ER_ACCESS_DENIED_NO_PASSWORD_ERROR)
+if [ -f "${APP_DIR}/scripts/provision-db.mjs" ]; then
+    log_info "Menjalankan provisioning database & kredensial user MariaDB..."
+    node "${APP_DIR}/scripts/provision-db.mjs" || log_warn "Provisioning database otomatis tidak dapat diselesaikan."
 fi
 
 # 10. Node.js Dependency Installation
