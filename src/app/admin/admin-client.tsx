@@ -1638,10 +1638,10 @@ export function AdminClient({
               <div className="border-b border-[var(--border)] pb-3">
                 <h2 className="text-base font-bold font-heading text-[var(--ink)] flex items-center gap-2">
                   <ImageIcon className="w-5 h-5 text-[var(--primary)]" />
-                  <span>Logo Sekolah &amp; Favicon Browser</span>
+                  <span>Logo Sekolah &amp; Ikon Aplikasi (PWA / Favicon)</span>
                 </h2>
                 <p className="text-xs text-[var(--ink-muted)] mt-0.5">
-                  Logo ini otomatis tampil di header navigasi, halaman login, dan langsung menjadi favicon tab browser.
+                  Logo ini otomatis tampil di header navigasi, halaman login, favicon browser, dan ikon aplikasi saat <strong>Add to Home Screen</strong> di ponsel Android maupun iPhone.
                 </p>
               </div>
 
@@ -1685,7 +1685,7 @@ export function AdminClient({
                         className="w-full text-xs text-[var(--ink)] file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-[var(--primary-light)] file:text-[var(--primary)] hover:file:bg-[var(--primary)] hover:file:text-white file:transition-colors file:cursor-pointer cursor-pointer border border-[var(--border)] rounded-xl p-2 bg-[var(--surface)]"
                       />
                       <p className="text-[11px] text-[var(--ink-muted)] mt-1">
-                        Format: PNG, JPG, WEBP, atau SVG. Ukuran maksimal 2MB. Otomatis dikonversi dan disinkronkan ke favicon browser.
+                        Format: PNG, JPG, WEBP, atau SVG. Ukuran maksimal 2MB. Otomatis dikonversi dan disinkronkan ke favicon browser dan ikon aplikasi ponsel (Android &amp; iOS PWA).
                       </p>
                     </div>
 

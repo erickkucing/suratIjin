@@ -19,19 +19,29 @@ const plusJakartaSans = Plus_Jakarta_Sans({
 
 export async function generateMetadata(): Promise<Metadata> {
   const settings = await getSystemSettings();
+  const appName = settings.appName || "Sistem Surat Izin & Ketidakhadiran Siswa";
+  const shortName = settings.appName || "Surat Izin";
+
+  let appleIcon = "/icons/icon-192x192.png";
+  if (settings.logoUrl) {
+    appleIcon = /logo-(\d+)\.png$/.test(settings.logoUrl)
+      ? settings.logoUrl.replace(/logo-(\d+)\.png$/, "apple-icon-$1.png")
+      : settings.logoUrl;
+  }
+
   return {
-    title: settings.appName || "Sistem Surat Izin & Ketidakhadiran Siswa",
+    title: appName,
     description:
       "Arsip surat izin, sakit, dan rekap ketidakhadiran siswa untuk Wali Kelas dan Wali Murid",
     manifest: "/manifest.webmanifest",
     appleWebApp: {
       capable: true,
       statusBarStyle: "default",
-      title: "Surat Izin",
+      title: shortName,
     },
     icons: {
       icon: settings.logoUrl || "/icons/icon-192x192.png",
-      apple: "/icons/icon-192x192.png",
+      apple: appleIcon,
     },
   };
 }
@@ -51,6 +61,11 @@ export default async function RootLayout({
   children: React.ReactNode;
 }) {
   const settings = await getSystemSettings();
+  const appleIcon = settings.logoUrl
+    ? (/logo-(\d+)\.png$/.test(settings.logoUrl)
+      ? settings.logoUrl.replace(/logo-(\d+)\.png$/, "apple-icon-$1.png")
+      : settings.logoUrl)
+    : "/icons/icon-192x192.png";
 
   return (
     <html
@@ -63,7 +78,10 @@ export default async function RootLayout({
       <head>
         <meta name="color-scheme" content="light dark" />
         {settings.logoUrl && (
-          <link rel="icon" href={settings.logoUrl} key="dynamic-favicon" />
+          <>
+            <link rel="icon" href={settings.logoUrl} key="dynamic-favicon" />
+            <link rel="apple-touch-icon" href={appleIcon} key="dynamic-apple-touch-icon" />
+          </>
         )}
         <style
           dangerouslySetInnerHTML={{

@@ -4,11 +4,16 @@ import {
   testAiConnectionAction,
   updateSystemIdentityAction,
   updateFooterTextAction,
+  uploadLogoAction,
+  removeLogoAction,
 } from "../system-settings";
 import { db } from "@/db";
 import { users, systemSettings } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import * as authModule from "@/lib/auth";
+import fs from "fs";
+import path from "path";
+import sharp from "sharp";
 
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
@@ -192,6 +197,86 @@ describe("System Identity & Footer Actions", () => {
 
     expect(res.success).toBe(true);
     expect(res.footerText).toBe("Sistem Surat Izin & Ketidakhadiran Siswa.");
+
+    spy.mockRestore();
+  });
+
+  it("should generate PWA icons (192, 512, apple-icon) on uploadLogoAction and clean up on removeLogoAction", async () => {
+    const adminUser = await db.query.users.findFirst({
+      where: eq(users.role, "superadmin"),
+    });
+    if (!adminUser) throw new Error("Superadmin not found");
+
+    const spy = vi.spyOn(authModule, "getCurrentUser").mockResolvedValue({
+      id: adminUser.id,
+      username: adminUser.username,
+      displayName: adminUser.displayName,
+      role: "superadmin",
+    } as any);
+
+    // Create a 100x100 dummy PNG buffer
+    const testPngBuffer = await sharp({
+      create: {
+        width: 100,
+        height: 100,
+        channels: 4,
+        background: { r: 181, g: 72, b: 38, alpha: 1 },
+      },
+    })
+      .png()
+      .toBuffer();
+
+    const file = new File([testPngBuffer], "test-logo.png", { type: "image/png" });
+    const formData = new FormData();
+    formData.append("logo", file);
+
+    const uploadRes = await uploadLogoAction(formData);
+    expect(uploadRes.success).toBe(true);
+    expect(uploadRes.logoUrl).toBeDefined();
+
+    const storageBase = process.env.STORAGE_PATH || "./storage/uploads";
+    const systemDir = path.resolve(storageBase, "system");
+
+    const match = uploadRes.logoUrl?.match(/logo-(\d+)\.png$/);
+    expect(match).not.toBeNull();
+    const ts = match![1];
+
+    const logoPath = path.resolve(systemDir, `logo-${ts}.png`);
+    const icon192Path = path.resolve(systemDir, `icon-192-${ts}.png`);
+    const icon512Path = path.resolve(systemDir, `icon-512-${ts}.png`);
+    const appleIconPath = path.resolve(systemDir, `apple-icon-${ts}.png`);
+
+    expect(fs.existsSync(logoPath)).toBe(true);
+    expect(fs.existsSync(icon192Path)).toBe(true);
+    expect(fs.existsSync(icon512Path)).toBe(true);
+    expect(fs.existsSync(appleIconPath)).toBe(true);
+
+    // Verify dimensions of generated icons
+    const icon192Meta = await sharp(icon192Path).metadata();
+    expect(icon192Meta.width).toBe(192);
+    expect(icon192Meta.height).toBe(192);
+
+    const icon512Meta = await sharp(icon512Path).metadata();
+    expect(icon512Meta.width).toBe(512);
+    expect(icon512Meta.height).toBe(512);
+
+    const appleIconMeta = await sharp(appleIconPath).metadata();
+    expect(appleIconMeta.width).toBe(180);
+    expect(appleIconMeta.height).toBe(180);
+
+    // Test removeLogoAction
+    const removeRes = await removeLogoAction();
+    expect(removeRes.success).toBe(true);
+
+    const updatedRow = await db.query.systemSettings.findFirst({
+      where: eq(systemSettings.id, 1),
+    });
+    expect(updatedRow?.logoUrl).toBeNull();
+
+    // Clean up created test files
+    [logoPath, icon192Path, icon512Path, appleIconPath].forEach((p) => {
+      if (fs.existsSync(p)) fs.unlinkSync(p);
+    });
 
     spy.mockRestore();
   });

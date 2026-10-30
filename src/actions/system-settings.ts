@@ -255,13 +255,46 @@ export async function uploadLogoAction(formData: FormData) {
 
   const timestamp = Date.now();
   const filename = `logo-${timestamp}.png`;
-  const targetPath = path.resolve(systemDir, filename);
+  const icon192Filename = `icon-192-${timestamp}.png`;
+  const icon512Filename = `icon-512-${timestamp}.png`;
+  const appleIconFilename = `apple-icon-${timestamp}.png`;
 
-  // Resize and convert to high quality PNG with sharp
+  const targetPath = path.resolve(systemDir, filename);
+  const icon192Path = path.resolve(systemDir, icon192Filename);
+  const icon512Path = path.resolve(systemDir, icon512Filename);
+  const appleIconPath = path.resolve(systemDir, appleIconFilename);
+
+  // 1. Resize and convert to high quality PNG for navbar/favicon
   await sharp(buffer)
     .resize(256, 256, { fit: "inside", withoutEnlargement: true })
     .png({ quality: 90 })
     .toFile(targetPath);
+
+  // 2. Generate standard PWA icons (transparent background, fit: contain)
+  await sharp(buffer)
+    .resize(192, 192, {
+      fit: "contain",
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    })
+    .png({ quality: 90 })
+    .toFile(icon192Path);
+
+  await sharp(buffer)
+    .resize(512, 512, {
+      fit: "contain",
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    })
+    .png({ quality: 90 })
+    .toFile(icon512Path);
+
+  // 3. Generate Apple Touch Icon (180x180, transparent background, fit: contain)
+  await sharp(buffer)
+    .resize(180, 180, {
+      fit: "contain",
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    })
+    .png({ quality: 90 })
+    .toFile(appleIconPath);
 
   const relativeUrl = `/api/files/system/${filename}`;
 

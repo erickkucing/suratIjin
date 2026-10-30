@@ -78,12 +78,39 @@ export async function GET(
       return new NextResponse("Akses tidak sah", { status: 403 });
     }
 
-    if (!fs.existsSync(fullPath)) {
-      return new NextResponse("File tidak ditemukan", { status: 404 });
-    }
-
-    // Public assets like system logo/favicon
+    // Public assets like system logo/favicon & dynamic PWA icons
     if (relativePath.startsWith("system/")) {
+      if (!fs.existsSync(fullPath)) {
+        // On-demand generation for icon variants if the source logo exists
+        const base = path.basename(fullPath);
+        const iconMatch = base.match(/^(?:icon-(192|512)|apple-icon)-(\d+)\.png$/);
+        if (iconMatch) {
+          const timestamp = iconMatch[2];
+          const isApple = base.startsWith("apple-icon");
+          const size = isApple ? 180 : parseInt(iconMatch[1], 10);
+          const sourceLogoPath = path.resolve(storageBase, "system", `logo-${timestamp}.png`);
+          if (fs.existsSync(sourceLogoPath)) {
+            try {
+              const sharp = (await import("sharp")).default;
+              const sourceBuffer = fs.readFileSync(sourceLogoPath);
+              await sharp(sourceBuffer)
+                .resize(size, size, {
+                  fit: "contain",
+                  background: { r: 0, g: 0, b: 0, alpha: 0 },
+                })
+                .png({ quality: 90 })
+                .toFile(fullPath);
+            } catch {
+              // Ignore failure, will fall through to 404 below
+            }
+          }
+        }
+      }
+
+      if (!fs.existsSync(fullPath)) {
+        return new NextResponse("File tidak ditemukan", { status: 404 });
+      }
+
       const ext = path.extname(fullPath).toLowerCase();
       const contentTypes: Record<string, string> = {
         ".png": "image/png",
@@ -100,6 +127,10 @@ export async function GET(
         contentType,
         "public, max-age=86400, stale-while-revalidate=604800"
       );
+    }
+
+    if (!fs.existsSync(fullPath)) {
+      return new NextResponse("File tidak ditemukan", { status: 404 });
     }
 
     // Authorization logic
