@@ -911,15 +911,11 @@ export function AdminClient({
 
   useEffect(() => {
     if (activeTab === "database" && technicalSubTab === "database" && redisEnabled) {
-      if (isInitialRedisMount.current) {
-        isInitialRedisMount.current = false;
-        checkRedisHealth();
-      } else if (redisHeartbeat.checked) {
-        const interval = setInterval(checkRedisHealth, 15000);
-        return () => clearInterval(interval);
-      }
+      checkRedisHealth();
+      const interval = setInterval(checkRedisHealth, 15000);
+      return () => clearInterval(interval);
     }
-  }, [activeTab, technicalSubTab, redisEnabled, redisHeartbeat.checked]);
+  }, [activeTab, technicalSubTab, redisEnabled]);
 
   const handleToggleRedis = async () => {
     if (togglingRedis) return;
@@ -927,7 +923,6 @@ export function AdminClient({
     setRedisNotice(null);
 
     const nextState = !redisEnabled;
-    isInitialRedisMount.current = false;
     setRedisEnabled(nextState);
     if (nextState) {
       setRedisHeartbeat({ checked: false, isConnected: false });
@@ -980,16 +975,17 @@ export function AdminClient({
     try {
       const res = await testRedisConnectionAction(targetUrl);
       if (res.success && res.connected) {
-        // Auto-save on successful test so settings are never lost
+        // Otomatis aktifkan toggle dan simpan ke database agar status persisten & terhubung
+        setRedisEnabled(true);
         await updateRedisSettingsAction({
-          redisEnabled,
+          redisEnabled: true,
           redisUrl: targetUrl,
         });
 
         setRedisNotice({
           type: "success",
           title: `Koneksi Berhasil (${res.latencyMs} ms)`,
-          message: "Server Redis aktif dan konfigurasi berhasil disimpan otomatis.",
+          message: "Server Redis aktif, terhubung, dan konfigurasi berhasil disimpan otomatis.",
         });
         setRedisHeartbeat({
           checked: true,
@@ -1027,8 +1023,10 @@ export function AdminClient({
     const targetUrl = buildRedisUrl(redisHost, redisPort, redisPassword);
 
     try {
+      // Otomatis aktifkan toggle dan simpan ke database agar konfigurasi langsung aktif & persisten
+      setRedisEnabled(true);
       const res = await updateRedisSettingsAction({
-        redisEnabled,
+        redisEnabled: true,
         redisUrl: targetUrl,
       });
 
@@ -1036,11 +1034,9 @@ export function AdminClient({
         setRedisNotice({
           type: "success",
           title: "Pengaturan Tersimpan",
-          message: "Konfigurasi Redis berhasil disimpan ke database.",
+          message: "Konfigurasi Redis berhasil disimpan dan diaktifkan.",
         });
-        if (redisEnabled) {
-          checkRedisHealth();
-        }
+        await checkRedisHealth();
         router.refresh();
       } else {
         setRedisNotice({
@@ -1053,7 +1049,7 @@ export function AdminClient({
       setRedisNotice({
         type: "error",
         title: "Gagal Menyimpan",
-        message: err instanceof Error ? err.message : "Terjadi kesalahan saat menyimpan.",
+        message: err instanceof Error ? err.message : "Terjadi kesalahan saat menyimpan konfigurasi.",
       });
     } finally {
       setSavingRedis(false);

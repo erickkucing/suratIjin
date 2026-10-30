@@ -56,7 +56,7 @@ test.describe("07. Redis Features, Admin UI & Performance Suite", () => {
     await expect(page.locator('#redis-password-input')).toBeVisible();
     await expect(page.getByRole("button", { name: "Uji Koneksi", exact: true })).toBeVisible();
     await expect(page.locator('button:has-text("Simpan Pengaturan")')).toBeVisible();
-    await expect(page.locator('text="Siap Diuji"')).toBeVisible();
+    await expect(page.locator('span:text-is("Online"), span:text-is("Siap Diuji")').first()).toBeVisible({ timeout: 5000 });
   });
 
   test("02. Admin UI: Uji Koneksi works and displays realtime status and latency", async ({

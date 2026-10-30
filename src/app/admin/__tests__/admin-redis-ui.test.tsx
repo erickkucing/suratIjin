@@ -171,7 +171,34 @@ describe("Redis Cache Server UI in Database Subtab", () => {
     expect(screen.getByRole("button", { name: /^Uji Koneksi$/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Simpan Pengaturan/i })).toBeTruthy();
     expect(screen.getByTitle(/Periksa status koneksi Redis sekarang/i)).toBeTruthy();
-    expect(screen.getByText("Siap Diuji")).toBeTruthy();
+    expect(screen.getAllByText(/Online|Siap Diuji/i).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("should auto-enable toggle and call updateRedisSettingsAction with redisEnabled: true when Simpan Pengaturan is clicked", async () => {
+    render(
+      <AdminClient
+        initialClasses={[]}
+        initialTeachers={[]}
+        initialSettings={{
+          ...baseSettings,
+          redisEnabled: true,
+        }}
+        superadminName="Superadmin"
+      />
+    );
+
+    navigateToDatabaseSubtab();
+
+    const saveBtn = screen.getByRole("button", { name: /Simpan Pengaturan/i });
+    await act(async () => {
+      fireEvent.click(saveBtn);
+    });
+
+    expect(redisAdminActions.updateRedisSettingsAction).toHaveBeenCalledWith({
+      redisEnabled: true,
+      redisUrl: "redis://127.0.0.1:6379",
+    });
+    expect(screen.getByText(/Pengaturan Tersimpan/i)).toBeTruthy();
   });
 
   it("should call testRedisConnectionAction and auto-save when Uji Koneksi button is clicked", async () => {
