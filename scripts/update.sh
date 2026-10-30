@@ -27,6 +27,65 @@ log_error() {
     echo -e "${COLOR_ERROR}[$(date +'%Y-%m-%d %H:%M:%S')] [ERROR]${COLOR_RESET} $1" >&2
 }
 
+print_git_deploy_summary() {
+    local prev_ref="${1:-}"
+    
+    # Pastikan berada di repositori git
+    if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        return 0
+    fi
+
+    local branch
+    branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "detached")
+    local head_hash
+    head_hash=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+    local full_hash
+    full_hash=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+    local commit_author
+    commit_author=$(git log -1 --format='%an <%ae>' 2>/dev/null || echo "unknown")
+    local commit_date
+    commit_date=$(git log -1 --format='%cd' --date=format:'%Y-%m-%d %H:%M:%S' 2>/dev/null || echo "unknown")
+    local commit_subject
+    commit_subject=$(git log -1 --format='%s' 2>/dev/null || echo "unknown")
+    local commit_body
+    commit_body=$(git log -1 --format='%b' 2>/dev/null || echo "")
+
+    echo "=============================================================================="
+    echo -e "${COLOR_INFO}📌 STATUS DEPLOY GIT & COMMIT AKTIF${COLOR_RESET}"
+    echo "=============================================================================="
+    echo -e "  Cabang (Branch) : ${COLOR_SUCCESS}${branch}${COLOR_RESET}"
+    echo -e "  Commit Hash     : ${COLOR_INFO}${head_hash}${COLOR_RESET} (${full_hash})"
+    echo -e "  Author          : ${commit_author}"
+    echo -e "  Waktu Commit    : ${commit_date}"
+    echo -e "  Pesan Commit    : ${COLOR_SUCCESS}${commit_subject}${COLOR_RESET}"
+    
+    if [ -n "${commit_body// /}" ]; then
+        echo -e "  Deskripsi       :"
+        echo "$commit_body" | sed 's/^/    /'
+    fi
+
+    # Tampilkan daftar commit jika ada commit baru yang ditarik
+    if [ -n "$prev_ref" ] && [ "$prev_ref" != "initial" ] && [ "$prev_ref" != "$full_hash" ]; then
+        local count
+        count=$(git rev-list --count "${prev_ref}..HEAD" 2>/dev/null || echo "0")
+        if [ "$count" -gt 0 ]; then
+            echo "------------------------------------------------------------------------------"
+            echo -e "  ${COLOR_SUCCESS}Daftar Commit yang Baru Diterapkan (${count} commit):${COLOR_RESET}"
+            git log --oneline "${prev_ref}..HEAD" 2>/dev/null | sed 's/^/    * /' || true
+        fi
+    fi
+
+    # Status Working Tree lokal
+    local dirty_count
+    dirty_count=$(git status --porcelain 2>/dev/null | wc -l || echo "0")
+    if [ "$dirty_count" -gt 0 ]; then
+        echo -e "  Working Tree    : ${COLOR_WARN}Terdapat ${dirty_count} file lokal yang dimodifikasi/belum di-commit${COLOR_RESET}"
+    else
+        echo -e "  Working Tree    : ${COLOR_SUCCESS}Bersih (Clean)${COLOR_RESET}"
+    fi
+    echo "=============================================================================="
+}
+
 APP_DIR="$(readlink -f "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)")"
 SERVICE_FILE="/etc/systemd/system/surat-ijin.service"
 
@@ -124,6 +183,7 @@ if [ -n "$CUSTOM_PORT" ]; then
     DEPLOY_ARGS+=("$CUSTOM_PORT")
 fi
 
+export CALLED_FROM_UPDATE=true
 if ! "$DEPLOY_SCRIPT" "${DEPLOY_ARGS[@]}"; then
     log_error "Deployment gagal! Memulai proses rollback ke commit sebelumnya (${PREV_COMMIT:0:7})..."
     if [ "$PREV_COMMIT" != "initial" ] && [ "$HAS_REMOTE" = true ]; then
@@ -148,3 +208,6 @@ fi
 echo "=============================================================================="
 log_success "PROSES AUTO-UPDATE BERHASIL SEPENUHNYA!"
 echo "=============================================================================="
+
+# 5. Display Git Deployment & Commit Status Banner
+print_git_deploy_summary "$PREV_COMMIT"

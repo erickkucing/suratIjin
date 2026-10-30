@@ -49,7 +49,8 @@ export async function generateMetadata(): Promise<Metadata> {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 5,
+  maximumScale: 1,
+  userScalable: false,
   viewportFit: "cover",
   colorScheme: "light dark",
   themeColor: "#B54826",
@@ -90,8 +91,9 @@ export default async function RootLayout({
                 font-family: var(--font-jakarta, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
                 background-color: var(--canvas, #f5efeb);
                 color: var(--ink, #231f1e);
-                overflow-x: hidden;
-                max-width: 100%;
+                overflow-x: clip;
+                max-width: 100vw;
+                width: 100%;
               }
               html.dark, html.dark body {
                 background-color: var(--canvas, #171413);

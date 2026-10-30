@@ -276,7 +276,7 @@ describe("AdminClient Empirical Verification (R1 - R6)", () => {
   // R3: Compact Horizontally Scrollable Dashboard Metrics
   // ==========================================
   describe("R3: Dashboard Metric Cards", () => {
-    it("renders horizontal scrollable container with no-scrollbar class", () => {
+    it("renders responsive 2-column grid container for metric cards", () => {
       const { container } = render(
         <AdminClient
           initialClasses={dummyClasses}
@@ -286,11 +286,11 @@ describe("AdminClient Empirical Verification (R1 - R6)", () => {
         />
       );
 
-      const statsContainer = container.querySelector(".overflow-x-auto.no-scrollbar");
+      const statsContainer = container.querySelector(".grid.grid-cols-2");
       expect(statsContainer).not.toBeNull();
-      expect(statsContainer?.className).toContain("snap-x");
-      expect(statsContainer?.className).toContain("snap-mandatory");
-      expect(statsContainer?.className).toContain("sm:grid");
+      expect(statsContainer?.className).toContain("grid-cols-2");
+      expect(statsContainer?.className).toContain("sm:grid-cols-2");
+      expect(statsContainer?.className).toContain("lg:grid-cols-4");
     });
 
     it("removes all redundant subtitle texts under numbers", () => {
@@ -560,8 +560,8 @@ describe("AdminClient Empirical Verification (R1 - R6)", () => {
       const submitBtn = screen.getByRole("button", { name: /Simpan Perubahan Identitas/i });
       fireEvent.click(submitBtn);
 
-      // Verify footer component is NOT rendered on admin page (restricted to login page only)
-      expect(screen.queryByRole("contentinfo")).toBeNull();
+      // Verify footer component is rendered on admin page across all pages
+      expect(screen.queryByRole("contentinfo")).not.toBeNull();
     });
 
     it("renders mobile FAB button for classes and teachers and organizes Pengaturan Teknis into distinct sections", () => {

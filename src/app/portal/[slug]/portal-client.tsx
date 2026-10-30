@@ -18,6 +18,7 @@ import {
 import { DashboardData, AttendanceRecordWithStudent } from "@/db/queries";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { StatCard } from "@/components/stat-card";
+import { AppFooter } from "@/components/app-footer";
 import dynamic from "next/dynamic";
 const MonthlyBarChart = dynamic(
   () => import("@/components/monthly-bar-chart").then((mod) => mod.MonthlyBarChart),
@@ -313,7 +314,7 @@ export function PortalClient({
       <main className="max-w-6xl mx-auto w-full px-4 sm:px-6 py-6 space-y-6">
         <section aria-labelledby="portal-summary-heading">
           <h2 id="portal-summary-heading" className="sr-only">Ringkasan Statistik</h2>
-          <div className="flex overflow-x-auto snap-x snap-mandatory gap-2.5 pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:overflow-visible no-scrollbar">
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard
               title="Total Alpa"
               count={dynamicMetrics.summary.totalAlpa}
@@ -873,6 +874,8 @@ export function PortalClient({
             </div>
           </section>
         </div>
+
+        <AppFooter className="py-6 pt-2" />
       </main>
 
       <LetterLightboxModal

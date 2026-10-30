@@ -30,6 +30,66 @@ log_error() {
     echo -e "${COLOR_ERROR}[$(date +'%Y-%m-%d %H:%M:%S')] [ERROR]${COLOR_RESET} $1" >&2
 }
 
+print_git_deploy_summary() {
+    local prev_ref="${1:-}"
+    
+    # Pastikan berada di direktori aplikasi yang memiliki git
+    cd "${APP_DIR:-.}" 2>/dev/null || true
+    if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        return 0
+    fi
+
+    local branch
+    branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "detached")
+    local head_hash
+    head_hash=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+    local full_hash
+    full_hash=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+    local commit_author
+    commit_author=$(git log -1 --format='%an <%ae>' 2>/dev/null || echo "unknown")
+    local commit_date
+    commit_date=$(git log -1 --format='%cd' --date=format:'%Y-%m-%d %H:%M:%S' 2>/dev/null || echo "unknown")
+    local commit_subject
+    commit_subject=$(git log -1 --format='%s' 2>/dev/null || echo "unknown")
+    local commit_body
+    commit_body=$(git log -1 --format='%b' 2>/dev/null || echo "")
+
+    echo "=============================================================================="
+    echo -e "${COLOR_INFO}📌 STATUS DEPLOY GIT & COMMIT AKTIF${COLOR_RESET}"
+    echo "=============================================================================="
+    echo -e "  Cabang (Branch) : ${COLOR_SUCCESS}${branch}${COLOR_RESET}"
+    echo -e "  Commit Hash     : ${COLOR_INFO}${head_hash}${COLOR_RESET} (${full_hash})"
+    echo -e "  Author          : ${commit_author}"
+    echo -e "  Waktu Commit    : ${commit_date}"
+    echo -e "  Pesan Commit    : ${COLOR_SUCCESS}${commit_subject}${COLOR_RESET}"
+    
+    if [ -n "${commit_body// /}" ]; then
+        echo -e "  Deskripsi       :"
+        echo "$commit_body" | sed 's/^/    /'
+    fi
+
+    # Tampilkan daftar commit jika ada commit baru yang ditarik
+    if [ -n "$prev_ref" ] && [ "$prev_ref" != "initial" ] && [ "$prev_ref" != "$full_hash" ]; then
+        local count
+        count=$(git rev-list --count "${prev_ref}..HEAD" 2>/dev/null || echo "0")
+        if [ "$count" -gt 0 ]; then
+            echo "------------------------------------------------------------------------------"
+            echo -e "  ${COLOR_SUCCESS}Daftar Commit yang Baru Diterapkan (${count} commit):${COLOR_RESET}"
+            git log --oneline "${prev_ref}..HEAD" 2>/dev/null | sed 's/^/    * /' || true
+        fi
+    fi
+
+    # Status Working Tree lokal
+    local dirty_count
+    dirty_count=$(git status --porcelain 2>/dev/null | wc -l || echo "0")
+    if [ "$dirty_count" -gt 0 ]; then
+        echo -e "  Working Tree    : ${COLOR_WARN}Terdapat ${dirty_count} file lokal yang dimodifikasi/belum di-commit${COLOR_RESET}"
+    else
+        echo -e "  Working Tree    : ${COLOR_SUCCESS}Bersih (Clean)${COLOR_RESET}"
+    fi
+    echo "=============================================================================="
+}
+
 # 1. Root Privileges Check
 if [ "${EUID:-$(id -u)}" -ne 0 ]; then
     log_error "Skrip deployment memerlukan hak akses root/sudo (untuk membuat user sistem, konfigurasi systemd, dan folder /opt)."
@@ -531,3 +591,7 @@ log_success "Aplikasi Surat Izin aktif pada: http://localhost:${PORT} (${MODE_LA
 log_success "Service OCR aktif pada: http://127.0.0.1:8001 (Status: OK | Akselerasi: ${OCR_HW_INFO:-CPU})"
 log_info "Catatan: Integrasi 9router AI secara default nonaktif (mode OCR mandiri aktif)."
 echo "=============================================================================="
+
+if [ "${CALLED_FROM_UPDATE:-false}" != true ]; then
+    print_git_deploy_summary
+fi

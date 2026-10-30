@@ -22,6 +22,7 @@ import {
   UserCheck,
   ClipboardCheck,
   SlidersHorizontal,
+  Shield,
 } from "lucide-react";
 import { DashboardData, AttendanceRecordWithStudent } from "@/db/queries";
 import { ClassItem } from "@/db/schema";
@@ -30,6 +31,7 @@ import { logoutAction } from "@/actions/auth";
 import { deleteAttendanceAction } from "@/actions/attendance";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { StatCard } from "@/components/stat-card";
+import { AppFooter } from "@/components/app-footer";
 import dynamic from "next/dynamic";
 const MonthlyBarChart = dynamic(
   () => import("@/components/monthly-bar-chart").then((mod) => mod.MonthlyBarChart),
@@ -297,9 +299,13 @@ export function DashboardClient({
             {user.role === "superadmin" && (
               <Link
                 href="/admin"
-                className="touch-target inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-100 text-amber-900 border border-amber-300 dark:bg-amber-950 dark:text-amber-200 dark:border-amber-800 text-xs font-bold"
+                className="touch-target inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-amber-100 text-amber-900 border border-amber-300 dark:bg-amber-950 dark:text-amber-200 dark:border-amber-800 text-xs font-bold shrink-0"
+                title="Buka Panel Superadmin"
+                aria-label="Panel Superadmin"
               >
-                Panel Superadmin
+                <Shield className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden sm:inline">Panel Superadmin</span>
+                <span className="sm:hidden">Admin</span>
               </Link>
             )}
 
@@ -319,10 +325,10 @@ export function DashboardClient({
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 py-6 pb-28 sm:pb-6 space-y-5 sm:space-y-6">
+      <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 py-6 pb-6 space-y-5 sm:space-y-6 flex-1">
         <section aria-labelledby="summary-heading">
           <h2 id="summary-heading" className="sr-only">Ringkasan Statistik Ketidakhadiran</h2>
-          <div className="flex overflow-x-auto snap-x snap-mandatory gap-2.5 pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:overflow-visible no-scrollbar">
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard
               title="Total Alpa"
               count={dynamicMetrics.summary.totalAlpa}
@@ -1057,6 +1063,8 @@ export function DashboardClient({
             </div>
           </section>
         </div>
+
+        <AppFooter className="pb-20 sm:pb-4 pt-6" />
       </main>
 
       {/* Floating Action Button (+ Catat) on Mobile */}

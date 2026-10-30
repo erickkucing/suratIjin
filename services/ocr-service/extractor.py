@@ -358,6 +358,15 @@ def extract_students_from_ocr_boxes(ocr_results: List) -> List[Dict[str, Optiona
             elif len(digit_items) == 1 and len(digit_items[0]) >= 4:
                 nis = digit_items[0]
 
+        # 3. If still not found, check if an item contains an embedded 4-12 digit NIS (e.g. "1. 1001Ahmad Dahlan" or "1001 Ahmad")
+        if not nis:
+            for item in line:
+                t = item["text"].strip()
+                nis_match = re.search(r'(?:^|[\.\)\s])(\d{4,12})(?=[A-Za-z\s]|$)', t)
+                if nis_match:
+                    nis = nis_match.group(1)
+                    break
+
         name_candidates: List[str] = []
 
         for idx, item in enumerate(line):

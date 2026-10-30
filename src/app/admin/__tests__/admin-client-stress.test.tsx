@@ -470,7 +470,7 @@ describe("Adversarial Stress Test: AdminClient", () => {
       expect(main?.className).toContain("md:pb-6");
     });
 
-    it("renders compact horizontally scrollable metric cards with no-scrollbar class", () => {
+    it("renders responsive 2-column grid metric cards", () => {
       const { container } = render(
         <AdminClient
           initialClasses={mockClasses}
@@ -480,10 +480,10 @@ describe("Adversarial Stress Test: AdminClient", () => {
         />
       );
 
-      const statsContainer = container.querySelector(".no-scrollbar");
+      const statsContainer = container.querySelector(".grid.grid-cols-2");
       expect(statsContainer).not.toBeNull();
-      expect(statsContainer?.className).toContain("overflow-x-auto");
-      expect(statsContainer?.className).toContain("snap-x");
+      expect(statsContainer?.className).toContain("grid-cols-2");
+      expect(statsContainer?.className).toContain("lg:grid-cols-4");
     });
   });
 });

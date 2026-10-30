@@ -1156,52 +1156,94 @@ export function StudentRosterModal({
                         </button>
                       </div>
 
-                      {/* Editable Table */}
-                      <div className="border border-[var(--border)] rounded-xl max-h-72 overflow-y-auto divide-y divide-[var(--border)] bg-[var(--surface)]">
-                        <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-[var(--canvas-subtle)] text-[11px] font-bold text-[var(--ink-muted)] border-b border-[var(--border)] sticky top-0 z-10">
+                      {/* Editable List / Table */}
+                      <div className="border border-[var(--border)] rounded-xl max-h-72 sm:max-h-80 overflow-y-auto divide-y divide-[var(--border)] bg-[var(--surface)]">
+                        {/* Table Header: Hidden on mobile, visible on tablet/desktop */}
+                        <div className="hidden sm:grid grid-cols-12 gap-2 px-3 py-2 bg-[var(--canvas-subtle)] text-[11px] font-bold text-[var(--ink-muted)] border-b border-[var(--border)] sticky top-0 z-10">
                           <div className="col-span-1 text-center">No</div>
-                          <div className="col-span-4 sm:col-span-3">NIS (Opsional)</div>
-                          <div className="col-span-6 sm:col-span-7">Nama Lengkap Siswa</div>
+                          <div className="col-span-3">NIS (Opsional)</div>
+                          <div className="col-span-7">Nama Lengkap Siswa</div>
                           <div className="col-span-1 text-right">Aksi</div>
                         </div>
 
                         {ocrStudents.map((st, i) => (
                           <div
                             key={i}
-                            className="grid grid-cols-12 gap-2 px-3 py-2 items-center hover:bg-[var(--canvas-subtle)]/50 transition-colors"
+                            className="p-2.5 sm:px-3 sm:py-2 hover:bg-[var(--canvas-subtle)]/40 transition-colors"
                           >
-                            <div className="col-span-1 text-center text-xs font-mono text-[var(--ink-subtle)]">
-                              {i + 1}.
+                            {/* Mobile View: 2-Row Adaptive Card */}
+                            <div className="sm:hidden space-y-1.5">
+                              <div className="flex items-center gap-2">
+                                <span className="w-6 text-center text-xs font-mono font-bold text-[var(--ink-subtle)] shrink-0">
+                                  {i + 1}.
+                                </span>
+                                <input
+                                  type="text"
+                                  value={st.name}
+                                  onChange={(e) => handleOcrStudentChange(i, "name", e.target.value)}
+                                  placeholder="Nama Lengkap Siswa"
+                                  className="flex-1 min-w-0 px-2.5 py-1.5 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                                  required
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleOcrRemoveStudent(i)}
+                                  className="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--ink-muted)] hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 shrink-0 transition-colors border border-transparent hover:border-red-200 dark:hover:border-red-900"
+                                  title="Hapus Baris Siswa"
+                                  aria-label={`Hapus baris siswa ${st.name || i + 1}`}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                              <div className="flex items-center gap-2 pl-8">
+                                <span className="text-[11px] font-semibold text-[var(--ink-subtle)] w-8 shrink-0">
+                                  NIS:
+                                </span>
+                                <input
+                                  type="text"
+                                  value={st.nis || ""}
+                                  onChange={(e) => handleOcrStudentChange(i, "nis", e.target.value)}
+                                  placeholder="Nomor Induk Siswa (Opsional)"
+                                  className="flex-1 min-w-0 px-2.5 py-1 text-xs font-mono rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                                />
+                              </div>
                             </div>
-                            <div className="col-span-4 sm:col-span-3">
-                              <input
-                                type="text"
-                                value={st.nis || ""}
-                                onChange={(e) => handleOcrStudentChange(i, "nis", e.target.value)}
-                                placeholder="NIS"
-                                className="w-full px-2 py-1.5 text-xs font-mono rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
-                              />
-                            </div>
-                            <div className="col-span-6 sm:col-span-7">
-                              <input
-                                type="text"
-                                value={st.name}
-                                onChange={(e) => handleOcrStudentChange(i, "name", e.target.value)}
-                                placeholder="Nama Lengkap Siswa"
-                                className="w-full px-2 py-1.5 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
-                                required
-                              />
-                            </div>
-                            <div className="col-span-1 flex justify-end">
-                              <button
-                                type="button"
-                                onClick={() => handleOcrRemoveStudent(i)}
-                                className="touch-target p-1 text-[var(--ink-muted)] hover:text-red-600 rounded transition-colors"
-                                title="Hapus Baris Siswa"
-                                aria-label={`Hapus baris siswa ${st.name || i + 1}`}
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+
+                            {/* Tablet/Desktop View: Multi-column Table Grid */}
+                            <div className="hidden sm:grid grid-cols-12 gap-2 items-center">
+                              <div className="col-span-1 text-center text-xs font-mono text-[var(--ink-subtle)]">
+                                {i + 1}.
+                              </div>
+                              <div className="col-span-3">
+                                <input
+                                  type="text"
+                                  value={st.nis || ""}
+                                  onChange={(e) => handleOcrStudentChange(i, "nis", e.target.value)}
+                                  placeholder="NIS"
+                                  className="w-full px-2 py-1.5 text-xs font-mono rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                                />
+                              </div>
+                              <div className="col-span-7">
+                                <input
+                                  type="text"
+                                  value={st.name}
+                                  onChange={(e) => handleOcrStudentChange(i, "name", e.target.value)}
+                                  placeholder="Nama Lengkap Siswa"
+                                  className="w-full px-2 py-1.5 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                                  required
+                                />
+                              </div>
+                              <div className="col-span-1 flex justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOcrRemoveStudent(i)}
+                                  className="p-1.5 text-[var(--ink-muted)] hover:text-red-600 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
+                                  title="Hapus Baris Siswa"
+                                  aria-label={`Hapus baris siswa ${st.name || i + 1}`}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             </div>
                           </div>
                         ))}

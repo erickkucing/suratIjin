@@ -38,6 +38,7 @@ import {
   Globe,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { AppFooter } from "@/components/app-footer";
 import { logoutAction } from "@/actions/auth";
 import {
   createTeacherAction,
@@ -1225,8 +1226,8 @@ export function AdminClient({
         )}
 
         {/* Overview Stats (R3) */}
-        <div className="flex overflow-x-auto snap-x snap-mandatory gap-2.5 pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:overflow-visible no-scrollbar">
-          <div className="min-w-[140px] sm:min-w-0 flex-1 sm:w-full snap-start shrink-0 sm:shrink card-paper px-3.5 py-3 sm:p-5 rounded-xl sm:rounded-2xl">
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="w-full card-paper px-3.5 py-3 sm:p-5 rounded-xl sm:rounded-2xl">
             <div className="flex items-center gap-1.5 mb-1.5 sm:mb-2">
               <span className="w-2 h-2 rounded-full bg-[var(--primary)] shrink-0" />
               <span className="text-xs font-semibold text-[var(--ink-muted)] truncate">Total Kelas</span>
@@ -1236,7 +1237,7 @@ export function AdminClient({
             </p>
           </div>
 
-          <div className="min-w-[140px] sm:min-w-0 flex-1 sm:w-full snap-start shrink-0 sm:shrink card-paper px-3.5 py-3 sm:p-5 rounded-xl sm:rounded-2xl">
+          <div className="w-full card-paper px-3.5 py-3 sm:p-5 rounded-xl sm:rounded-2xl">
             <div className="flex items-center gap-1.5 mb-1.5 sm:mb-2">
               <span className="w-2 h-2 rounded-full bg-[var(--accent-slate)] shrink-0" />
               <span className="text-xs font-semibold text-[var(--ink-muted)] truncate">Total Wali Kelas</span>
@@ -1246,7 +1247,7 @@ export function AdminClient({
             </p>
           </div>
 
-          <div className="min-w-[140px] sm:min-w-0 flex-1 sm:w-full snap-start shrink-0 sm:shrink card-paper px-3.5 py-3 sm:p-5 rounded-xl sm:rounded-2xl">
+          <div className="w-full card-paper px-3.5 py-3 sm:p-5 rounded-xl sm:rounded-2xl">
             <div className="flex items-center gap-1.5 mb-1.5 sm:mb-2">
               <span className="w-2 h-2 rounded-full bg-[var(--status-success-fg)] shrink-0" />
               <span className="text-xs font-semibold text-[var(--ink-muted)] truncate">Total Siswa Aktif</span>
@@ -1256,7 +1257,7 @@ export function AdminClient({
             </p>
           </div>
 
-          <div className="min-w-[140px] sm:min-w-0 flex-1 sm:w-full snap-start shrink-0 sm:shrink card-paper px-3.5 py-3 sm:p-5 rounded-xl sm:rounded-2xl">
+          <div className="w-full card-paper px-3.5 py-3 sm:p-5 rounded-xl sm:rounded-2xl">
             <div className="flex items-center gap-1.5 mb-1.5 sm:mb-2">
               <span className="w-2 h-2 rounded-full bg-amber-600 shrink-0" />
               <span className="text-xs font-semibold text-[var(--ink-muted)] truncate">Total Ketidakhadiran</span>
@@ -2910,8 +2911,8 @@ export function AdminClient({
           </button>
         )}
 
-        {/* Safe bottom spacer for mobile navigation clearance */}
-        <div className="h-28 md:hidden pointer-events-none" aria-hidden="true" />
+        {/* In-flow AppFooter right below content, clears fixed bottom nav bar */}
+        <AppFooter text={footerTextInput} className="pb-20 md:pb-6 pt-4" />
       </main>
 
       {/* 4-Tab Bottom Navigation Bar on Mobile (R5 & R6) */}

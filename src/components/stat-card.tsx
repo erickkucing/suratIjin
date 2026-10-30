@@ -37,7 +37,7 @@ export function StatCard({
     <button
       type="button"
       onClick={onClick}
-      className={`touch-target text-left min-w-[125px] sm:min-w-0 w-auto sm:w-full snap-start shrink-0 sm:shrink px-3.5 py-3 sm:p-5 rounded-xl sm:rounded-2xl card-paper transition-all duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] ${
+      className={`touch-target text-left w-full px-3.5 py-3 sm:p-5 rounded-xl sm:rounded-2xl card-paper transition-all duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] ${
         isActive
           ? "ring-2 ring-[var(--primary)] shadow-sm bg-[var(--canvas-subtle)]"
           : "hover:shadow-sm hover:bg-[var(--canvas-subtle)]"
