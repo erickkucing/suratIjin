@@ -12,6 +12,7 @@ import {
   ScanLine,
   ChevronDown,
   Image as ImageIcon,
+  Sparkles,
 } from "lucide-react";
 import { Student } from "@/db/schema";
 import { AttendanceRecordWithStudent } from "@/db/queries";
@@ -78,6 +79,20 @@ export function AttendanceFormModal({
     description: string;
     hardwareInfo?: string;
   } | null>(null);
+
+  const [aiRefining, setAiRefining] = useState(false);
+  const [showAiSuggestion, setShowAiSuggestion] = useState(false);
+  const [userModifiedFields, setUserModifiedFields] = useState<Set<string>>(new Set());
+  const [rawExtractedLines, setRawExtractedLines] = useState<string[]>([]);
+
+  const markFieldModified = (field: string) => {
+    setUserModifiedFields((prev) => {
+      if (prev.has(field)) return prev;
+      const next = new Set(prev);
+      next.add(field);
+      return next;
+    });
+  };
 
   const { sheetRef, sheetStyle, touchHandlers } = useBottomSheetGesture({
     isOpen,
@@ -151,6 +166,10 @@ export function AttendanceFormModal({
       setErrorMessage(null);
       setScanningLetter(false);
       setOcrResultBanner(null);
+      setAiRefining(false);
+      setShowAiSuggestion(false);
+      setUserModifiedFields(new Set());
+      setRawExtractedLines([]);
     }
   }, [isOpen, editRecord, studentsList]);
 
@@ -206,33 +225,44 @@ export function AttendanceFormModal({
       setOcrStage(3);
       const detected = data.detected;
       if (detected) {
-        if (detected.studentId) {
-          setStudentId(detected.studentId);
-          setStudentError(false);
-          const found = studentsList.find((s) => s.id === detected.studentId);
-          if (found) {
-            setStudentSearch(found.name);
-          }
-        } else if (detected.studentName) {
-          const found = studentsList.find(
-            (s) => s.name.toLowerCase() === detected.studentName.toLowerCase()
+        const rawText: string = detected.rawExtractedText || data.raw_text || "";
+        const lines = rawText ? rawText.split("\n").map((l: string) => l.trim()).filter(Boolean) : [];
+        setRawExtractedLines(lines);
+
+        const needsAi = typeof data.needsAiRefinement === "boolean"
+          ? data.needsAiRefinement
+          : (!detected.studentName || (detected.matchConfidence || 0) < 0.80 || !detected.startDate);
+        setShowAiSuggestion(needsAi);
+
+        let found = detected.studentId
+          ? studentsList.find((s) => s.id === detected.studentId)
+          : undefined;
+
+        if (!found && detected.studentName) {
+          const normTarget = detected.studentName.trim().toLowerCase();
+          found = studentsList.find(
+            (s) => s.name.trim().toLowerCase() === normTarget
           );
-          if (found) {
-            setStudentId(found.id);
-            setStudentSearch(found.name);
-            setStudentError(false);
-          }
+        }
+
+        if (!found && detected.candidateName) {
+          const normCand = detected.candidateName.trim().toLowerCase();
+          found = studentsList.find(
+            (s) => s.name.trim().toLowerCase() === normCand
+          );
+        }
+
+        if (found) {
+          setStudentId(found.id);
+          setStudentSearch(found.name);
+          setStudentError(false);
+        } else if (detected.candidateName || detected.studentName) {
+          setStudentSearch(detected.candidateName || detected.studentName || "");
+          setStudentId(0);
         }
 
         if (detected.status === "Sakit" || detected.status === "Izin") {
           setStatus(detected.status);
-        }
-
-        if (detected.startDate) {
-          setStartDate(detected.startDate);
-        }
-        if (detected.endDate) {
-          setEndDate(detected.endDate);
         }
 
         const isMultiDayDetected =
@@ -247,6 +277,16 @@ export function AttendanceFormModal({
           setIsMultiDay(true);
         } else if (typeof detected.isMultiDay === "boolean") {
           setIsMultiDay(detected.isMultiDay);
+        }
+
+        if (detected.startDate) {
+          setStartDate(detected.startDate);
+          if (!isMultiDayDetected) {
+            setEndDate(detected.startDate);
+          }
+        }
+        if (detected.endDate) {
+          setEndDate(detected.endDate);
         }
 
         if (detected.description) {
@@ -293,6 +333,125 @@ export function AttendanceFormModal({
     } finally {
       clearInterval(timerInterval);
       setScanningLetter(false);
+    }
+  };
+
+  const runAiRefine = async () => {
+    if (!selectedFile) return;
+    setAiRefining(true);
+    setErrorMessage(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("classId", String(classId));
+      formData.append("file", selectedFile);
+      if (rawExtractedLines.length > 0) {
+        formData.append("rawLines", JSON.stringify(rawExtractedLines));
+      }
+
+      const res = await fetch("/api/ocr/letter/ai-refine", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal menyempurnakan pembacaan surat dengan AI.");
+      }
+
+      const detected = data.detected;
+      if (detected) {
+        // Safe Merge: Only update fields that haven't been manually modified by the user
+        if (!userModifiedFields.has("student")) {
+          let found = detected.studentId
+            ? studentsList.find((s) => s.id === detected.studentId)
+            : undefined;
+
+          if (!found && detected.studentName) {
+            const normTarget = detected.studentName.trim().toLowerCase();
+            found = studentsList.find(
+              (s) => s.name.trim().toLowerCase() === normTarget
+            );
+          }
+
+          if (!found && detected.candidateName) {
+            const normCand = detected.candidateName.trim().toLowerCase();
+            found = studentsList.find(
+              (s) => s.name.trim().toLowerCase() === normCand
+            );
+          }
+
+          if (found) {
+            setStudentId(found.id);
+            setStudentSearch(found.name);
+            setStudentError(false);
+          } else if (detected.candidateName || detected.studentName) {
+            setStudentSearch(detected.candidateName || detected.studentName || "");
+            setStudentId(0);
+          }
+        }
+
+        if (!userModifiedFields.has("status")) {
+          if (detected.status === "Sakit" || detected.status === "Izin") {
+            setStatus(detected.status);
+          }
+        }
+
+        const isMultiDayDetected =
+          detected.isMultiDay === true ||
+          Boolean(
+            detected.startDate &&
+            detected.endDate &&
+            detected.startDate !== detected.endDate
+          );
+
+        if (!userModifiedFields.has("isMultiDay")) {
+          if (isMultiDayDetected) {
+            setIsMultiDay(true);
+          } else if (typeof detected.isMultiDay === "boolean") {
+            setIsMultiDay(detected.isMultiDay);
+          }
+        }
+
+        if (!userModifiedFields.has("startDate") && detected.startDate) {
+          setStartDate(detected.startDate);
+          if (!isMultiDayDetected && !userModifiedFields.has("endDate")) {
+            setEndDate(detected.startDate);
+          }
+        }
+
+        if (!userModifiedFields.has("endDate") && detected.endDate) {
+          setEndDate(detected.endDate);
+        }
+
+        if (!userModifiedFields.has("description") && detected.description) {
+          setDescription(detected.description);
+        }
+
+        // Update OCR result banner with refined data
+        setOcrResultBanner((prev) => ({
+          studentName: detected.studentName || prev?.studentName || null,
+          candidateName: detected.candidateName || prev?.candidateName || null,
+          className: detected.className || prev?.className || null,
+          matchConfidence: detected.matchConfidence || prev?.matchConfidence || 0.95,
+          status: detected.status || prev?.status || status,
+          startDate: detected.startDate || prev?.startDate || startDate,
+          endDate: detected.endDate || prev?.endDate || endDate,
+          isMultiDay: isMultiDayDetected,
+          description: detected.description || prev?.description || description,
+          hardwareInfo: "Vision AI",
+        }));
+
+        setShowAiSuggestion(false);
+      }
+    } catch (err: unknown) {
+      setErrorMessage(
+        err instanceof Error
+          ? err.message
+          : "Gagal menyempurnakan pembacaan surat dengan AI."
+      );
+    } finally {
+      setAiRefining(false);
     }
   };
 
@@ -690,6 +849,8 @@ export function AttendanceFormModal({
                       setFilePreviewUrl(null);
                       setCompressionInfo(null);
                       setOcrResultBanner(null);
+                      setShowAiSuggestion(false);
+                      setRawExtractedLines([]);
                       if (cameraInputRef.current) cameraInputRef.current.value = "";
                       if (galleryInputRef.current) galleryInputRef.current.value = "";
                     }}
@@ -750,6 +911,48 @@ export function AttendanceFormModal({
                   </button>
                 </div>
               )}
+
+              {/* Bilah Bantuan Saran Minimalis (Anti-Slop) */}
+              {showAiSuggestion && selectedFile && (
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 p-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-xs mt-1.5">
+                  <div className="flex items-center gap-2 text-[var(--ink-muted)] min-w-0">
+                    <Sparkles className="w-4 h-4 text-[var(--primary)] shrink-0" />
+                    <span className="truncate">Tulisan tangan / data belum lengkap? Sempurnakan dengan AI.</span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={aiRefining || scanningLetter}
+                    onClick={runAiRefine}
+                    className="touch-target inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] font-semibold text-xs shadow-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] disabled:opacity-50 cursor-pointer transition-colors shrink-0"
+                  >
+                    {aiRefining ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Menganalisis...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>Analisis dengan AI</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+
+              {/* Tautan halus jika user ingin manual refine tulisan tangan meskipun score tinggi */}
+              {!showAiSuggestion && selectedFile && ocrResultBanner && !aiRefining && (
+                <div className="flex justify-end pt-0.5">
+                  <button
+                    type="button"
+                    onClick={runAiRefine}
+                    className="text-[11px] text-[var(--primary)] hover:underline inline-flex items-center gap-1 cursor-pointer"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    <span>Sempurnakan tulisan tangan dengan AI</span>
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -780,6 +983,7 @@ export function AttendanceFormModal({
                   setStudentSearch(e.target.value);
                   setStudentError(false);
                   setIsComboOpen(true);
+                  markFieldModified("student");
                   if (!e.target.value.trim()) {
                     setStudentId(0);
                   }
@@ -801,6 +1005,7 @@ export function AttendanceFormModal({
                       setStudentSearch("");
                       setStudentId(0);
                       setStudentError(false);
+                      markFieldModified("student");
                       setIsComboOpen(true);
                     }}
                     className="p-1 hover:text-[var(--ink)] rounded cursor-pointer"
@@ -844,6 +1049,7 @@ export function AttendanceFormModal({
                           setStudentSearch(s.name);
                           setStudentError(false);
                           setIsComboOpen(false);
+                          markFieldModified("student");
                         }}
                         className={`flex items-center justify-between px-3.5 py-2 cursor-pointer transition-colors ${
                           isSelected
@@ -880,7 +1086,10 @@ export function AttendanceFormModal({
                 type="button"
                 role="switch"
                 aria-checked={isMultiDay}
-                onClick={() => setIsMultiDay(!isMultiDay)}
+                onClick={() => {
+                  setIsMultiDay(!isMultiDay);
+                  markFieldModified("isMultiDay");
+                }}
                 className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] ${
                   isMultiDay ? "bg-[var(--primary)]" : "bg-gray-300 dark:bg-gray-700"
                 }`}
@@ -904,7 +1113,10 @@ export function AttendanceFormModal({
                 id="start-date"
                 type="date"
                 value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
+                onChange={(e) => {
+                  setStartDate(e.target.value);
+                  markFieldModified("startDate");
+                }}
                 className="w-full px-3.5 py-2.5 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
                 required
               />
@@ -920,7 +1132,10 @@ export function AttendanceFormModal({
                   type="date"
                   min={startDate}
                   value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
+                  onChange={(e) => {
+                    setEndDate(e.target.value);
+                    markFieldModified("endDate");
+                  }}
                   className="w-full px-3.5 py-2.5 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
                   required={isMultiDay}
                 />
@@ -943,7 +1158,10 @@ export function AttendanceFormModal({
                   <button
                     key={s}
                     type="button"
-                    onClick={() => setStatus(s)}
+                    onClick={() => {
+                      setStatus(s);
+                      markFieldModified("status");
+                    }}
                     className={`touch-target flex items-center justify-center py-2.5 px-3 rounded-xl border text-sm font-semibold transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] ${
                       isSelected
                         ? s === "Izin"
@@ -978,7 +1196,10 @@ export function AttendanceFormModal({
                   <button
                     key={src}
                     type="button"
-                    onClick={() => setInfoSource(src)}
+                    onClick={() => {
+                      setInfoSource(src);
+                      markFieldModified("infoSource");
+                    }}
                     className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] ${
                       isSelected
                         ? "bg-[var(--primary)] text-white border-[var(--primary)]"
@@ -994,7 +1215,10 @@ export function AttendanceFormModal({
               <input
                 type="text"
                 value={customInfoSource}
-                onChange={(e) => setCustomInfoSource(e.target.value)}
+                onChange={(e) => {
+                  setCustomInfoSource(e.target.value);
+                  markFieldModified("infoSource");
+                }}
                 placeholder="Sebutkan sumber info (cth: Guru Piket, Wali Asrama)..."
                 className="mt-2 w-full px-3.5 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
                 required
@@ -1011,7 +1235,10 @@ export function AttendanceFormModal({
               id="keterangan"
               type="text"
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(e) => {
+                setDescription(e.target.value);
+                markFieldModified("description");
+              }}
               placeholder="Contoh: Demam tinggi, kontrol dokter, izin sim..."
               className="w-full px-3.5 py-2.5 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] placeholder:text-[var(--ink-subtle)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
             />

@@ -181,6 +181,96 @@ describe("ai-router library", () => {
 
       expect(result).toBeNull();
     });
+
+    it("should normalize unpadded dates and reject student birth dates", async () => {
+      const currentYear = new Date().getFullYear();
+      const mockAiResponse = {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                studentId: 1,
+                studentName: "Budi Santoso",
+                candidateName: "Budi Santoso",
+                status: "Izin",
+                startDate: `${currentYear}-10-5`, // Unpadded day
+                endDate: `${currentYear}-10-8`,
+                isMultiDay: true,
+                description: "Acara keluarga",
+              }),
+            },
+          },
+        ],
+      };
+
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => mockAiResponse,
+      });
+      vi.stubGlobal("fetch", mockFetch);
+
+      const result = await parseLetterWithAi({
+        rawLines: ["Surat Izin"],
+        studentCandidates: [{ id: 1, name: "Budi Santoso", nis: "1001" }],
+        configOverride: {
+          enabled: true,
+          baseUrl: "http://127.0.0.1:20128/v1",
+          apiKey: "valid-key",
+          model: "gemini/gemini-3.8-flash",
+        },
+      });
+
+      expect(result).not.toBeNull();
+      expect(result?.startDate).toBe(`${currentYear}-10-05`);
+      expect(result?.endDate).toBe(`${currentYear}-10-08`);
+      expect(result?.isMultiDay).toBe(true);
+    });
+
+    it("should reject hallucinated studentId not present in candidates and infer Sakit from description", async () => {
+      const currentYear = new Date().getFullYear();
+      const mockAiResponse = {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                studentId: 9999, // Hallucinated ID
+                studentName: "Budi Santoso",
+                candidateName: "Budi",
+                status: "Absen", // Generic status
+                startDate: `${currentYear}-10-28`,
+                endDate: null,
+                isMultiDay: false,
+                description: "Surat keterangan istirahat dokter demam tinggi",
+              }),
+            },
+          },
+        ],
+      };
+
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => mockAiResponse,
+      });
+      vi.stubGlobal("fetch", mockFetch);
+
+      const result = await parseLetterWithAi({
+        rawLines: ["Surat Dokter"],
+        studentCandidates: [{ id: 5, name: "Budi Santoso", nis: "1005" }],
+        configOverride: {
+          enabled: true,
+          baseUrl: "http://127.0.0.1:20128/v1",
+          apiKey: "valid-key",
+          model: "gemini/gemini-3.8-flash",
+        },
+      });
+
+      expect(result).not.toBeNull();
+      // Should resolve to actual candidate ID 5, not hallucinated 9999
+      expect(result?.studentId).toBe(5);
+      expect(result?.studentName).toBe("Budi Santoso");
+      // Status should be inferred as Sakit due to medical description keywords
+      expect(result?.status).toBe("Sakit");
+    });
   });
 
   describe("parseRosterWithAi", () => {

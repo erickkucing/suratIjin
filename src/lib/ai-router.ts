@@ -155,13 +155,13 @@ export async function testAiRouterConnection(
 }
 
 export async function parseLetterWithAi({
-  rawLines,
+  rawLines = [],
   studentCandidates,
   imageBase64,
   mimeType,
   configOverride,
 }: {
-  rawLines: string[];
+  rawLines?: string[];
   studentCandidates: Array<{ id: number; name: string; nis?: string | null }>;
   imageBase64?: string;
   mimeType?: string;
@@ -196,22 +196,24 @@ export async function parseLetterWithAi({
       : "(Tidak ada daftar siswa)";
 
   const systemPrompt = `Anda adalah asisten AI ekstraksi presisi tinggi untuk surat izin ketidakhadiran siswa sekolah di Indonesia.
-Tugas Anda adalah membaca teks surat, mencocokkan dengan daftar siswa kelas resmi, dan mengeluarkan informasi terstruktur.
+Tugas Anda adalah membaca dokumen surat (baik ketikan, surat dokter/klinik, maupun tulisan tangan orang tua), mencocokkan dengan daftar siswa resmi kelas, dan mengeluarkan informasi terstruktur.
 
 Daftar resmi siswa kelas ini:
 ${rosterContext}
 
 Aturan Ekstraksi:
-1. "studentId" & "studentName": Cari nama siswa di surat. Cocokkan dengan salah satu nama dari daftar di atas. Jika ditemukan kecocokan kuat (misal variasi ejaan atau nama panggilan), berikan ID dan Nama siswa sesuai daftar.
-2. "candidateName": Tuliskan nama siswa persis seperti yang tertulis pada surat fisik.
-3. "className": Nama kelas jika tertulis (contoh: "XII TKJ 2", "7A").
+1. "studentId" & "studentName": Cari nama siswa di surat. Pada tulisan tangan atau surat dokter, ejaan mungkin terdapat sedikit variasi/singkatan. Cocokkan dengan salah satu nama dari daftar di atas. Jika ditemukan kecocokan kuat, berikan ID dan Nama siswa sesuai daftar resmi. Jika tidak ada yang cocok di daftar, isi null.
+2. "candidateName": Tuliskan nama siswa persis seperti yang tertulis pada teks fisik/surat aslinya.
+3. "className": Nama kelas jika tertulis di surat (contoh: "XII TKJ 2", "7A").
 4. "matchConfidence": Angka 0.0 sampai 1.0 yang menunjukkan tingkat keyakinan pencocokan nama siswa.
-5. "status": Harus "Sakit" atau "Izin". Jika sakit/demam/opname -> "Sakit". Jika acara keluarga/keperluan/menikah -> "Izin".
+5. "status": Harus "Sakit" atau "Izin".
+   - Jika ada kata sakit, demam, flu, batuk, resep, opname, rawat inap, istirahat dokter, diagnosa medis -> "Sakit".
+   - Jika keperluan keluarga, bepergian, urusan mendesak, acara keluarga -> "Izin".
 6. "startDate": Tanggal awal tidak masuk dalam format YYYY-MM-DD.
-   PERINGATAN KRUSIAL: JANGAN PERNAH mengambil Tanggal Lahir / TTL siswa (misal tahun 2005-2015) sebagai startDate! Tanggal izin/sakit adalah tanggal periode sakit/absen (tahun berjalan mendekati saat ini). Jika surat keterangan dokter hanya mencantumkan TTL dan tanggal surat dibuat (misal "Jakarta, 29 Oktober 2026"), gunakan tanggal surat dibuat sebagai startDate. Jika tidak ada tanggal absen maupun tanggal surat yang valid, kembalikan null atau string kosong "".
+   PERINGATAN KRUSIAL: JANGAN PERNAH mengambil Tanggal Lahir / TTL siswa (misal tahun 2005-2016) sebagai startDate! Tanggal izin/sakit adalah tanggal periode sakit/absen atau tanggal surat dibuat pada tahun berjalan. Jika surat keterangan dokter hanya mencantumkan TTL dan tanggal surat dibuat (misal "Jakarta, 29 Oktober 2026"), gunakan tanggal surat dibuat sebagai startDate. Jika tidak ada tanggal absen maupun tanggal surat yang valid, kembalikan null atau string kosong "".
 7. "endDate": Tanggal akhir tidak masuk format YYYY-MM-DD jika izin lebih dari 1 hari. Jika hanya 1 hari, bernilai null.
 8. "isMultiDay": true jika lebih dari 1 hari, sebaliknya false.
-9. "description": Alasan ketidakhadiran secara singkat dan jelas (misal: "Demam tinggi", "Menghadiri pernikahan keluarga di luar kota").
+9. "description": Alasan ketidakhadiran secara singkat dan jelas (misal: "Demam tinggi", "Surat keterangan istirahat dokter", "Acara keluarga di luar kota").
 
 Output WAJIB berupa JSON murni tanpa markdown, tanpa penjelasan di luar JSON:
 {
@@ -229,19 +231,18 @@ Output WAJIB berupa JSON murni tanpa markdown, tanpa penjelasan di luar JSON:
 
   const messages: any[] = [{ role: "system", content: systemPrompt }];
 
-  if (rawLines.length >= 3 || !imageBase64) {
-    messages.push({
-      role: "user",
-      content: `Berikut adalah teks baris yang diekstrak oleh pemindai OCR:\n\n${rawLines.join("\n")}`,
-    });
-  } else {
-    // Fallback to multimodal vision when text lines are scarce
+  if (imageBase64) {
+    const textPrompt =
+      rawLines && rawLines.length > 0
+        ? `Analisis foto surat izin terlampir (tulisan tangan / surat dokter). Teks OCR awal sebagai referensi tambahan:\n${rawLines.join("\n")}\n\nSilakan baca foto secara teliti dan keluarkan data JSON terstruktur sesuai format:`
+        : `Analisis foto surat izin terlampir (tulisan tangan / surat dokter / ketikan) dan keluarkan data JSON terstruktur sesuai format:`;
+
     messages.push({
       role: "user",
       content: [
         {
           type: "text",
-          text: `Teks OCR sangat minim: "${rawLines.join(" ")}". Silakan baca langsung dari foto surat terlampir dan isi format JSON:`,
+          text: textPrompt,
         },
         {
           type: "image_url",
@@ -251,11 +252,16 @@ Output WAJIB berupa JSON murni tanpa markdown, tanpa penjelasan di luar JSON:
         },
       ],
     });
+  } else {
+    messages.push({
+      role: "user",
+      content: `Berikut adalah teks baris yang diekstrak oleh pemindai OCR:\n\n${(rawLines || []).join("\n")}\n\nSilakan cocokkan dengan daftar siswa dan keluarkan data JSON terstruktur.`,
+    });
   }
 
   const controller = new AbortController();
-  // 12-second timeout according to agreed user preference
-  const timeoutId = setTimeout(() => controller.abort(), 12000);
+  // 25-second timeout for multimodal vision letter parse
+  const timeoutId = setTimeout(() => controller.abort(), 25000);
 
   try {
     const res = await fetch(endpoint, {
@@ -284,34 +290,65 @@ Output WAJIB berupa JSON murni tanpa markdown, tanpa penjelasan di luar JSON:
     const cleaned = content.replace(/```(?:json)?/gi, "").replace(/```/g, "").trim();
     const parsed = JSON.parse(cleaned);
 
-    const validStatus = parsed.status === "Sakit" ? "Sakit" : "Izin";
-    const confidence = typeof parsed.matchConfidence === "number" ? parsed.matchConfidence : 0.8;
+    const rawStatus = typeof parsed.status === "string" ? parsed.status.trim().toLowerCase() : "";
+    const rawDesc = typeof parsed.description === "string" ? parsed.description.trim().toLowerCase() : "";
+    const isSakitByKeyword =
+      rawStatus.includes("sakit") ||
+      rawDesc.includes("sakit") ||
+      rawDesc.includes("demam") ||
+      rawDesc.includes("dokter") ||
+      rawDesc.includes("opname") ||
+      rawDesc.includes("rawat");
+    const validStatus: "Sakit" | "Izin" = isSakitByKeyword ? "Sakit" : "Izin";
 
     const currentYear = new Date().getFullYear();
-    let sanitizedStartDate = "";
-    if (typeof parsed.startDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(parsed.startDate)) {
-      const year = parseInt(parsed.startDate.split("-")[0], 10);
-      if (Math.abs(year - currentYear) <= 1) {
-        sanitizedStartDate = parsed.startDate;
-      }
-    }
+    const normalizeDate = (raw: unknown): string | null => {
+      if (typeof raw !== "string") return null;
+      const str = raw.trim();
+      const match = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+      if (!match) return null;
+      const year = parseInt(match[1], 10);
+      if (Math.abs(year - currentYear) > 1) return null;
+      const month = match[2].padStart(2, "0");
+      const day = match[3].padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    };
 
-    let sanitizedEndDate: string | null = null;
-    if (typeof parsed.endDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(parsed.endDate)) {
-      const year = parseInt(parsed.endDate.split("-")[0], 10);
-      if (Math.abs(year - currentYear) <= 1) {
-        sanitizedEndDate = parsed.endDate;
-      }
-    }
+    const sanitizedStartDate = normalizeDate(parsed.startDate) || "";
+    const sanitizedEndDate = normalizeDate(parsed.endDate);
 
     const isMultiDay = Boolean(
       parsed.isMultiDay ||
       (sanitizedStartDate && sanitizedEndDate && sanitizedStartDate !== sanitizedEndDate)
     );
 
+    // Verify studentId against provided studentCandidates to prevent hallucinated IDs
+    let matchedId: number | null = null;
+    let matchedName: string | null = null;
+
+    if (typeof parsed.studentId === "number") {
+      const candidate = studentCandidates.find((s) => s.id === parsed.studentId);
+      if (candidate) {
+        matchedId = candidate.id;
+        matchedName = candidate.name;
+      }
+    }
+
+    if (!matchedId && typeof parsed.studentName === "string" && parsed.studentName.trim()) {
+      const target = parsed.studentName.trim().toLowerCase();
+      const candidate = studentCandidates.find((s) => s.name.trim().toLowerCase() === target);
+      if (candidate) {
+        matchedId = candidate.id;
+        matchedName = candidate.name;
+      }
+    }
+
+    const defaultConf = matchedId ? 0.95 : 0.7;
+    const confidence = typeof parsed.matchConfidence === "number" ? parsed.matchConfidence : defaultConf;
+
     return {
-      studentId: typeof parsed.studentId === "number" ? parsed.studentId : null,
-      studentName: typeof parsed.studentName === "string" ? parsed.studentName : null,
+      studentId: matchedId,
+      studentName: matchedName || (typeof parsed.studentName === "string" ? parsed.studentName : null),
       candidateName: typeof parsed.candidateName === "string" ? parsed.candidateName : null,
       className: typeof parsed.className === "string" ? parsed.className : null,
       matchConfidence: Math.min(Math.max(confidence, 0), 1),

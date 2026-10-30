@@ -4,7 +4,6 @@ import { db } from "@/db";
 import { classes, students } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { checkRateLimit, recordFailedAttempt } from "@/lib/rate-limiter";
-import { getAiRouterConfig, parseLetterWithAi } from "@/lib/ai-router";
 import crypto from "crypto";
 import { getCache, setCache } from "@/lib/redis";
 
@@ -139,6 +138,7 @@ export async function POST(request: NextRequest) {
         device?: string;
         deviceName?: string;
         gpuFallbackError?: string;
+        needsAiRefinement?: boolean;
       }>(ocrCacheKey);
 
       const isStaleFallback =
@@ -147,12 +147,18 @@ export async function POST(request: NextRequest) {
         (typeof cachedResult?.deviceName === "string" && cachedResult.deviceName.toLowerCase().includes("cpu"));
 
       if (cachedResult && cachedResult.detected && !isStaleFallback) {
+        const det = cachedResult.detected;
+        const matchConf = typeof det.matchConfidence === "number" ? det.matchConfidence : 0;
+        const needsAi = !det.studentName || matchConf < 0.80 || !det.startDate;
+
         return NextResponse.json({
           success: true,
           detected: cachedResult.detected,
           processingTimeSeconds: cachedResult.processingTimeSeconds ?? 0,
           device: cachedResult.device,
           deviceName: cachedResult.deviceName,
+          needsAiRefinement: typeof cachedResult.needsAiRefinement === "boolean" ? cachedResult.needsAiRefinement : needsAi,
+          fileHash,
           cached: true,
         });
       }
@@ -233,62 +239,6 @@ export async function POST(request: NextRequest) {
     const data = await ocrResponse.json();
     const detected = data.detected || {};
 
-    // Smart Fallback via 9router AI if enabled
-    const aiConfig = await getAiRouterConfig();
-    if (aiConfig.enabled) {
-      const matchConfidence = typeof detected.matchConfidence === "number" ? detected.matchConfidence : 0;
-      const needsAi =
-        !detected.studentName ||
-        matchConfidence < 0.70 ||
-        !detected.startDate ||
-        !detected.status;
-
-      if (needsAi) {
-        try {
-          const rawText: string = detected.rawExtractedText || data.raw_text || "";
-          const rawLines = rawText ? rawText.split("\n").map((l: string) => l.trim()).filter(Boolean) : [];
-
-          const aiResult = await parseLetterWithAi({
-            rawLines,
-            studentCandidates: classStudents,
-            imageBase64: buffer.toString("base64"),
-            mimeType: file.type || "image/jpeg",
-          });
-
-          if (aiResult) {
-            if (aiResult.studentName && (!detected.studentName || aiResult.matchConfidence > matchConfidence)) {
-              detected.studentId = aiResult.studentId;
-              detected.studentName = aiResult.studentName;
-              detected.candidateName = aiResult.candidateName || detected.candidateName;
-              detected.matchConfidence = aiResult.matchConfidence;
-            } else if (!detected.candidateName && aiResult.candidateName) {
-              detected.candidateName = aiResult.candidateName;
-            }
-
-            if (aiResult.className && !detected.className) {
-              detected.className = aiResult.className;
-            }
-
-            if (aiResult.status && (!detected.status || detected.status === "Izin")) {
-              detected.status = aiResult.status;
-            }
-
-            if (aiResult.startDate) {
-              detected.startDate = aiResult.startDate;
-              detected.endDate = aiResult.endDate;
-              detected.isMultiDay = aiResult.isMultiDay;
-            }
-
-            if (aiResult.description && (!detected.description || detected.description.length < 5)) {
-              detected.description = aiResult.description;
-            }
-          }
-        } catch (aiErr) {
-          console.warn("[Letter OCR] AI fallback failed, continuing with PaddleOCR result:", aiErr);
-        }
-      }
-    }
-
     // Layer 3 defense: Sanitize dates to prevent student birth dates (e.g. 2005-2015) from becoming absence dates
     const currentYear = new Date().getFullYear();
     if (detected.startDate) {
@@ -308,6 +258,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Calculate quality flag for AI Refinement suggestion
+    const matchConfidence = typeof detected.matchConfidence === "number" ? detected.matchConfidence : 0;
+    const needsAiRefinement = !detected.studentName || matchConfidence < 0.80 || !detected.startDate;
+
     // Cache the successfully analyzed and sanitized OCR result (TTL 24 hours = 86400s)
     try {
       const isCpuFallback =
@@ -323,6 +277,7 @@ export async function POST(request: NextRequest) {
           device: data?.device,
           deviceName: data?.device_name,
           gpuFallbackError: data?.gpu_fallback_error,
+          needsAiRefinement,
         },
         ttl
       );
@@ -337,6 +292,8 @@ export async function POST(request: NextRequest) {
       device: data.device,
       deviceName: data.device_name,
       gpuFallbackError: data.gpu_fallback_error,
+      needsAiRefinement,
+      fileHash,
     });
   } catch (err: unknown) {
     console.error("Letter OCR API route error:", err);
