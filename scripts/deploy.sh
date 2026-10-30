@@ -511,7 +511,7 @@ if [ -d "$OCR_DIR" ] && command -v python3 >/dev/null 2>&1; then
 
     log_info "Melakukan pra-inisialisasi (pre-warming) model PaddleOCR ke cache lokal..."
     (
-        cd "$OCR_SERVICE_DIR"
+        cd "$OCR_DIR"
         HOME="${APP_DIR}" PADDLE_HOME="${PADDLE_CACHE_DIR}" "$OCR_VENV/bin/python" -c "
 import main
 import numpy as np
@@ -535,7 +535,7 @@ WorkingDirectory=${OCR_DIR}
 Environment=PYTHONUNBUFFERED=1
 Environment=HOME=${APP_DIR}
 Environment=PADDLE_HOME=${PADDLE_CACHE_DIR}
-Environment=LD_LIBRARY_PATH=/usr/local/cuda/lib64:${OCR_VENV}/lib/python3.11/site-packages/nvidia/cudnn/lib:${OCR_VENV}/lib/python3.12/site-packages/nvidia/cudnn/lib:${OCR_VENV}/lib/python3.10/site-packages/nvidia/cudnn/lib:\${LD_LIBRARY_PATH}
+Environment=LD_LIBRARY_PATH=/usr/local/cuda/lib64:${OCR_VENV}/lib/python3.11/site-packages/nvidia/cudnn/lib:${OCR_VENV}/lib/python3.11/site-packages/nvidia/cublas/lib:${OCR_VENV}/lib/python3.12/site-packages/nvidia/cudnn/lib:${OCR_VENV}/lib/python3.10/site-packages/nvidia/cudnn/lib:\${LD_LIBRARY_PATH}
 EnvironmentFile=-${APP_DIR}/.env
 ExecStart=${OCR_VENV}/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8001 --workers 1
 Restart=always
