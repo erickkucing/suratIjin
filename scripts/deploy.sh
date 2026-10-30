@@ -298,6 +298,18 @@ if [ -z "$CURRENT_JWT" ] || [ ${#CURRENT_JWT} -lt 32 ] || [ "$CURRENT_JWT" = "$F
     log_success "JWT_SECRET berhasil diperbarui dengan kunci 256-bit acak yang aman."
 fi
 
+# Ensure robust, synchronized OCR_INTERNAL_SECRET (mencegah error autentikasi internal 401 antara Next.js dan OCR)
+CURRENT_OCR_SECRET=$(grep -E '^\s*OCR_INTERNAL_SECRET=' "${APP_DIR}/.env" 2>/dev/null | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d ' ' || true)
+if [ -z "$CURRENT_OCR_SECRET" ] || [[ "$CURRENT_OCR_SECRET" == *"ganti_dengan_token_rahasia"* ]]; then
+    NEW_OCR_SECRET="surat-ijin-internal-secret-2026"
+    if grep -qE '^\s*OCR_INTERNAL_SECRET=' "${APP_DIR}/.env"; then
+        sed -i -E "s|^\s*OCR_INTERNAL_SECRET=.*|OCR_INTERNAL_SECRET=\"${NEW_OCR_SECRET}\"|" "${APP_DIR}/.env"
+    else
+        echo "OCR_INTERNAL_SECRET=\"${NEW_OCR_SECRET}\"" >> "${APP_DIR}/.env"
+    fi
+    log_success "OCR_INTERNAL_SECRET berhasil disinkronkan ke .env."
+fi
+
 # Ensure storage directory exists with proper permissions
 mkdir -p "${APP_DIR}/storage/uploads"
 chmod 775 "${APP_DIR}/storage/uploads"
@@ -440,6 +452,7 @@ WorkingDirectory=${OCR_DIR}
 Environment=PYTHONUNBUFFERED=1
 Environment=HOME=${APP_DIR}
 Environment=PADDLE_HOME=${PADDLE_CACHE_DIR}
+EnvironmentFile=-${APP_DIR}/.env
 ExecStart=${OCR_VENV}/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8001 --workers 1
 Restart=always
 RestartSec=3s

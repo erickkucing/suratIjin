@@ -14,20 +14,46 @@ from paddleocr import PaddleOCR
 from extractor import process_document_bytes
 from letter_parser import process_letter_bytes
 
+# Load .env file automatically if present in current dir or project root
+try:
+    from dotenv import load_dotenv
+    for _p in [
+        os.path.join(os.path.dirname(__file__), "..", "..", ".env"),
+        os.path.join(os.path.dirname(__file__), ".env"),
+        "/opt/surat-ijin/.env",
+    ]:
+        if os.path.isfile(_p):
+            load_dotenv(_p)
+            break
+except Exception:
+    pass
+
 # Maximum allowed file size for OCR processing: 25 MB
 MAX_FILE_SIZE = 25 * 1024 * 1024
 
 # Internal security secret for microservice hardening (SEC-FINDING-04)
-OCR_INTERNAL_SECRET = os.environ.get("OCR_INTERNAL_SECRET", "surat-ijin-internal-secret-2026")
+DEFAULT_INTERNAL_SECRET = "surat-ijin-internal-secret-2026"
+PLACEHOLDER_INTERNAL_SECRET = "ganti_dengan_token_rahasia_internal_microservice_ocr_2026"
+
+def get_allowed_internal_secrets() -> set:
+    configured = (os.environ.get("OCR_INTERNAL_SECRET") or "").strip()
+    secrets = {DEFAULT_INTERNAL_SECRET}
+    if configured:
+        secrets.add(configured)
+        # If .env has the example placeholder, also allow default secret
+        if configured == PLACEHOLDER_INTERNAL_SECRET:
+            secrets.add(DEFAULT_INTERNAL_SECRET)
+    return secrets
 
 async def verify_internal_secret(x_internal_secret: Optional[str] = Header(None)):
     """Enforce shared-secret authentication for internal endpoints."""
-    if OCR_INTERNAL_SECRET:
-        if not x_internal_secret or x_internal_secret != OCR_INTERNAL_SECRET:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Akses ditolak: Token autentikasi internal tidak valid atau tidak disertakan."
-            )
+    allowed = get_allowed_internal_secrets()
+    token = (x_internal_secret or "").strip()
+    if not token or token not in allowed:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Akses ditolak: Token autentikasi internal tidak valid atau tidak disertakan."
+        )
 
 _ocr_engine: Optional[PaddleOCR] = None
 _active_device: str = "cpu"

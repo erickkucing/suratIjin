@@ -178,12 +178,18 @@ export async function POST(request: NextRequest) {
     // Allow up to 90 seconds for multi-page PDF processing
     const timeoutId = setTimeout(() => controller.abort(), 90000);
 
+    const rawSecret = (process.env.OCR_INTERNAL_SECRET || "").trim();
+    const internalSecret =
+      !rawSecret || rawSecret === "ganti_dengan_token_rahasia_internal_microservice_ocr_2026"
+        ? "surat-ijin-internal-secret-2026"
+        : rawSecret;
+
     let ocrResponse: Response;
     try {
       ocrResponse = await fetch(`${OCR_SERVICE_URL}/extract`, {
         method: "POST",
         headers: {
-          "X-Internal-Secret": process.env.OCR_INTERNAL_SECRET || "surat-ijin-internal-secret-2026",
+          "X-Internal-Secret": internalSecret,
         },
         body: forwardFormData,
         signal: controller.signal,
