@@ -63,21 +63,35 @@ test.describe("02. Dashboard & Attendance Workflow", () => {
     const modal = page.locator('div[role="dialog"]');
     await expect(modal).toBeVisible();
 
-    await page.fill("#keterangan", TEST_DESC);
+    // Select student from combobox
+    const studentInput = modal.locator("#student-combobox");
+    await studentInput.click();
+    const firstOption = modal.locator('#student-listbox [role="option"]').first();
+    await expect(firstOption).toBeVisible({ timeout: 5000 });
+    await firstOption.click();
 
     const izinBtn = modal.locator('button:has-text("Izin")').first();
     await izinBtn.click();
 
     const fileInput = modal.locator('input[type="file"][accept*=".pdf"]');
-    await fileInput.setInputFiles({
-      name: "surat_dokter_dummy.png",
-      mimeType: "image/png",
-      buffer: samplePngBuffer,
-    });
+    const [ocrResponse] = await Promise.all([
+      page.waitForResponse((res) => res.url().includes("/api/ocr/letter")),
+      fileInput.setInputFiles({
+        name: "surat_dokter_dummy.png",
+        mimeType: "image/png",
+        buffer: samplePngBuffer,
+      }),
+    ]);
+    await ocrResponse.finished();
 
     await expect(modal.locator('img[alt="Pratinjau Surat"]')).toBeVisible({ timeout: 10000 });
 
+    // Allow OCR auto-fill state to settle, then set test description explicitly
+    await page.waitForTimeout(500);
+    await page.fill("#keterangan", TEST_DESC);
+
     const submitBtn = modal.locator('button[type="submit"]:has-text("Simpan Catatan")');
+    await expect(submitBtn).toBeEnabled({ timeout: 5000 });
     await submitBtn.click();
 
     await expect(modal).not.toBeVisible({ timeout: 10000 });
@@ -138,11 +152,12 @@ test.describe("02. Dashboard & Attendance Workflow", () => {
     const deleteBtn = tableRow.locator('button[title="Hapus Data"]');
     await expect(deleteBtn).toBeVisible();
 
-    page.once("dialog", async (dialog) => {
-      await dialog.accept();
-    });
-
     await deleteBtn.click();
+
+    // Confirm using custom alertdialog button
+    const confirmBtn = page.locator('div[role="alertdialog"]').getByRole("button", { name: "Hapus Catatan", exact: true });
+    await expect(confirmBtn).toBeVisible({ timeout: 5000 });
+    await confirmBtn.click();
 
     await expect(page.locator(`tr:has-text("${TEST_DESC}")`)).not.toBeVisible({ timeout: 7000 });
   });

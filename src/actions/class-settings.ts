@@ -7,6 +7,10 @@ import { eq, and, ne } from "drizzle-orm";
 import { getCurrentUser, hashPassword } from "@/lib/auth";
 import { generateUniqueClassSlug } from "@/lib/class-slug";
 import { revalidatePath } from "next/cache";
+import {
+  invalidateClassDashboardCache,
+  invalidateAdminOverviewCache,
+} from "@/db/queries";
 
 const updateParentAccessSchema = z.object({
   classId: z.coerce.number().positive(),
@@ -78,6 +82,13 @@ export async function updateParentAccessAction(inputData: unknown) {
   revalidatePath("/dashboard");
   revalidatePath(`/portal/${cls.slug}`);
 
+  try {
+    await invalidateClassDashboardCache(classId);
+    await invalidateAdminOverviewCache();
+  } catch (err) {
+    console.error("Failed to invalidate cache after updateParentAccessAction:", err);
+  }
+
   return { success: true, message: "Pengaturan berhasil disimpan." };
 }
 
@@ -121,6 +132,14 @@ export async function addStudentAction(classId: number, name: string, nis?: stri
   });
 
   revalidatePath("/dashboard");
+
+  try {
+    await invalidateClassDashboardCache(classId);
+    await invalidateAdminOverviewCache();
+  } catch (err) {
+    console.error("Failed to invalidate cache after addStudentAction:", err);
+  }
+
   return { success: true, message: "Siswa berhasil ditambahkan." };
 }
 
@@ -173,6 +192,14 @@ export async function updateStudentAction(studentId: number, name: string, nis?:
     .where(eq(students.id, studentId));
 
   revalidatePath("/dashboard");
+
+  try {
+    await invalidateClassDashboardCache(st.classId);
+    await invalidateAdminOverviewCache();
+  } catch (err) {
+    console.error("Failed to invalidate cache after updateStudentAction:", err);
+  }
+
   return { success: true, message: "Data siswa berhasil diperbarui." };
 }
 
@@ -208,6 +235,14 @@ export async function toggleStudentActiveAction(studentId: number, isActive: boo
     .where(eq(students.id, studentId));
 
   revalidatePath("/dashboard");
+
+  try {
+    await invalidateClassDashboardCache(st.classId);
+    await invalidateAdminOverviewCache();
+  } catch (err) {
+    console.error("Failed to invalidate cache after toggleStudentActiveAction:", err);
+  }
+
   return { success: true, message: isActive ? "Siswa diaktifkan." : "Siswa diarsipkan." };
 }
 
@@ -256,6 +291,16 @@ export async function bulkAddStudentsAction(classId: number, names: string[]) {
 
   revalidatePath("/dashboard");
   revalidatePath(`/portal/${cls.slug}`);
+
+  if (newRows.length > 0) {
+    try {
+      await invalidateClassDashboardCache(classId);
+      await invalidateAdminOverviewCache();
+    } catch (err) {
+      console.error("Failed to invalidate cache after bulkAddStudentsAction:", err);
+    }
+  }
+
   return { success: true, message: `Berhasil menambahkan ${newRows.length} siswa baru.` };
 }
 
@@ -289,6 +334,14 @@ export async function deleteStudentAction(studentId: number) {
 
   revalidatePath("/dashboard");
   revalidatePath(`/portal/${targetClass.slug}`);
+
+  try {
+    await invalidateClassDashboardCache(st.classId);
+    await invalidateAdminOverviewCache();
+  } catch (err) {
+    console.error("Failed to invalidate cache after deleteStudentAction:", err);
+  }
+
   return { success: true, message: `Siswa "${st.name}" berhasil dihapus.` };
 }
 
@@ -360,6 +413,18 @@ export async function bulkImportStudentsAction(
 
   revalidatePath("/dashboard");
   revalidatePath(`/portal/${cls.slug}`);
+
+  if (newRows.length > 0 || nisUpdates.length > 0) {
+    try {
+      await invalidateClassDashboardCache(classId);
+      if (newRows.length > 0) {
+        await invalidateAdminOverviewCache();
+      }
+    } catch (err) {
+      console.error("Failed to invalidate cache after bulkImportStudentsAction:", err);
+    }
+  }
+
   return { success: true, message: `Berhasil mengimpor ${newRows.length} siswa baru.` };
 }
 
@@ -390,6 +455,13 @@ export async function regenerateClassSlugAction(classId: number) {
   revalidatePath("/admin");
   revalidatePath(`/portal/${oldSlug}`);
   revalidatePath(`/portal/${newSlug}`);
+
+  try {
+    await invalidateClassDashboardCache(classId);
+    await invalidateAdminOverviewCache();
+  } catch (err) {
+    console.error("Failed to invalidate cache after regenerateClassSlugAction:", err);
+  }
 
   return {
     success: true,
@@ -431,6 +503,13 @@ export async function deleteAllStudentsAction(classId: number) {
   revalidatePath("/dashboard");
   revalidatePath("/admin");
   revalidatePath(`/portal/${cls.slug}`);
+
+  try {
+    await invalidateClassDashboardCache(classId);
+    await invalidateAdminOverviewCache();
+  } catch (err) {
+    console.error("Failed to invalidate cache after deleteAllStudentsAction:", err);
+  }
 
   return {
     success: true,

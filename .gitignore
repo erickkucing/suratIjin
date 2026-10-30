@@ -5,6 +5,9 @@ out/
 # Dependencies
 node_modules/
 
+# TypeScript build cache
+*.tsbuildinfo
+
 # Environment files
 .env*.local
 

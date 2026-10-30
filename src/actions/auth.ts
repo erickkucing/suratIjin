@@ -75,7 +75,7 @@ export async function loginAction(
     const ipKey = `login:ip:${clientIp}`;
     const accountKey = `login:account:${username.toLowerCase().trim()}`;
 
-    const limitCheck = checkDualRateLimit(ipKey, accountKey);
+    const limitCheck = await checkDualRateLimit(ipKey, accountKey);
     if (limitCheck.isBlocked) {
       return {
         success: false,
@@ -88,7 +88,7 @@ export async function loginAction(
     });
 
     if (!user || !user.isActive) {
-      const failStatus = recordDualFailedAttempt(ipKey, accountKey);
+      const failStatus = await recordDualFailedAttempt(ipKey, accountKey);
       return {
         success: false,
         error: failStatus.isBlocked
@@ -99,7 +99,7 @@ export async function loginAction(
 
     const isValid = await verifyPassword(password, user.passwordHash);
     if (!isValid) {
-      const failStatus = recordDualFailedAttempt(ipKey, accountKey);
+      const failStatus = await recordDualFailedAttempt(ipKey, accountKey);
       return {
         success: false,
         error: failStatus.isBlocked
@@ -108,7 +108,7 @@ export async function loginAction(
       };
     }
 
-    resetDualRateLimit(ipKey, accountKey);
+    await resetDualRateLimit(ipKey, accountKey);
 
     const token = await createSessionToken({
       id: user.id,
@@ -158,7 +158,7 @@ export async function parentUnlockAction(classSlug: string, passwordPlain: strin
   const ipKey = `unlock:ip:${clientIp}`;
   const classKey = `unlock:class:${classSlug.toLowerCase().trim()}`;
 
-  const limitCheck = checkDualRateLimit(ipKey, classKey);
+  const limitCheck = await checkDualRateLimit(ipKey, classKey);
   if (limitCheck.isBlocked) {
     return {
       success: false,
@@ -180,7 +180,7 @@ export async function parentUnlockAction(classSlug: string, passwordPlain: strin
 
   const isValid = await verifyPassword(passwordPlain, cls.parentPasswordHash);
   if (!isValid) {
-    const failStatus = recordDualFailedAttempt(ipKey, classKey);
+    const failStatus = await recordDualFailedAttempt(ipKey, classKey);
     return {
       success: false,
       error: failStatus.isBlocked
@@ -189,7 +189,7 @@ export async function parentUnlockAction(classSlug: string, passwordPlain: strin
     };
   }
 
-  resetDualRateLimit(ipKey, classKey);
+  await resetDualRateLimit(ipKey, classKey);
 
   const token = await createParentToken({
     classSlug: cls.slug,

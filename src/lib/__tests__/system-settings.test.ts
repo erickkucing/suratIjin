@@ -145,4 +145,38 @@ describe("System Settings & 5 Curated Themes", () => {
       .where(eq(systemSettings.id, 1));
     invalidateSystemSettingsCache();
   });
+
+  it("should populate Redis cache and purge upon invalidateSystemSettingsCache", async () => {
+    const { initializeRedis, disconnectRedis, getCache } = await import("@/lib/redis");
+    await initializeRedis("redis://127.0.0.1:6379");
+
+    try {
+      await invalidateSystemSettingsCache();
+      const settings = await getSystemSettings();
+      expect(settings).toBeDefined();
+
+      // Check that Redis key cache:settings:global was populated
+      const redisCached = await getCache<any>("cache:settings:global");
+      expect(redisCached).toBeDefined();
+      expect(redisCached?.appName).toBe(settings.appName);
+
+      // Invalidate
+      await invalidateSystemSettingsCache();
+      const afterInvalidate = await getCache<any>("cache:settings:global");
+      expect(afterInvalidate).toBeNull();
+    } finally {
+      await disconnectRedis();
+    }
+  });
+
+  it("should gracefully fallback to in-memory/MySQL when Redis is disconnected", async () => {
+    const { disconnectRedis } = await import("@/lib/redis");
+    await disconnectRedis();
+
+    await invalidateSystemSettingsCache();
+    const settings = await getSystemSettings();
+    expect(settings).toBeDefined();
+    expect(settings.appName).toBeTruthy();
+  });
 });
+

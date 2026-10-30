@@ -226,7 +226,7 @@ describe("System Identity & Footer Actions", () => {
       .png()
       .toBuffer();
 
-    const file = new File([testPngBuffer], "test-logo.png", { type: "image/png" });
+    const file = new File([new Uint8Array(testPngBuffer)], "test-logo.png", { type: "image/png" });
     const formData = new FormData();
     formData.append("logo", file);
 

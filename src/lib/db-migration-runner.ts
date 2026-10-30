@@ -116,6 +116,8 @@ const TABLE_DEFINITIONS: { name: string; ddl: string }[] = [
         \`ai_router_url\` varchar(255) NOT NULL DEFAULT 'http://127.0.0.1:20128/v1',
         \`ai_router_api_key\` varchar(255),
         \`ai_router_model\` varchar(100) NOT NULL DEFAULT 'gemini/gemini-3.8-flash',
+        \`redis_enabled\` tinyint(1) NOT NULL DEFAULT 0,
+        \`redis_url\` varchar(255),
         \`updated_at\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         \`updated_by_id\` int,
         CONSTRAINT \`system_settings_id\` PRIMARY KEY(\`id\`),
@@ -155,6 +157,18 @@ export async function runRemoteMigration(
     for (const def of TABLE_DEFINITIONS) {
       await conn.query(def.ddl);
       logs.push(`✓ Tabel \`${def.name}\` siap.`);
+    }
+
+    // Ensure new columns exist on target if tables already existed without drop
+    try {
+      await conn.query(`
+        ALTER TABLE \`system_settings\`
+          ADD COLUMN IF NOT EXISTS \`redis_enabled\` tinyint(1) NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS \`redis_url\` varchar(255) NULL;
+      `);
+      logs.push("✓ Kolom redis_enabled & redis_url diverifikasi pada database target.");
+    } catch {
+      // Gracefully continue if columns already exist or IF NOT EXISTS syntax unsupported
     }
 
     let stats = {
@@ -233,9 +247,9 @@ export async function runRemoteMigration(
       const localSettings = await db.query.systemSettings.findFirst();
       if (localSettings) {
         await conn.query(
-          `INSERT INTO \`system_settings\` (\`id\`, \`app_name\`, \`logo_url\`, \`theme_color\`, \`bg_theme\`, \`footer_text\`, \`ai_enabled\`, \`ai_router_url\`, \`ai_router_api_key\`, \`ai_router_model\`, \`updated_at\`, \`updated_by_id\`)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON DUPLICATE KEY UPDATE \`app_name\` = VALUES(\`app_name\`), \`logo_url\` = VALUES(\`logo_url\`), \`theme_color\` = VALUES(\`theme_color\`), \`bg_theme\` = VALUES(\`bg_theme\`), \`footer_text\` = VALUES(\`footer_text\`), \`ai_enabled\` = VALUES(\`ai_enabled\`), \`ai_router_url\` = VALUES(\`ai_router_url\`), \`ai_router_api_key\` = VALUES(\`ai_router_api_key\`), \`ai_router_model\` = VALUES(\`ai_router_model\`);`,
+          `INSERT INTO \`system_settings\` (\`id\`, \`app_name\`, \`logo_url\`, \`theme_color\`, \`bg_theme\`, \`footer_text\`, \`ai_enabled\`, \`ai_router_url\`, \`ai_router_api_key\`, \`ai_router_model\`, \`redis_enabled\`, \`redis_url\`, \`updated_at\`, \`updated_by_id\`)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE \`app_name\` = VALUES(\`app_name\`), \`logo_url\` = VALUES(\`logo_url\`), \`theme_color\` = VALUES(\`theme_color\`), \`bg_theme\` = VALUES(\`bg_theme\`), \`footer_text\` = VALUES(\`footer_text\`), \`ai_enabled\` = VALUES(\`ai_enabled\`), \`ai_router_url\` = VALUES(\`ai_router_url\`), \`ai_router_api_key\` = VALUES(\`ai_router_api_key\`), \`ai_router_model\` = VALUES(\`ai_router_model\`), \`redis_enabled\` = VALUES(\`redis_enabled\`), \`redis_url\` = VALUES(\`redis_url\`);`,
           [
             localSettings.id,
             localSettings.appName,
@@ -247,12 +261,14 @@ export async function runRemoteMigration(
             localSettings.aiRouterUrl,
             localSettings.aiRouterApiKey,
             localSettings.aiRouterModel,
+            localSettings.redisEnabled ? 1 : 0,
+            localSettings.redisUrl || null,
             localSettings.updatedAt,
             localSettings.updatedById,
           ]
         );
         stats.settingsCount = 1;
-        logs.push("✓ Pengaturan sistem (branding, tema & AI) berhasil disalin.");
+        logs.push("✓ Pengaturan sistem (branding, tema, AI & Redis) berhasil disalin.");
       }
     }
 

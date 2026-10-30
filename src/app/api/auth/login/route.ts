@@ -64,7 +64,7 @@ export async function POST(request: Request) {
     const ipKey = `login:ip:${clientIp}`;
     const accountKey = `login:account:${username.toLowerCase().trim()}`;
 
-    const limitCheck = checkDualRateLimit(ipKey, accountKey);
+    const limitCheck = await checkDualRateLimit(ipKey, accountKey);
     if (limitCheck.isBlocked) {
       return NextResponse.json(
         {
@@ -83,7 +83,7 @@ export async function POST(request: Request) {
     });
 
     if (!user || !user.isActive) {
-      const failStatus = recordDualFailedAttempt(ipKey, accountKey);
+      const failStatus = await recordDualFailedAttempt(ipKey, accountKey);
       return NextResponse.json(
         {
           success: false,
@@ -102,7 +102,7 @@ export async function POST(request: Request) {
 
     const isValid = await verifyPassword(password, user.passwordHash);
     if (!isValid) {
-      const failStatus = recordDualFailedAttempt(ipKey, accountKey);
+      const failStatus = await recordDualFailedAttempt(ipKey, accountKey);
       return NextResponse.json(
         {
           success: false,
@@ -120,7 +120,7 @@ export async function POST(request: Request) {
     }
 
     // Reset rate limit counters upon successful credentials
-    resetDualRateLimit(ipKey, accountKey);
+    await resetDualRateLimit(ipKey, accountKey);
 
     const token = await createSessionToken({
       id: user.id,

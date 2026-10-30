@@ -59,6 +59,7 @@ interface DashboardClientProps {
   classesList: ClassItem[];
   currentClassId: number;
   logoUrl?: string | null;
+  footerText?: string | null;
 }
 
 export function DashboardClient({
@@ -67,6 +68,7 @@ export function DashboardClient({
   classesList,
   currentClassId,
   logoUrl,
+  footerText,
 }: DashboardClientProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -1064,7 +1066,7 @@ export function DashboardClient({
           </section>
         </div>
 
-        <AppFooter className="pb-20 sm:pb-4 pt-6" />
+        <AppFooter text={footerText} className="pb-20 sm:pb-4 pt-6" />
       </main>
 
       {/* Floating Action Button (+ Catat) on Mobile */}

@@ -52,6 +52,7 @@ export default async function PortalPage({ params }: PortalPageProps) {
       classNameTitle={classItem.name}
       academicYear={classItem.academicYear}
       logoUrl={settings.logoUrl}
+      footerText={settings.footerText}
     />
   );
 }

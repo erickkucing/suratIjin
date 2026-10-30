@@ -47,7 +47,7 @@ describe("Hardening & Security Verification", () => {
     it("should enforce secure=true when X-Forwarded-Proto header is https", () => {
       delete process.env.COOKIE_SECURE;
       delete process.env.NEXT_PUBLIC_APP_URL;
-      process.env.NODE_ENV = "test";
+      (process.env as Record<string, string | undefined>).NODE_ENV = "test";
 
       const headers = new Headers({ "x-forwarded-proto": "https" });
       expect(resolveCookieSecurity(headers)).toBe(true);
@@ -61,7 +61,7 @@ describe("Hardening & Security Verification", () => {
     it("should handle chained proxy headers (e.g. 'https, http')", () => {
       delete process.env.COOKIE_SECURE;
       delete process.env.NEXT_PUBLIC_APP_URL;
-      process.env.NODE_ENV = "test";
+      (process.env as Record<string, string | undefined>).NODE_ENV = "test";
 
       const headers = new Headers({ "x-forwarded-proto": "https, http" });
       expect(resolveCookieSecurity(headers)).toBe(true);
@@ -70,7 +70,7 @@ describe("Hardening & Security Verification", () => {
     it("should enforce secure=true when COOKIE_SECURE is 'true'", () => {
       process.env.COOKIE_SECURE = "true";
       delete process.env.NEXT_PUBLIC_APP_URL;
-      process.env.NODE_ENV = "test";
+      (process.env as Record<string, string | undefined>).NODE_ENV = "test";
 
       expect(resolveCookieSecurity()).toBe(true);
     });
@@ -78,7 +78,7 @@ describe("Hardening & Security Verification", () => {
     it("should enforce secure=true when NEXT_PUBLIC_APP_URL starts with https://", () => {
       delete process.env.COOKIE_SECURE;
       process.env.NEXT_PUBLIC_APP_URL = "https://suratijin.sekolah.sch.id";
-      process.env.NODE_ENV = "test";
+      (process.env as Record<string, string | undefined>).NODE_ENV = "test";
 
       expect(resolveCookieSecurity()).toBe(true);
     });
@@ -86,7 +86,7 @@ describe("Hardening & Security Verification", () => {
     it("should default to true in production environment", () => {
       delete process.env.COOKIE_SECURE;
       delete process.env.NEXT_PUBLIC_APP_URL;
-      process.env.NODE_ENV = "production";
+      (process.env as Record<string, string | undefined>).NODE_ENV = "production";
 
       expect(resolveCookieSecurity()).toBe(true);
     });
@@ -94,7 +94,7 @@ describe("Hardening & Security Verification", () => {
     it("should return false in non-production environment without HTTPS indicators", () => {
       delete process.env.COOKIE_SECURE;
       delete process.env.NEXT_PUBLIC_APP_URL;
-      process.env.NODE_ENV = "test";
+      (process.env as Record<string, string | undefined>).NODE_ENV = "test";
 
       const req = new Request("http://localhost:3001/api/auth/login");
       expect(resolveCookieSecurity(req)).toBe(false);
@@ -103,7 +103,7 @@ describe("Hardening & Security Verification", () => {
   });
 
   describe("SEC-VULN-05: File Download Rate Limiter", () => {
-    it("should allow up to 60 downloads per minute per IP and block the 61st request", () => {
+    it("should allow up to 60 downloads per minute per IP and block the 61st request", async () => {
       _clearRateLimitStoreForTesting();
       const ip = "198.51.100.42";
       const key = `file-download:${ip}`;
@@ -111,19 +111,19 @@ describe("Hardening & Security Verification", () => {
       const windowMs = 60 * 1000;
 
       for (let i = 1; i <= 60; i++) {
-        const check = checkRateLimit(key, limit, windowMs);
+        const check = await checkRateLimit(key, limit, windowMs);
         expect(check.isBlocked).toBe(false);
         expect(check.remainingAttempts).toBe(limit - (i - 1));
-        recordFailedAttempt(key, limit, windowMs);
+        await recordFailedAttempt(key, limit, windowMs);
       }
 
-      const blockedCheck = checkRateLimit(key, limit, windowMs);
+      const blockedCheck = await checkRateLimit(key, limit, windowMs);
       expect(blockedCheck.isBlocked).toBe(true);
       expect(blockedCheck.remainingAttempts).toBe(0);
       expect(blockedCheck.retryAfterSeconds).toBeGreaterThan(0);
 
       // Distinct IP is not affected
-      const otherCheck = checkRateLimit("file-download:198.51.100.43", limit, windowMs);
+      const otherCheck = await checkRateLimit("file-download:198.51.100.43", limit, windowMs);
       expect(otherCheck.isBlocked).toBe(false);
     });
   });

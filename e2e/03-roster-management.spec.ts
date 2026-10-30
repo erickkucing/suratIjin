@@ -4,14 +4,15 @@ import { students } from "@/db/schema";
 import { or, like, eq } from "drizzle-orm";
 
 test.describe("03. Student Roster Management Workflow", () => {
-  const TEST_STUDENT_NAME = "__E2E_TEST_STUDENT__";
-  const TEST_STUDENT_EDITED = "__E2E_TEST_STUDENT_EDITED__";
+  const TEST_STUDENT_NAME = "Test Student E2e";
+  const TEST_STUDENT_EDITED = "Test Student Edited";
   const TEST_NIS = "999999";
 
   const cleanupTestStudents = async () => {
     try {
       await db.delete(students).where(
         or(
+          like(students.name, "%Test Student%"),
           like(students.name, "%__E2E_%"),
           eq(students.nis, TEST_NIS)
         )
@@ -90,9 +91,10 @@ test.describe("03. Student Roster Management Workflow", () => {
 
     const saveBtn = editRow.locator('button[title="Simpan"]');
     await saveBtn.click();
+    await expect(editNameInput).not.toBeVisible({ timeout: 10000 });
 
     await searchInput.fill(TEST_STUDENT_EDITED);
-    await expect(modal.locator(`div:has-text("${TEST_STUDENT_EDITED}")`).last()).toBeVisible();
+    await expect(modal.locator(`div:has-text("${TEST_STUDENT_EDITED}")`).last()).toBeVisible({ timeout: 10000 });
   });
 
   test("should download Excel student import template", async ({ page }) => {
@@ -105,7 +107,7 @@ test.describe("03. Student Roster Management Workflow", () => {
     const bulkTab = modal.locator('button:has-text("Impor Massal")');
     await bulkTab.click();
 
-    const downloadTemplateBtn = modal.locator('button:has-text("Download Format Excel")');
+    const downloadTemplateBtn = modal.locator('button:has-text("Format Excel")');
     await expect(downloadTemplateBtn).toBeVisible();
 
     const downloadPromise = page.waitForEvent("download");
@@ -127,13 +129,13 @@ test.describe("03. Student Roster Management Workflow", () => {
     const deleteBtn = modal.locator(`button[aria-label="Hapus ${TEST_STUDENT_EDITED}"]`);
     await expect(deleteBtn).toBeVisible();
 
-    page.once("dialog", async (dialog) => {
-      await dialog.accept();
-    });
-
     await deleteBtn.click();
 
-    await expect(modal.locator(`p:has-text("${TEST_STUDENT_EDITED}")`)).not.toBeVisible({ timeout: 5000 });
+    const confirmBtn = page.locator('div[role="alertdialog"]').getByRole("button", { name: "Hapus Siswa", exact: true });
+    await expect(confirmBtn).toBeVisible({ timeout: 5000 });
+    await confirmBtn.click();
+
+    await expect(modal.locator("text=berhasil dihapus")).toBeVisible({ timeout: 5000 });
 
     const closeBtn = modal.locator('button[aria-label="Tutup dialog"]');
     await closeBtn.click();

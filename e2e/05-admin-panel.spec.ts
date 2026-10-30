@@ -13,19 +13,22 @@ test.describe("05. Superadmin Panel Workflow", () => {
   });
 
   test("should navigate across all 4 superadmin tabs seamlessly", async ({ page }) => {
-    await expect(page.locator('button:has-text("Manajemen Kelas")')).toBeVisible();
+    await expect(page.locator('button:has-text("Manajemen Kelas")').first()).toBeVisible();
     await expect(page.locator("body")).toContainText("XII TKJ 2");
 
-    const teachersTab = page.locator('button:has-text("Akun Wali Kelas")');
+    const teachersTab = page.locator('button:has-text("Akun Wali Kelas")').first();
     await teachersTab.click();
     await expect(page.locator("body")).toContainText("erick");
 
-    const settingsTab = page.locator('button:has-text("Pengaturan Sistem & Tema")');
+    const settingsTab = page.locator('button:has-text("Pengaturan Tampilan")').first();
     await settingsTab.click();
-    await expect(page.locator("body")).toContainText("Logo Sekolah & Favicon Browser");
+    await expect(page.locator("body")).toContainText("Logo Sekolah & Ikon Aplikasi");
 
-    const dbTab = page.locator('button:has-text("Database & Migrasi")');
+    const dbTab = page.locator('button:has-text("Pengaturan Teknis")').first();
     await dbTab.click();
+
+    const dbSubTab = page.locator('button:has-text("Manajemen Basis Data")').first();
+    await dbSubTab.click();
     await expect(page.locator("body")).toContainText("Status Database Aplikasi Saat Ini");
   });
 

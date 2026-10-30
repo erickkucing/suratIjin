@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Lock, Unlock, Share2, Eye, EyeOff, Copy, Check, MessageSquare, Loader2, RotateCcw, AlertCircle, RefreshCw } from "lucide-react";
+import { Lock, Unlock, Share2, Eye, EyeOff, Copy, Check, MessageSquare, Loader2, RotateCcw, AlertCircle, RefreshCw, X } from "lucide-react";
 import QRCode from "qrcode";
 import { ClassItem } from "@/db/schema";
 import { updateParentAccessAction, regenerateClassSlugAction } from "@/actions/class-settings";
@@ -355,6 +355,14 @@ export function ParentPortalSettingsModal({
               </p>
             </div>
           </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Tutup dialog"
+            className="touch-target p-2 rounded-lg text-[var(--ink-muted)] hover:text-[var(--ink)] hover:bg-[var(--canvas)] transition-colors cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         {/* Body */}

@@ -10,6 +10,10 @@ import { getAutoAcademicPeriod } from "@/lib/academic-year";
 import { generateUniqueClassSlug } from "@/lib/class-slug";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
+import {
+  invalidateAdminOverviewCache,
+  invalidateClassDashboardCache,
+} from "@/db/queries";
 
 const createTeacherSchema = z.object({
   username: z.string().min(3, "Username minimal 3 karakter."),
@@ -62,6 +66,16 @@ export async function createTeacherAction(inputData: unknown) {
   }
 
   revalidatePath("/admin");
+
+  try {
+    await invalidateAdminOverviewCache();
+    if (classId) {
+      await invalidateClassDashboardCache(classId);
+    }
+  } catch (err) {
+    console.error("Failed to invalidate cache after createTeacherAction:", err);
+  }
+
   return { success: true, message: "Akun Wali Kelas berhasil dibuat." };
 }
 
@@ -117,6 +131,16 @@ export async function updateTeacherAction(
   }
 
   revalidatePath("/admin");
+
+  try {
+    await invalidateAdminOverviewCache();
+    if (classId) {
+      await invalidateClassDashboardCache(classId);
+    }
+  } catch (err) {
+    console.error("Failed to invalidate cache after updateTeacherAction:", err);
+  }
+
   return { success: true, message: "Data Wali Kelas berhasil diperbarui." };
 }
 
@@ -185,6 +209,13 @@ export async function createClassAction(inputData: unknown) {
   });
 
   revalidatePath("/admin");
+
+  try {
+    await invalidateAdminOverviewCache();
+  } catch (err) {
+    console.error("Failed to invalidate cache after createClassAction:", err);
+  }
+
   return {
     success: true,
     message: `Kelas baru berhasil dibuat. PIN portal orang tua: ${initialPin}`,
@@ -238,6 +269,14 @@ export async function updateClassAction(
   revalidatePath("/dashboard");
   revalidatePath(`/portal/${existing.slug}`);
   revalidatePath(`/portal/${slug.trim()}`);
+
+  try {
+    await invalidateAdminOverviewCache();
+    await invalidateClassDashboardCache(classId);
+  } catch (err) {
+    console.error("Failed to invalidate cache after updateClassAction:", err);
+  }
+
   return { success: true, message: "Data kelas berhasil diperbarui." };
 }
 

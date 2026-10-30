@@ -5,6 +5,8 @@ import { classes, students } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { checkRateLimit, recordFailedAttempt } from "@/lib/rate-limiter";
 import { getAiRouterConfig, parseLetterWithAi } from "@/lib/ai-router";
+import crypto from "crypto";
+import { getCache, setCache } from "@/lib/redis";
 
 const OCR_SERVICE_URL = process.env.OCR_SERVICE_URL || "http://127.0.0.1:8001";
 const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15 MB
@@ -62,7 +64,7 @@ export async function POST(request: NextRequest) {
 
     // Rate limiting: 20 OCR letter scan requests per minute per user
     const rateLimitKey = `ocr-letter:${user.id}`;
-    const rateCheck = checkRateLimit(rateLimitKey, 20, 60 * 1000);
+    const rateCheck = await checkRateLimit(rateLimitKey, 20, 60 * 1000);
     if (rateCheck.isBlocked) {
       return NextResponse.json(
         {
@@ -72,7 +74,7 @@ export async function POST(request: NextRequest) {
         { status: 429, headers: { "Retry-After": "60" } }
       );
     }
-    recordFailedAttempt(rateLimitKey, 20, 60 * 1000);
+    await recordFailedAttempt(rateLimitKey, 20, 60 * 1000);
 
     const formData = await request.formData();
     const classIdStr = formData.get("classId") as string;
@@ -124,6 +126,28 @@ export async function POST(request: NextRequest) {
         },
         { status: 400 }
       );
+    }
+
+    // Hash-based caching: check if this identical letter file has already been processed for this class
+    const fileHash = crypto.createHash("sha256").update(buffer).digest("hex");
+    const ocrCacheKey = `cache:ocr:letter:${fileHash}:${classId}`;
+
+    try {
+      const cachedResult = await getCache<{
+        detected: Record<string, unknown>;
+        processingTimeSeconds?: number;
+      }>(ocrCacheKey);
+
+      if (cachedResult && cachedResult.detected) {
+        return NextResponse.json({
+          success: true,
+          detected: cachedResult.detected,
+          processingTimeSeconds: cachedResult.processingTimeSeconds ?? 0,
+          cached: true,
+        });
+      }
+    } catch (cacheErr) {
+      console.warn("[Letter OCR] Redis getCache failed, proceeding with live inference:", cacheErr);
     }
 
     // Retrieve active students for this class to pass to OCR fuzzy matcher
@@ -266,6 +290,20 @@ export async function POST(request: NextRequest) {
         detected.endDate = "";
         detected.isMultiDay = false;
       }
+    }
+
+    // Cache the successfully analyzed and sanitized OCR result (TTL 24 hours = 86400s)
+    try {
+      await setCache(
+        ocrCacheKey,
+        {
+          detected,
+          processingTimeSeconds: data?.processing_time_seconds ?? 0,
+        },
+        86400
+      );
+    } catch (cacheErr) {
+      console.warn("[Letter OCR] Redis setCache failed:", cacheErr);
     }
 
     return NextResponse.json({

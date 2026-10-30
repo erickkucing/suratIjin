@@ -45,7 +45,7 @@ export async function GET(
     // SEC-VULN-05: Rate limiting on file downloads (60 downloads per minute per client IP)
     const clientIp = await getClientIp(request);
     const rateLimitKey = `file-download:${clientIp}`;
-    const rateCheck = checkRateLimit(rateLimitKey, 60, 60 * 1000);
+    const rateCheck = await checkRateLimit(rateLimitKey, 60, 60 * 1000);
 
     if (rateCheck.isBlocked) {
       return NextResponse.json(
@@ -61,7 +61,7 @@ export async function GET(
         }
       );
     }
-    recordFailedAttempt(rateLimitKey, 60, 60 * 1000);
+    await recordFailedAttempt(rateLimitKey, 60, 60 * 1000);
 
     const { path: pathSegments } = await params;
     if (!pathSegments || pathSegments.length === 0) {

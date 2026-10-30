@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
 
     // Rate limiting: 15 OCR scan requests per minute per user
     const rateLimitKey = `ocr-roster:${user.id}`;
-    const rateCheck = checkRateLimit(rateLimitKey, 15, 60 * 1000);
+    const rateCheck = await checkRateLimit(rateLimitKey, 15, 60 * 1000);
     if (rateCheck.isBlocked) {
       return NextResponse.json(
         {
@@ -115,7 +115,7 @@ export async function POST(request: NextRequest) {
         { status: 429, headers: { "Retry-After": "60" } }
       );
     }
-    recordFailedAttempt(rateLimitKey, 15, 60 * 1000);
+    await recordFailedAttempt(rateLimitKey, 15, 60 * 1000);
 
     const formData = await request.formData();
     const classIdStr = formData.get("classId") as string;

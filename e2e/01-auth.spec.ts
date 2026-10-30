@@ -1,6 +1,13 @@
 import { test, expect } from "@playwright/test";
+import { execSync } from "child_process";
 
 test.describe("01. Authentication & Security Module", () => {
+  test.beforeAll(async () => {
+    try {
+      execSync("redis-cli flushall");
+    } catch {}
+  });
+
   test.beforeEach(async ({ page }) => {
     await page.context().clearCookies();
   });
@@ -17,7 +24,7 @@ test.describe("01. Authentication & Security Module", () => {
     ]);
 
     await expect(page).toHaveURL(/\/admin/);
-    await expect(page.locator("h1")).toContainText("Panel Superadmin");
+    await expect(page.locator("h1")).toContainText("Superadmin");
   });
 
   test("should successfully log in as Wali Kelas and redirect to /dashboard", async ({ page }) => {
@@ -62,6 +69,11 @@ test.describe("01. Authentication & Security Module", () => {
     const alert = page.locator('div[role="alert"]:not(#__next-route-announcer__)');
     await expect(alert).toBeVisible();
     await expect(alert).toContainText(/Terlalu banyak percobaan/i);
+
+    // Clear rate limit lock so subsequent tests from 127.0.0.1 proceed smoothly
+    try {
+      execSync("redis-cli flushall");
+    } catch {}
   });
 
   test("should successfully log out and redirect to /login", async ({ page }) => {

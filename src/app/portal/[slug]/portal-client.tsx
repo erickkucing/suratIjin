@@ -42,6 +42,7 @@ interface PortalClientProps {
   classNameTitle?: string;
   academicYear?: string;
   logoUrl?: string | null;
+  footerText?: string | null;
 }
 
 export function PortalClient({
@@ -52,6 +53,7 @@ export function PortalClient({
   classNameTitle = "Kelas",
   academicYear = "2026/2027",
   logoUrl,
+  footerText,
 }: PortalClientProps) {
   const router = useRouter();
 
@@ -111,7 +113,7 @@ export function PortalClient({
         setGateError(resData?.error || "Password salah. Silakan tanyakan kepada Wali Kelas.");
         return;
       }
-      router.refresh();
+      window.location.reload();
     } catch {
       try {
         const res = await parentUnlockAction(classSlug, passwordInput);
@@ -119,7 +121,7 @@ export function PortalClient({
           setGateError(res.error || "Password salah. Silakan tanyakan kepada Wali Kelas.");
           return;
         }
-        router.refresh();
+        window.location.reload();
       } catch (err: unknown) {
         setGateError(err instanceof Error ? err.message : "Terjadi kesalahan koneksi.");
       }
@@ -211,6 +213,7 @@ export function PortalClient({
             </div>
           </div>
         </main>
+        <AppFooter text={footerText} />
       </div>
     );
   }
@@ -875,7 +878,7 @@ export function PortalClient({
           </section>
         </div>
 
-        <AppFooter className="py-6 pt-2" />
+        <AppFooter text={footerText} className="py-6 pt-2" />
       </main>
 
       <LetterLightboxModal

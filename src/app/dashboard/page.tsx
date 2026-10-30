@@ -5,6 +5,7 @@ import { classes } from "@/db/schema";
 import { eq, asc } from "drizzle-orm";
 import { getClassDashboardData } from "@/db/queries";
 import { getSystemSettings } from "@/lib/system-settings";
+import { AppFooter } from "@/components/app-footer";
 import { DashboardClient } from "./dashboard-client";
 
 interface DashboardPageProps {
@@ -42,20 +43,24 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   }
 
   if (userClasses.length === 0) {
+    const settings = await getSystemSettings();
     return (
-      <div className="min-h-screen flex items-center justify-center p-6 bg-[var(--canvas)] text-[var(--ink)]">
-        <div className="card-paper p-8 rounded-2xl max-w-md text-center space-y-4">
-          <h1 className="text-xl font-bold font-heading">Belum Ada Kelas Tersedia</h1>
-          <p className="text-sm text-[var(--ink-muted)]">
-            Hubungi Superadmin untuk membuat kelas atau menugaskan Anda sebagai Wali Kelas.
-          </p>
-          <a
-            href="/login"
-            className="inline-block px-4 py-2 rounded-xl bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white text-sm font-semibold transition-colors"
-          >
-            Kembali ke Login
-          </a>
+      <div className="min-h-screen flex flex-col justify-between p-6 bg-[var(--canvas)] text-[var(--ink)]">
+        <div className="flex-1 flex items-center justify-center">
+          <div className="card-paper p-8 rounded-2xl max-w-md text-center space-y-4">
+            <h1 className="text-xl font-bold font-heading">Belum Ada Kelas Tersedia</h1>
+            <p className="text-sm text-[var(--ink-muted)]">
+              Hubungi Superadmin untuk membuat kelas atau menugaskan Anda sebagai Wali Kelas.
+            </p>
+            <a
+              href="/login"
+              className="inline-block px-4 py-2 rounded-xl bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white text-sm font-semibold transition-colors"
+            >
+              Kembali ke Login
+            </a>
+          </div>
         </div>
+        <AppFooter text={settings.footerText} />
       </div>
     );
   }
@@ -78,6 +83,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       classesList={userClasses}
       currentClassId={selectedClassId}
       logoUrl={settings.logoUrl}
+      footerText={settings.footerText}
     />
   );
 }

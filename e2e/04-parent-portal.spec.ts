@@ -39,17 +39,23 @@ test.describe("04. Parent Portal Workflow", () => {
     await expect(errorAlert).toContainText(/Kata sandi|salah/i);
 
     await pinInput.fill("123456");
-    await page.click('button[type="submit"]:has-text("Buka Papan Presensi")');
+    await Promise.all([
+      page.waitForResponse((r) => r.url().includes("/api/auth/unlock") && r.status() === 200),
+      page.click('button[type="submit"]:has-text("Buka Papan Presensi")'),
+    ]);
 
-    await expect(page.locator("h1")).toContainText("XII TKJ 2", { timeout: 7000 });
+    await expect(page.locator("h1")).toContainText("Kelas XII TKJ 2", { timeout: 10000 });
     await expect(page.locator("body")).toContainText("Wali Kelas");
   });
 
   test("should search student and verify 100% appreciation board on unlocked portal", async ({ page }) => {
     await page.goto(`/portal/${CLASS_SLUG}`);
     await page.fill("#parent-password-input", "123456");
-    await page.click('button[type="submit"]:has-text("Buka Papan Presensi")');
-    await expect(page.locator("h1")).toContainText("XII TKJ 2", { timeout: 7000 });
+    await Promise.all([
+      page.waitForResponse((r) => r.url().includes("/api/auth/unlock") && r.status() === 200),
+      page.click('button[type="submit"]:has-text("Buka Papan Presensi")'),
+    ]);
+    await expect(page.locator("h1")).toContainText("Kelas XII TKJ 2", { timeout: 10000 });
 
     const searchInput = page.locator('input[placeholder="Cari nama putra/putri Anda..."]');
     await expect(searchInput).toBeVisible();

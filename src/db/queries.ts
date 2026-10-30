@@ -1,6 +1,49 @@
 import { db } from "./index";
 import { classes, students, attendanceRecords, users, Student, AttendanceRecord } from "./schema";
 import { eq, and, gte, lte, sql, inArray, desc, asc } from "drizzle-orm";
+import crypto from "crypto";
+import { getCache, setCache, deleteCache, deleteCachePattern } from "@/lib/redis";
+
+export const CLASS_DASHBOARD_CACHE_TTL = 60; // 60 seconds
+export const ADMIN_OVERVIEW_CACHE_TTL = 30; // 30 seconds
+export const ADMIN_OVERVIEW_CACHE_KEY = "cache:dashboard:admin:overview";
+
+export function getDashboardFilterHash(filters: DashboardFilters = {}): string {
+  const entries = Object.entries(filters)
+    .filter(([_, v]) => v !== undefined && v !== null && v !== "" && v !== "Semua")
+    .sort(([a], [b]) => a.localeCompare(b));
+  if (entries.length === 0) return "all";
+  const serialized = JSON.stringify(entries);
+  return crypto.createHash("sha256").update(serialized).digest("hex").slice(0, 16);
+}
+
+export function getClassDashboardCacheKey(classId: number | string, filters: DashboardFilters = {}): string {
+  const hash = getDashboardFilterHash(filters);
+  return `cache:dashboard:class:${classId}:${hash}`;
+}
+
+export async function invalidateClassDashboardCache(classId?: string | number): Promise<void> {
+  try {
+    if (classId !== undefined && classId !== null) {
+      await deleteCache(getClassDashboardCacheKey(classId, {}));
+    }
+    const pattern =
+      classId !== undefined && classId !== null
+        ? `cache:dashboard:class:${classId}:*`
+        : "cache:dashboard:class:*";
+    await deleteCachePattern(pattern);
+  } catch {
+    // Soft fallback
+  }
+}
+
+export async function invalidateAdminOverviewCache(): Promise<void> {
+  try {
+    await deleteCache(ADMIN_OVERVIEW_CACHE_KEY);
+  } catch {
+    // Soft fallback
+  }
+}
 
 export interface DashboardFilters {
   dateStart?: string;
@@ -44,6 +87,17 @@ export async function getClassDashboardData(
   classId: number,
   filters: DashboardFilters = {}
 ): Promise<DashboardData> {
+  const cacheKey = getClassDashboardCacheKey(classId, filters);
+
+  try {
+    const cached = await getCache<DashboardData>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+  } catch {
+    // Soft fallback
+  }
+
   const classItem = await db.query.classes.findFirst({
     where: eq(classes.id, classId),
   });
@@ -201,7 +255,7 @@ export async function getClassDashboardData(
     };
   });
 
-  return {
+  const result: DashboardData = {
     classInfo: classItem,
     studentsList,
     allStudentsList,
@@ -217,9 +271,26 @@ export async function getClassDashboardData(
     students100Percent,
     totalClassStudents: studentsList.length,
   };
+
+  try {
+    await setCache(cacheKey, result, CLASS_DASHBOARD_CACHE_TTL);
+  } catch {
+    // Soft fallback
+  }
+
+  return result;
 }
 
 export async function getAdminOverviewData() {
+  try {
+    const cached = await getCache<{ classes: any[]; teachers: any[] }>(ADMIN_OVERVIEW_CACHE_KEY);
+    if (cached) {
+      return cached;
+    }
+  } catch {
+    // Soft fallback
+  }
+
   const [rawClasses, studentCounts, absenceCounts, waliKelasUsers] = await Promise.all([
     db
       .select({
@@ -281,8 +352,16 @@ export async function getAdminOverviewData() {
     totalAbsences: absenceMap.get(c.id) || 0,
   }));
 
-  return {
+  const result = {
     classes: classesList,
     teachers: waliKelasUsers,
   };
+
+  try {
+    await setCache(ADMIN_OVERVIEW_CACHE_KEY, result, ADMIN_OVERVIEW_CACHE_TTL);
+  } catch {
+    // Soft fallback
+  }
+
+  return result;
 }

@@ -36,6 +36,7 @@ import {
   Settings,
   Copy,
   Globe,
+  Zap,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { AppFooter } from "@/components/app-footer";
@@ -66,6 +67,10 @@ import {
   migrateAndApplyDatabaseAction,
   revertToLocalDatabaseAction,
 } from "@/actions/database-admin";
+import {
+  testRedisConnectionAction,
+  updateRedisSettingsAction,
+} from "@/actions/redis-admin";
 import {
   parseDbUrl,
   buildDbUrl,
@@ -197,6 +202,33 @@ export function AdminClient({
   const [revertLoading, setRevertLoading] = useState(false);
   const [isRevertModalOpen, setIsRevertModalOpen] = useState(false);
   const [copiedUri, setCopiedUri] = useState(false);
+
+  // Redis Cache States (Opsional)
+  const [redisEnabled, setRedisEnabled] = useState<boolean>(initialSettings?.redisEnabled ?? false);
+  const [redisUrl, setRedisUrl] = useState<string>(initialSettings?.redisUrl || "redis://127.0.0.1:6379");
+  const [testingRedis, setTestingRedis] = useState(false);
+  const [savingRedis, setSavingRedis] = useState(false);
+  const [togglingRedis, setTogglingRedis] = useState(false);
+  const [redisNotice, setRedisNotice] = useState<{
+    type: "success" | "error";
+    title?: string;
+    message: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!redisNotice) return;
+    const timer = setTimeout(() => {
+      setRedisNotice(null);
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [redisNotice]);
+
+  const [redisHeartbeat, setRedisHeartbeat] = useState<{
+    checked: boolean;
+    isConnected: boolean;
+    latencyMs?: number;
+    error?: string;
+  }>({ checked: false, isConnected: false });
 
   // Create Teacher Modal
   const [isTeacherModalOpen, setIsTeacherModalOpen] = useState(false);
@@ -822,6 +854,161 @@ export function AdminClient({
       } catch {
         // Fallback failed silently
       }
+    }
+  };
+
+  // Realtime Polling Redis Status (15s interval)
+  const checkRedisHealth = async () => {
+    try {
+      const res = await fetch("/api/redis/status", { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        setRedisHeartbeat({
+          checked: true,
+          isConnected: Boolean(data.connected),
+          latencyMs: data.latencyMs,
+          error: data.error,
+        });
+      }
+    } catch {
+      setRedisHeartbeat({
+        checked: true,
+        isConnected: false,
+        error: "Gagal menghubungi endpoint status Redis",
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "database" && technicalSubTab === "database" && redisEnabled) {
+      checkRedisHealth();
+      const interval = setInterval(checkRedisHealth, 15000);
+      return () => clearInterval(interval);
+    }
+  }, [activeTab, technicalSubTab, redisEnabled]);
+
+  const handleToggleRedis = async () => {
+    if (togglingRedis) return;
+    setTogglingRedis(true);
+    setRedisNotice(null);
+
+    const nextState = !redisEnabled;
+    setRedisEnabled(nextState);
+
+    try {
+      const res = await updateRedisSettingsAction({
+        redisEnabled: nextState,
+        redisUrl: redisUrl.trim() || "redis://127.0.0.1:6379",
+      });
+
+      if (res.success) {
+        setRedisNotice({
+          type: "success",
+          title: nextState ? "Redis Diaktifkan" : "Redis Dinonaktifkan",
+          message: nextState
+            ? "Akselerasi cache Redis berhasil diaktifkan dan disimpan."
+            : "Akselerasi Redis dinonaktifkan. Aplikasi beralih ke direct MySQL & in-memory cache.",
+        });
+        if (nextState) {
+          checkRedisHealth();
+        } else {
+          setRedisHeartbeat({ checked: true, isConnected: false });
+        }
+        router.refresh();
+      } else {
+        setRedisNotice({
+          type: "error",
+          title: "Gagal Mengubah Status",
+          message: res.error || "Gagal menyimpan status Redis.",
+        });
+        setRedisEnabled(!nextState);
+      }
+    } catch (err: unknown) {
+      setRedisNotice({
+        type: "error",
+        title: "Terjadi Kesalahan",
+        message: err instanceof Error ? err.message : "Terjadi kesalahan saat mengubah status Redis.",
+      });
+      setRedisEnabled(!nextState);
+    } finally {
+      setTogglingRedis(false);
+    }
+  };
+
+  const handleTestRedisConnection = async () => {
+    setTestingRedis(true);
+    setRedisNotice(null);
+    try {
+      const res = await testRedisConnectionAction(redisUrl.trim());
+      if (res.success && res.connected) {
+        setRedisNotice({
+          type: "success",
+          title: `Koneksi Berhasil (${res.latencyMs} ms)`,
+          message: "Server Redis aktif dan merespons PONG dengan normal.",
+        });
+        setRedisHeartbeat({
+          checked: true,
+          isConnected: true,
+          latencyMs: res.latencyMs,
+        });
+      } else {
+        setRedisNotice({
+          type: "error",
+          title: "Koneksi Gagal",
+          message: res.error || "Gagal menghubungi server Redis.",
+        });
+        setRedisHeartbeat({
+          checked: true,
+          isConnected: false,
+          error: res.error,
+        });
+      }
+    } catch (err: unknown) {
+      setRedisNotice({
+        type: "error",
+        title: "Koneksi Gagal",
+        message: err instanceof Error ? err.message : "Terjadi kesalahan saat menguji koneksi.",
+      });
+    } finally {
+      setTestingRedis(false);
+    }
+  };
+
+  const handleSaveRedisSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingRedis(true);
+    setRedisNotice(null);
+    try {
+      const res = await updateRedisSettingsAction({
+        redisEnabled,
+        redisUrl: redisUrl.trim() || null,
+      });
+
+      if (res.success) {
+        setRedisNotice({
+          type: "success",
+          title: "Pengaturan Tersimpan",
+          message: "Konfigurasi Redis berhasil disimpan ke database.",
+        });
+        if (redisEnabled) {
+          checkRedisHealth();
+        }
+        router.refresh();
+      } else {
+        setRedisNotice({
+          type: "error",
+          title: "Gagal Menyimpan",
+          message: res.error || "Gagal menyimpan konfigurasi Redis.",
+        });
+      }
+    } catch (err: unknown) {
+      setRedisNotice({
+        type: "error",
+        title: "Gagal Menyimpan",
+        message: err instanceof Error ? err.message : "Terjadi kesalahan saat menyimpan.",
+      });
+    } finally {
+      setSavingRedis(false);
     }
   };
 
@@ -2886,6 +3073,251 @@ export function AdminClient({
               {/* Safe bottom margin inside technical tab */}
               <div className="pb-6" />
             </div>
+
+            {/* ============================================================= */}
+            {/* CARD 4: REDIS CACHE SERVER (OPSIONAL)                         */}
+            {/* Pemisah visual yang jelas dari manajemen MySQL di atas        */}
+            {/* ============================================================= */}
+            <div className="relative my-8">
+              <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                <div className="w-full border-t border-dashed border-[var(--border)]" />
+              </div>
+              <div className="relative flex justify-center">
+                <span className="px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-[var(--ink-muted)] bg-[var(--canvas)] rounded-full border border-[var(--border)] shadow-2xs flex items-center gap-1.5">
+                  <Zap className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Akselerasi &amp; Caching (Fitur Opsional)</span>
+                </span>
+              </div>
+            </div>
+
+            <section aria-labelledby="section-redis-heading">
+              <div className="card-paper p-6 rounded-2xl space-y-5">
+                {/* Header & Toggle */}
+                <div className="flex items-center justify-between gap-4 border-b border-[var(--border)] pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 shrink-0">
+                      <Zap className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h2
+                        id="section-redis-heading"
+                        className="text-base font-bold font-heading text-[var(--ink)] flex items-center gap-2"
+                      >
+                        <span>Redis Cache Server</span>
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[var(--canvas-subtle)] text-[var(--ink-muted)] border border-[var(--border)]">
+                          Opsional
+                        </span>
+                      </h2>
+                      <p className="text-xs text-[var(--ink-muted)] mt-0.5">
+                        Mempercepat query portal &amp; dashboard, mendistribusikan rate limiting, dan melakukan caching inferensi OCR surat izin.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="text-xs font-medium text-[var(--ink-muted)] hidden sm:inline">
+                      {redisEnabled ? "Aktif" : "Nonaktif"}
+                    </span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={redisEnabled}
+                      onClick={handleToggleRedis}
+                      disabled={togglingRedis}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden focus-visible:ring-2 focus-visible:ring-[var(--primary)] disabled:opacity-50 ${
+                        redisEnabled ? "bg-[var(--primary)]" : "bg-[var(--border)]"
+                      }`}
+                      title={redisEnabled ? "Nonaktifkan Redis" : "Aktifkan Redis"}
+                    >
+                      <span className="sr-only">Toggle Redis Cache</span>
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                          redisEnabled ? "translate-x-5" : "translate-x-0"
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Floating In-card Notification */}
+                {redisNotice && (
+                  <div
+                    role="alert"
+                    className={`flex items-start gap-3 p-3.5 rounded-xl border text-xs animate-in fade-in duration-200 ${
+                      redisNotice.type === "success"
+                        ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-200"
+                        : "bg-red-500/10 border-red-500/30 text-red-800 dark:text-red-200"
+                    }`}
+                  >
+                    {redisNotice.type === "success" ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                    )}
+                    <div className="space-y-0.5">
+                      {redisNotice.title && (
+                        <p className="font-bold">{redisNotice.title}</p>
+                      )}
+                      <p className="opacity-90">{redisNotice.message}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Realtime Status Indicator (Non-AI Slop, Minimalist & Precise) */}
+                <div className="flex flex-wrap items-center justify-between gap-3 text-xs py-2.5 px-4 rounded-xl bg-[var(--canvas-subtle)] border border-[var(--border)]">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                        !redisEnabled
+                          ? "bg-zinc-400"
+                          : !redisHeartbeat.checked
+                          ? "bg-amber-400 animate-pulse"
+                          : redisHeartbeat.isConnected
+                          ? "bg-emerald-500"
+                          : "bg-red-500"
+                      }`}
+                    />
+                    <span
+                      className={`font-bold ${
+                        !redisEnabled
+                          ? "text-[var(--ink-muted)]"
+                          : !redisHeartbeat.checked
+                          ? "text-amber-700 dark:text-amber-300"
+                          : redisHeartbeat.isConnected
+                          ? "text-emerald-700 dark:text-emerald-400"
+                          : "text-red-700 dark:text-red-400"
+                      }`}
+                    >
+                      {!redisEnabled
+                        ? "Redis Dinonaktifkan"
+                        : !redisHeartbeat.checked
+                        ? "Memeriksa Koneksi..."
+                        : redisHeartbeat.isConnected
+                        ? "Terhubung ke Redis"
+                        : "Terputus dari Server Redis"}
+                    </span>
+
+                    {redisEnabled && redisHeartbeat.isConnected && redisHeartbeat.latencyMs !== undefined && (
+                      <>
+                        <span className="text-[var(--border-strong)] opacity-40">&bull;</span>
+                        <span className="font-mono text-[var(--ink-muted)]">
+                          {redisHeartbeat.latencyMs} ms
+                        </span>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-[var(--ink-muted)] hidden md:inline">
+                      {redisEnabled ? "Polling otomatis setiap 15s" : "Gunakan MySQL fallback"}
+                    </span>
+                    {redisEnabled && (
+                      <button
+                        type="button"
+                        onClick={checkRedisHealth}
+                        className="touch-target inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-[var(--ink)] cursor-pointer transition-colors"
+                        title="Periksa status koneksi Redis sekarang"
+                      >
+                        <RefreshCw className="w-3 h-3 text-[var(--ink-muted)]" />
+                        <span>Periksa Status</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Redis Configuration Form */}
+                <form onSubmit={handleSaveRedisSettings} className="space-y-4 pt-1">
+                  <div>
+                    <label
+                      htmlFor="redis-url-input"
+                      className="block text-xs font-bold text-[var(--ink)] mb-1.5"
+                    >
+                      URL Koneksi Redis (Lokal atau Remote VPC)
+                    </label>
+                    <div className="relative">
+                      <input
+                        id="redis-url-input"
+                        type="text"
+                        value={redisUrl}
+                        onChange={(e) => setRedisUrl(e.target.value)}
+                        placeholder="redis://127.0.0.1:6379"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] font-mono text-xs focus:outline-hidden focus:ring-2 focus:ring-[var(--primary)]"
+                        spellCheck={false}
+                        autoCapitalize="none"
+                      />
+                    </div>
+                    <p className="text-[11px] text-[var(--ink-muted)] mt-1.5">
+                      Mendukung skema <code className="font-mono">redis://[user:password@]host[:port][/db]</code>. Contoh remote LAN/VPC: <code className="font-mono">redis://10.0.0.5:6379</code>.
+                    </p>
+                  </div>
+
+                  {/* Feature Highlights & Soft Fallback Notice */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                    <div className="p-3 rounded-xl bg-[var(--canvas-subtle)] border border-[var(--border)]">
+                      <span className="block text-[11px] font-bold text-[var(--ink)]">⚡ Query Caching</span>
+                      <span className="text-[10px] text-[var(--ink-muted)] mt-0.5 block">
+                        Memangkas 5 query agregasi portal &amp; dashboard kelas menjadi 1-2 ms.
+                      </span>
+                    </div>
+                    <div className="p-3 rounded-xl bg-[var(--canvas-subtle)] border border-[var(--border)]">
+                      <span className="block text-[11px] font-bold text-[var(--ink)]">🛡️ Rate Limiting</span>
+                      <span className="text-[10px] text-[var(--ink-muted)] mt-0.5 block">
+                        Atomic sliding window terdistribusi yang persisten melewati restart aplikasi.
+                      </span>
+                    </div>
+                    <div className="p-3 rounded-xl bg-[var(--canvas-subtle)] border border-[var(--border)]">
+                      <span className="block text-[11px] font-bold text-[var(--ink)]">📄 OCR Hash Cache</span>
+                      <span className="text-[10px] text-[var(--ink-muted)] mt-0.5 block">
+                        Menghindari re-inferensi berkas surat izin identik via SHA-256 fingerprint.
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Circuit Breaker & Soft Fallback Guarantee */}
+                  <div className="p-3.5 rounded-xl bg-[var(--canvas-subtle)] border border-[var(--border)] text-[11px] text-[var(--ink-muted)] flex items-start gap-2.5">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-semibold text-[var(--ink)] block">
+                        Garansi Soft Fallback (Zero Downtime)
+                      </span>
+                      <span>
+                        Sistem dilengkapi Circuit Breaker mandiri. Jika server Redis mengalami gangguan jaringan atau down, aplikasi akan otomatis beralih seketika ke database MySQL lokal dan cache in-memory tanpa memunculkan galat 500 ke pengguna.
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex flex-wrap items-center gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={handleTestRedisConnection}
+                      disabled={testingRedis || !redisUrl.trim()}
+                      className="touch-target inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-xs font-bold text-[var(--ink)] transition-colors cursor-pointer shadow-xs disabled:opacity-40"
+                    >
+                      {testingRedis ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-[var(--primary)]" />
+                      ) : (
+                        <Wifi className="w-4 h-4 text-[var(--primary)]" />
+                      )}
+                      <span>{testingRedis ? "Menguji Koneksi..." : "Uji Koneksi"}</span>
+                    </button>
+
+                    <button
+                      type="submit"
+                      disabled={savingRedis}
+                      className="touch-target inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white text-xs font-bold transition-colors cursor-pointer shadow-xs disabled:opacity-40"
+                    >
+                      {savingRedis ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Check className="w-4 h-4" />
+                      )}
+                      <span>{savingRedis ? "Menyimpan..." : "Simpan Pengaturan"}</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </section>
           </div>
         )}
       </div>

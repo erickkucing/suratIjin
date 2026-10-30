@@ -133,6 +133,8 @@ export interface SystemSettingsData {
   aiRouterUrl: string;
   aiRouterApiKey: string | null;
   aiRouterModel: string;
+  redisEnabled?: boolean;
+  redisUrl?: string | null;
 }
 
 export const DEFAULT_SYSTEM_SETTINGS: SystemSettingsData = {
@@ -145,4 +147,6 @@ export const DEFAULT_SYSTEM_SETTINGS: SystemSettingsData = {
   aiRouterUrl: "http://127.0.0.1:20128/v1",
   aiRouterApiKey: null,
   aiRouterModel: "gemini/gemini-3.8-flash",
+  redisEnabled: false,
+  redisUrl: null,
 };

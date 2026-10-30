@@ -150,6 +150,8 @@ export const systemSettings = mysqlTable("system_settings", {
   aiRouterUrl: varchar("ai_router_url", { length: 255 }).notNull().default("http://127.0.0.1:20128/v1"),
   aiRouterApiKey: varchar("ai_router_api_key", { length: 255 }),
   aiRouterModel: varchar("ai_router_model", { length: 100 }).notNull().default("gemini/gemini-3.8-flash"),
+  redisEnabled: boolean("redis_enabled").notNull().default(false),
+  redisUrl: varchar("redis_url", { length: 255 }),
   updatedAt: timestamp("updated_at").notNull().defaultNow().onUpdateNow(),
   updatedById: int("updated_by_id").references(() => users.id, { onDelete: "set null" }),
 });

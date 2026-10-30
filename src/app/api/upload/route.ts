@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, verifySessionToken, SESSION_COOKIE_NAME } from "@/lib/auth";
 import { db } from "@/db";
 import { classes } from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -8,6 +8,7 @@ import fs from "fs";
 import crypto from "crypto";
 import sharp from "sharp";
 import { checkRateLimit, recordFailedAttempt } from "@/lib/rate-limiter";
+import { getCache, setCache } from "@/lib/redis";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 
@@ -37,21 +38,30 @@ function isValidImageMagicBytes(buffer: Buffer): boolean {
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getCurrentUser();
+    let user = await getCurrentUser();
+    if (!user) {
+      const cookieHeader = request.headers.get("cookie") || "";
+      const match = cookieHeader.match(new RegExp(`${SESSION_COOKIE_NAME}=([^;]+)`));
+      const token = (request as NextRequest).cookies?.get?.(SESSION_COOKIE_NAME)?.value || (match ? match[1] : null);
+      if (token) {
+        user = await verifySessionToken(token);
+      }
+    }
+
     if (!user) {
       return NextResponse.json({ error: "Sesi tidak valid. Silakan login kembali." }, { status: 401 });
     }
 
     // Rate limiting: max 30 uploads per minute per user
     const uploadRateKey = `upload:${user.id}`;
-    const rateCheck = checkRateLimit(uploadRateKey, 30, 60 * 1000);
+    const rateCheck = await checkRateLimit(uploadRateKey, 30, 60 * 1000);
     if (rateCheck.isBlocked) {
       return NextResponse.json(
         { error: "Terlalu banyak permintaan unggah file. Silakan tunggu 1 menit." },
         { status: 429, headers: { "Retry-After": "60" } }
       );
     }
-    recordFailedAttempt(uploadRateKey, 30, 60 * 1000);
+    await recordFailedAttempt(uploadRateKey, 30, 60 * 1000);
 
     const formData = await request.formData();
     const classIdStr = formData.get("classId") as string;
@@ -87,12 +97,53 @@ export async function POST(request: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
 
+    // Validate file integrity & magic bytes before deduplication and storage
+    if (isPdf) {
+      if (buffer.length < 5 || buffer.subarray(0, 5).toString() !== "%PDF-") {
+        return NextResponse.json({ error: "File PDF tidak valid atau rusak." }, { status: 400 });
+      }
+    } else {
+      if (!isValidImageMagicBytes(buffer)) {
+        return NextResponse.json(
+          { error: "Format file gambar tidak valid. Harap gunakan file JPG, PNG, atau WebP yang sah." },
+          { status: 400 }
+        );
+      }
+    }
+
+    const storageBase = process.env.STORAGE_PATH || "./storage/uploads";
+
+    // File upload deduplication via SHA-256 hash (TTL: 30 days = 2592000s)
+    const fileHash = crypto.createHash("sha256").update(buffer).digest("hex");
+    const dedupKey = `dedup:upload:${fileHash}`;
+
+    try {
+      const cachedFilePath = await getCache<string>(dedupKey);
+      if (cachedFilePath && typeof cachedFilePath === "string") {
+        const fullDiskPath = path.resolve(storageBase, cachedFilePath);
+        const rel = path.relative(path.resolve(storageBase), fullDiskPath);
+        const isSafePath = !rel.startsWith("..") && !path.isAbsolute(rel);
+
+        if (isSafePath && fs.existsSync(fullDiskPath)) {
+          const ext = path.extname(cachedFilePath).toLowerCase();
+          const mimeType = ext === ".pdf" ? "application/pdf" : "image/webp";
+          return NextResponse.json({
+            success: true,
+            filePath: cachedFilePath,
+            mimeType,
+            deduplicated: true,
+          });
+        }
+      }
+    } catch (cacheErr) {
+      console.warn("[Upload Dedup] Redis dedup check failed, proceeding with normal upload:", cacheErr);
+    }
+
     const now = new Date();
     const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
     const randomSuffix = crypto.randomBytes(6).toString("hex");
     const timestamp = Date.now();
 
-    const storageBase = process.env.STORAGE_PATH || "./storage/uploads";
     const dirPath = path.resolve(storageBase, String(classId), yearMonth);
 
     if (!fs.existsSync(dirPath)) {
@@ -104,20 +155,11 @@ export async function POST(request: NextRequest) {
     let finalPath: string;
 
     if (isPdf) {
-      if (buffer.length < 5 || buffer.subarray(0, 5).toString() !== "%PDF-") {
-        return NextResponse.json({ error: "File PDF tidak valid atau rusak." }, { status: 400 });
-      }
       fileName = `${timestamp}_${randomSuffix}.pdf`;
       finalPath = path.join(dirPath, fileName);
       fs.writeFileSync(finalPath, buffer);
       mimeType = "application/pdf";
     } else {
-      if (!isValidImageMagicBytes(buffer)) {
-        return NextResponse.json(
-          { error: "Format file gambar tidak valid. Harap gunakan file JPG, PNG, atau WebP yang sah." },
-          { status: 400 }
-        );
-      }
       // Process with sharp: auto-orient based on EXIF and optimize to WebP
       fileName = `${timestamp}_${randomSuffix}.webp`;
       finalPath = path.join(dirPath, fileName);
@@ -130,6 +172,13 @@ export async function POST(request: NextRequest) {
 
     // Store relative path e.g. "1/2026-10/1729838493_a1b2c3.webp"
     const relativeStoredPath = `${classId}/${yearMonth}/${fileName}`;
+
+    // Cache deduplication pointer (30 days TTL = 2592000s)
+    try {
+      await setCache(dedupKey, relativeStoredPath, 30 * 86400);
+    } catch (cacheErr) {
+      console.warn("[Upload Dedup] Redis setCache failed:", cacheErr);
+    }
 
     return NextResponse.json({
       success: true,

@@ -4,6 +4,8 @@ import { AppFooter } from "@/components/app-footer";
 import { LoginForm } from "./login-form";
 import { getSystemSettings } from "@/lib/system-settings";
 
+export const dynamic = "force-dynamic";
+
 interface LoginPageProps {
   searchParams?: Promise<{ next?: string }>;
 }

@@ -40,7 +40,7 @@ export async function POST(request: Request) {
     const ipKey = `unlock:ip:${clientIp}`;
     const classKey = `unlock:class:${classSlug.toLowerCase().trim()}`;
 
-    const limitCheck = checkDualRateLimit(ipKey, classKey);
+    const limitCheck = await checkDualRateLimit(ipKey, classKey);
     if (limitCheck.isBlocked) {
       return NextResponse.json(
         {
@@ -71,7 +71,7 @@ export async function POST(request: Request) {
 
     const isValid = await verifyPassword(password, cls.parentPasswordHash);
     if (!isValid) {
-      const failStatus = recordDualFailedAttempt(ipKey, classKey);
+      const failStatus = await recordDualFailedAttempt(ipKey, classKey);
       return NextResponse.json(
         {
           success: false,
@@ -89,7 +89,7 @@ export async function POST(request: Request) {
     }
 
     // Reset rate limit counters upon successful password
-    resetDualRateLimit(ipKey, classKey);
+    await resetDualRateLimit(ipKey, classKey);
 
     const token = await createParentToken({
       classSlug: cls.slug,

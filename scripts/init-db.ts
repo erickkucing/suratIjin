@@ -98,6 +98,8 @@ const TABLE_DEFINITIONS: { name: string; ddl: string }[] = [
         \`ai_router_url\` varchar(255) NOT NULL DEFAULT 'http://127.0.0.1:20128/v1',
         \`ai_router_api_key\` varchar(255),
         \`ai_router_model\` varchar(100) NOT NULL DEFAULT 'gemini/gemini-3.8-flash',
+        \`redis_enabled\` tinyint(1) NOT NULL DEFAULT 0,
+        \`redis_url\` varchar(255),
         \`updated_at\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         \`updated_by_id\` int,
         CONSTRAINT \`system_settings_id\` PRIMARY KEY(\`id\`),
@@ -146,6 +148,32 @@ async function initDatabase() {
       console.log("✓ Indeks idx_attendance_class_student_date_unique sudah ada.");
     } else {
       console.warn("Peringatan saat membuat idx_attendance_class_student_date_unique:", msg);
+    }
+  }
+
+  console.log("==> Memeriksa dan memperbarui kolom tabel system_settings...");
+  try {
+    await db.execute(sql.raw(`
+      ALTER TABLE \`system_settings\`
+        ADD COLUMN IF NOT EXISTS \`redis_enabled\` tinyint(1) NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS \`redis_url\` varchar(255) NULL;
+    `));
+    console.log("✓ Kolom redis_enabled & redis_url pada system_settings siap.");
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("Duplicate column name") || (err as any)?.errno === 1060) {
+      console.log("✓ Kolom redis_enabled & redis_url pada system_settings sudah ada.");
+    } else {
+      try {
+        await db.execute(sql.raw("ALTER TABLE `system_settings` ADD COLUMN `redis_enabled` tinyint(1) NOT NULL DEFAULT 0;"));
+      } catch (e: any) {
+        if (!e.message?.includes("Duplicate column") && e.errno !== 1060) console.warn("Peringatan redis_enabled:", e.message);
+      }
+      try {
+        await db.execute(sql.raw("ALTER TABLE `system_settings` ADD COLUMN `redis_url` varchar(255) NULL;"));
+      } catch (e: any) {
+        if (!e.message?.includes("Duplicate column") && e.errno !== 1060) console.warn("Peringatan redis_url:", e.message);
+      }
     }
   }
 

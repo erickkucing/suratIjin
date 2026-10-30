@@ -11,6 +11,10 @@ import fs from "fs";
 
 import { generateDateRange } from "@/lib/date-utils";
 import { isValidLetterFilePath } from "@/lib/attendance-security";
+import {
+  invalidateClassDashboardCache,
+  invalidateAdminOverviewCache,
+} from "@/db/queries";
 
 /**
  * Helper to safely delete an unused letter file from disk
@@ -182,6 +186,13 @@ export async function createAttendanceAction(inputData: unknown) {
   revalidatePath("/dashboard");
   revalidatePath(`/portal/${cls.slug}`);
 
+  try {
+    await invalidateClassDashboardCache(classId);
+    await invalidateAdminOverviewCache();
+  } catch (err) {
+    console.error("Failed to invalidate cache after createAttendanceAction:", err);
+  }
+
   return {
     success: true,
     message: `Berhasil mencatat ketidakhadiran (${insertedCount} hari).`,
@@ -320,6 +331,13 @@ export async function updateAttendanceAction(inputData: unknown) {
   revalidatePath("/dashboard");
   revalidatePath(`/portal/${targetClass.slug}`);
 
+  try {
+    await invalidateClassDashboardCache(record.classId);
+    await invalidateAdminOverviewCache();
+  } catch (err) {
+    console.error("Failed to invalidate cache after updateAttendanceAction:", err);
+  }
+
   return { success: true, message: "Data berhasil diperbarui." };
 }
 
@@ -360,6 +378,13 @@ export async function deleteAttendanceAction(recordId: number) {
 
   revalidatePath("/dashboard");
   revalidatePath(`/portal/${targetClass.slug}`);
+
+  try {
+    await invalidateClassDashboardCache(record.classId);
+    await invalidateAdminOverviewCache();
+  } catch (err) {
+    console.error("Failed to invalidate cache after deleteAttendanceAction:", err);
+  }
 
   return { success: true, message: "Data ketidakhadiran berhasil dihapus." };
 }

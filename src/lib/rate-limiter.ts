@@ -1,14 +1,21 @@
 import { headers } from "next/headers";
+import {
+  isRedisConnected,
+  getRedisClient,
+  deleteCache,
+  deleteCachePattern,
+  redisIncr,
+} from "./redis";
 
 interface RateLimitRecord {
   count: number;
   resetTime: number;
 }
 
-// Global in-memory storage for sliding window rate limiting
+// Global in-memory storage for fallback sliding window rate limiting
 const rateLimitStore = new Map<string, RateLimitRecord>();
 
-// Clean up expired entries every 5 minutes to prevent memory leaks
+// Clean up expired in-memory entries every 5 minutes to prevent memory leaks
 if (typeof setInterval !== "undefined") {
   const timer = setInterval(() => {
     const now = Date.now();
@@ -85,17 +92,85 @@ export interface RateLimitCheckResult {
   errorMessage?: string;
 }
 
+export interface RateLimitBucketConfig {
+  maxAttempts?: number;
+  windowMs?: number;
+}
+
 const DEFAULT_MAX_ATTEMPTS = 5;
 const DEFAULT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 
+function formatRedisRateKey(key: string): string {
+  return key.startsWith("ratelimit:") ? key : `ratelimit:${key}`;
+}
+
 /**
- * Checks whether a key is currently rate-limited without incrementing counter
+ * Checks whether a key is currently rate-limited without incrementing counter.
+ * Uses Redis if connected; otherwise falls back 100% to in-memory store.
  */
-export function checkRateLimit(
+export async function checkRateLimit(
   key: string,
   maxAttempts = DEFAULT_MAX_ATTEMPTS,
   windowMs = DEFAULT_WINDOW_MS
-): RateLimitCheckResult {
+): Promise<RateLimitCheckResult> {
+  if (isRedisConnected()) {
+    try {
+      const client = getRedisClient();
+      if (client) {
+        const redisKey = formatRedisRateKey(key);
+        const results = await client.pipeline().get(redisKey).ttl(redisKey).exec();
+
+        if (results && results.length >= 2) {
+          const [getErr, rawVal] = results[0];
+          const [ttlErr, rawTtl] = results[1];
+
+          if (!getErr && !ttlErr) {
+            if (rawVal === null || rawVal === undefined) {
+              return {
+                isBlocked: false,
+                remainingAttempts: maxAttempts,
+                retryAfterSeconds: 0,
+                retryAfterMinutes: 0,
+              };
+            }
+
+            const count = Number(rawVal);
+            const ttl = Number(rawTtl);
+
+            if (Number.isFinite(count)) {
+              if (ttl === -2) {
+                // Key expired in Redis
+                return {
+                  isBlocked: false,
+                  remainingAttempts: maxAttempts,
+                  retryAfterSeconds: 0,
+                  retryAfterMinutes: 0,
+                };
+              }
+
+              const isBlocked = count >= maxAttempts;
+              const retryAfterSeconds = ttl > 0 ? ttl : Math.max(1, Math.ceil(windowMs / 1000));
+              const retryAfterMinutes = Math.max(1, Math.ceil(retryAfterSeconds / 60));
+
+              return {
+                isBlocked,
+                remainingAttempts: Math.max(0, maxAttempts - count),
+                retryAfterSeconds,
+                retryAfterMinutes,
+                errorMessage: isBlocked
+                  ? `Terlalu banyak percobaan gagal. Silakan coba lagi dalam ${retryAfterMinutes} menit.`
+                  : undefined,
+              };
+            }
+          }
+        }
+      }
+    } catch {
+      // Redis operation failed; fall through to in-memory fallback
+    }
+  }
+
+  // --- In-memory fallback ---
   const now = Date.now();
   const record = rateLimitStore.get(key);
 
@@ -127,13 +202,42 @@ export function checkRateLimit(
 }
 
 /**
- * Records a failed attempt for a given key and returns current status
+ * Records a failed attempt for a given key and returns current status.
+ * Uses Redis INCR with TTL sliding window if connected; falls back to in-memory store.
  */
-export function recordFailedAttempt(
+export async function recordFailedAttempt(
   key: string,
   maxAttempts = DEFAULT_MAX_ATTEMPTS,
   windowMs = DEFAULT_WINDOW_MS
-): RateLimitCheckResult {
+): Promise<RateLimitCheckResult> {
+  const ttlSeconds = Math.max(1, Math.ceil(windowMs / 1000));
+
+  if (isRedisConnected()) {
+    try {
+      const redisKey = formatRedisRateKey(key);
+      const count = await redisIncr(redisKey, ttlSeconds);
+
+      if (count !== null && Number.isFinite(count)) {
+        const isBlocked = count >= maxAttempts;
+        const retryAfterSeconds = ttlSeconds;
+        const retryAfterMinutes = Math.max(1, Math.ceil(retryAfterSeconds / 60));
+
+        return {
+          isBlocked,
+          remainingAttempts: Math.max(0, maxAttempts - count),
+          retryAfterSeconds,
+          retryAfterMinutes,
+          errorMessage: isBlocked
+            ? `Terlalu banyak percobaan gagal. Silakan coba lagi dalam ${retryAfterMinutes} menit.`
+            : undefined,
+        };
+      }
+    } catch {
+      // Redis operation failed; fall through to in-memory fallback
+    }
+  }
+
+  // --- In-memory fallback ---
   const now = Date.now();
   let record = rateLimitStore.get(key);
 
@@ -164,42 +268,66 @@ export function recordFailedAttempt(
 }
 
 /**
- * Clears rate limit counter for a key upon successful authentication
+ * Clears rate limit counter for a key upon successful authentication.
+ * Clears both in-memory store and Redis cache.
  */
-export function resetRateLimit(key: string): void {
+export async function resetRateLimit(key: string): Promise<void> {
   rateLimitStore.delete(key);
+
+  if (isRedisConnected()) {
+    try {
+      const redisKey = formatRedisRateKey(key);
+      await deleteCache(redisKey);
+    } catch {
+      // Redis delete error ignored; in-memory is already cleared
+    }
+  }
 }
 
 /**
- * Dual-bucket rate limit check: checks both an IP-scoped bucket and a Target-scoped bucket.
+ * Dual-bucket rate limit check: checks both an IP-scoped bucket and a Target-scoped bucket concurrently.
  * Protects against distributed / spoofed brute-force attacks targeting a single account or class.
  */
-export function checkDualRateLimit(
+export async function checkDualRateLimit(
   ipKey: string,
   targetKey: string,
-  ipConfig = { maxAttempts: DEFAULT_MAX_ATTEMPTS, windowMs: DEFAULT_WINDOW_MS },
-  targetConfig = { maxAttempts: DEFAULT_MAX_ATTEMPTS, windowMs: DEFAULT_WINDOW_MS }
-): RateLimitCheckResult {
-  const ipCheck = checkRateLimit(ipKey, ipConfig.maxAttempts, ipConfig.windowMs);
-  if (ipCheck.isBlocked) return ipCheck;
+  ipConfig: RateLimitBucketConfig = { maxAttempts: DEFAULT_MAX_ATTEMPTS, windowMs: DEFAULT_WINDOW_MS },
+  targetConfig: RateLimitBucketConfig = { maxAttempts: DEFAULT_MAX_ATTEMPTS, windowMs: DEFAULT_WINDOW_MS }
+): Promise<RateLimitCheckResult> {
+  const ipMaxAttempts = ipConfig.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
+  const ipWindowMs = ipConfig.windowMs ?? DEFAULT_WINDOW_MS;
+  const targetMaxAttempts = targetConfig.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
+  const targetWindowMs = targetConfig.windowMs ?? DEFAULT_WINDOW_MS;
 
-  const targetCheck = checkRateLimit(targetKey, targetConfig.maxAttempts, targetConfig.windowMs);
+  const [ipCheck, targetCheck] = await Promise.all([
+    checkRateLimit(ipKey, ipMaxAttempts, ipWindowMs),
+    checkRateLimit(targetKey, targetMaxAttempts, targetWindowMs),
+  ]);
+
+  if (ipCheck.isBlocked) return ipCheck;
   if (targetCheck.isBlocked) return targetCheck;
 
   return ipCheck.remainingAttempts <= targetCheck.remainingAttempts ? ipCheck : targetCheck;
 }
 
 /**
- * Records failed attempt across both IP-scoped and Target-scoped buckets.
+ * Records failed attempt across both IP-scoped and Target-scoped buckets concurrently.
  */
-export function recordDualFailedAttempt(
+export async function recordDualFailedAttempt(
   ipKey: string,
   targetKey: string,
-  ipConfig = { maxAttempts: DEFAULT_MAX_ATTEMPTS, windowMs: DEFAULT_WINDOW_MS },
-  targetConfig = { maxAttempts: DEFAULT_MAX_ATTEMPTS, windowMs: DEFAULT_WINDOW_MS }
-): RateLimitCheckResult {
-  const ipResult = recordFailedAttempt(ipKey, ipConfig.maxAttempts, ipConfig.windowMs);
-  const targetResult = recordFailedAttempt(targetKey, targetConfig.maxAttempts, targetConfig.windowMs);
+  ipConfig: RateLimitBucketConfig = { maxAttempts: DEFAULT_MAX_ATTEMPTS, windowMs: DEFAULT_WINDOW_MS },
+  targetConfig: RateLimitBucketConfig = { maxAttempts: DEFAULT_MAX_ATTEMPTS, windowMs: DEFAULT_WINDOW_MS }
+): Promise<RateLimitCheckResult> {
+  const ipMaxAttempts = ipConfig.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
+  const ipWindowMs = ipConfig.windowMs ?? DEFAULT_WINDOW_MS;
+  const targetMaxAttempts = targetConfig.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
+  const targetWindowMs = targetConfig.windowMs ?? DEFAULT_WINDOW_MS;
+
+  const [ipResult, targetResult] = await Promise.all([
+    recordFailedAttempt(ipKey, ipMaxAttempts, ipWindowMs),
+    recordFailedAttempt(targetKey, targetMaxAttempts, targetWindowMs),
+  ]);
 
   if (ipResult.isBlocked) return ipResult;
   if (targetResult.isBlocked) return targetResult;
@@ -210,14 +338,32 @@ export function recordDualFailedAttempt(
 /**
  * Resets both IP-scoped and Target-scoped rate limit buckets upon successful auth.
  */
-export function resetDualRateLimit(ipKey: string, targetKey: string): void {
-  resetRateLimit(ipKey);
-  resetRateLimit(targetKey);
+export async function resetDualRateLimit(ipKey: string, targetKey: string): Promise<void> {
+  await Promise.all([
+    resetRateLimit(ipKey),
+    resetRateLimit(targetKey),
+  ]);
 }
 
 /**
- * For testing purposes: clears the entire in-memory store
+ * For testing purposes: clears the entire in-memory store and initiates Redis cleanup.
+ * Synchronous return preserves compatibility with existing non-async test hooks.
  */
 export function _clearRateLimitStoreForTesting(): void {
   rateLimitStore.clear();
+  if (isRedisConnected()) {
+    deleteCachePattern("ratelimit:*").catch(() => {});
+  }
+}
+
+/**
+ * For testing purposes: awaits full cleanup of both in-memory store and Redis keys.
+ */
+export async function _clearAllRateLimitsForTesting(): Promise<void> {
+  rateLimitStore.clear();
+  if (isRedisConnected()) {
+    try {
+      await deleteCachePattern("ratelimit:*");
+    } catch {}
+  }
 }

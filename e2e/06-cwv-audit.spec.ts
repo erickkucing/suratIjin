@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import { db } from "@/db";
 import { systemSettings } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { deleteCache } from "@/lib/redis";
 
 test.describe("06. Core Web Vitals & Responsiveness Audit", () => {
   let portalPath = "/portal/eqf";
@@ -31,8 +32,9 @@ test.describe("06. Core Web Vitals & Responsiveness Audit", () => {
         .update(systemSettings)
         .set({ logoUrl: TEST_LOGO_URL })
         .where(eq(systemSettings.id, 1));
-    } catch {
-      // Best-effort database setup
+      await deleteCache("cache:settings:global");
+    } catch (err) {
+      console.error("[06-cwv-audit beforeAll error]:", err);
     }
   });
 
@@ -42,6 +44,7 @@ test.describe("06. Core Web Vitals & Responsiveness Audit", () => {
         .update(systemSettings)
         .set({ logoUrl: initialLogoUrl })
         .where(eq(systemSettings.id, 1));
+      await deleteCache("cache:settings:global");
     } catch {
       // Best-effort database cleanup
     }
@@ -123,6 +126,13 @@ test.describe("06. Core Web Vitals & Responsiveness Audit", () => {
 
   test("should verify school logos and QR code images define explicit dimensions and high fetch priority", async ({ page }) => {
     // 1. Login Page
+    await db
+      .update(systemSettings)
+      .set({ logoUrl: TEST_LOGO_URL })
+      .where(eq(systemSettings.id, 1));
+    await deleteCache("cache:settings:global");
+
+    await page.context().clearCookies();
     await page.goto("/login");
     const loginHeaderLogo = page.locator('header img[alt="Logo Sekolah"]');
     await expect(loginHeaderLogo).toBeVisible();
@@ -145,7 +155,10 @@ test.describe("06. Core Web Vitals & Responsiveness Audit", () => {
     await expect(portalLockLogo).toHaveAttribute("fetchpriority", "high");
 
     await page.fill("#parent-password-input", "123456");
-    await page.click('button[type="submit"]:has-text("Buka Papan Presensi")');
+    await Promise.all([
+      page.waitForNavigation({ waitUntil: "load" }).catch(() => null),
+      page.click('button[type="submit"]:has-text("Buka Papan Presensi")'),
+    ]);
     const portalUnlockedLogo = page.locator('header img[alt="Logo Sekolah"]');
     await expect(portalUnlockedLogo).toBeVisible();
     await expect(portalUnlockedLogo).toHaveAttribute("width", "40");
