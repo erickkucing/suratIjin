@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser, checkParentAccess } from "@/lib/auth";
+import { getClientIp, checkRateLimit, recordFailedAttempt } from "@/lib/rate-limiter";
 import { db } from "@/db";
 import { classes, attendanceRecords } from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -41,6 +42,27 @@ export async function GET(
   { params }: { params: Promise<{ path: string[] }> }
 ) {
   try {
+    // SEC-VULN-05: Rate limiting on file downloads (60 downloads per minute per client IP)
+    const clientIp = await getClientIp(request);
+    const rateLimitKey = `file-download:${clientIp}`;
+    const rateCheck = checkRateLimit(rateLimitKey, 60, 60 * 1000);
+
+    if (rateCheck.isBlocked) {
+      return NextResponse.json(
+        {
+          error: "Terlalu banyak permintaan unduhan berkas. Silakan coba lagi nanti.",
+          retryAfterSeconds: rateCheck.retryAfterSeconds,
+        },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(rateCheck.retryAfterSeconds),
+          },
+        }
+      );
+    }
+    recordFailedAttempt(rateLimitKey, 60, 60 * 1000);
+
     const { path: pathSegments } = await params;
     if (!pathSegments || pathSegments.length === 0) {
       return new NextResponse("File tidak ditemukan", { status: 404 });

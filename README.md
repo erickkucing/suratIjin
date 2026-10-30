@@ -395,9 +395,9 @@ Type=simple
 User=root
 WorkingDirectory=/root/project/suratIjin
 Environment=NODE_ENV=production
-Environment=PORT=3000
+Environment=PORT=3001
 EnvironmentFile=/root/project/suratIjin/.env
-ExecStart=/usr/bin/npm start -- -H 0.0.0.0 -p 3000
+ExecStart=/usr/bin/npm start -- -H 127.0.0.1 -p 3001
 Restart=always
 RestartSec=3s
 KillMode=mixed

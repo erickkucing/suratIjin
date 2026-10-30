@@ -3,7 +3,12 @@ import { z } from "zod";
 import { db } from "@/db";
 import { classes } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { verifyPassword, createParentToken, PARENT_COOKIE_PREFIX } from "@/lib/auth";
+import {
+  verifyPassword,
+  createParentToken,
+  resolveCookieSecurity,
+  PARENT_COOKIE_PREFIX,
+} from "@/lib/auth";
 import {
   getClientIp,
   checkDualRateLimit,
@@ -15,10 +20,6 @@ const unlockSchema = z.object({
   classSlug: z.string().min(1, "Slug kelas harus diisi."),
   password: z.string().min(1, "Password akses harus diisi."),
 });
-
-const isCookieSecure =
-  process.env.COOKIE_SECURE === "true" ||
-  process.env.NEXT_PUBLIC_APP_URL?.startsWith("https://") === true;
 
 export async function POST(request: Request) {
   try {
@@ -97,6 +98,7 @@ export async function POST(request: Request) {
 
     const response = NextResponse.json({ success: true });
 
+    const isCookieSecure = resolveCookieSecurity(request);
     response.cookies.set(`${PARENT_COOKIE_PREFIX}${cls.slug}`, token, {
       httpOnly: true,
       secure: isCookieSecure,

@@ -3,7 +3,12 @@ import { z } from "zod";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { verifyPassword, createSessionToken, SESSION_COOKIE_NAME } from "@/lib/auth";
+import {
+  verifyPassword,
+  createSessionToken,
+  resolveCookieSecurity,
+  SESSION_COOKIE_NAME,
+} from "@/lib/auth";
 import {
   getClientIp,
   checkDualRateLimit,
@@ -15,10 +20,6 @@ const loginSchema = z.object({
   username: z.string().min(1, "Username harus diisi."),
   password: z.string().min(1, "Password harus diisi."),
 });
-
-const isCookieSecure =
-  process.env.COOKIE_SECURE === "true" ||
-  process.env.NEXT_PUBLIC_APP_URL?.startsWith("https://") === true;
 
 export async function POST(request: Request) {
   try {
@@ -136,6 +137,7 @@ export async function POST(request: Request) {
       redirectUrl,
     });
 
+    const isCookieSecure = resolveCookieSecurity(request);
     response.cookies.set(SESSION_COOKIE_NAME, token, {
       httpOnly: true,
       secure: isCookieSecure,

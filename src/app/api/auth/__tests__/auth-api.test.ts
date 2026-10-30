@@ -55,6 +55,23 @@ describe("API Auth Endpoints", () => {
     expect(cookie).toContain("surat_session=");
   });
 
+  it("should dynamically set Secure flag on session cookie when X-Forwarded-Proto is https", async () => {
+    const req = new Request("http://localhost:3000/api/auth/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-forwarded-proto": "https",
+      },
+      body: JSON.stringify({ username: "erick", password: "feelgood6969" }),
+    });
+
+    const res = await loginPost(req);
+    expect(res.status).toBe(200);
+    const cookie = res.headers.get("set-cookie");
+    expect(cookie).toContain("surat_session=");
+    expect(cookie?.toLowerCase()).toContain("secure");
+  });
+
   it("should successfully log in valid superadmin", async () => {
     const req = new Request("http://localhost:3000/api/auth/login", {
       method: "POST",

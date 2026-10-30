@@ -26,6 +26,52 @@ const JWT_SECRET = new TextEncoder().encode(
 export const SESSION_COOKIE_NAME = "surat_session";
 export const PARENT_COOKIE_PREFIX = "parent_access_";
 
+/**
+ * Dynamically resolves whether cookies should be flagged with the Secure attribute.
+ *
+ * Priority order:
+ * 1. Checks incoming Request or Headers for `x-forwarded-proto === "https"` (Cloudflare Tunnel / Reverse Proxy)
+ * 2. Checks static `process.env.COOKIE_SECURE === "true"`
+ * 3. Checks `process.env.NEXT_PUBLIC_APP_URL?.startsWith("https://")`
+ * 4. Defaults to `true` in production (`process.env.NODE_ENV === "production"`)
+ */
+export function resolveCookieSecurity(
+  requestOrHeaders?: Headers | Request | { get: (name: string) => string | null } | null
+): boolean {
+  if (requestOrHeaders) {
+    let headerObj: { get: (name: string) => string | null } | null = null;
+
+    if (typeof Request !== "undefined" && requestOrHeaders instanceof Request) {
+      headerObj = requestOrHeaders.headers;
+    } else if (
+      requestOrHeaders &&
+      typeof (requestOrHeaders as { get?: unknown }).get === "function"
+    ) {
+      headerObj = requestOrHeaders as { get: (name: string) => string | null };
+    }
+
+    if (headerObj) {
+      const proto = headerObj.get("x-forwarded-proto");
+      if (proto) {
+        const primaryProto = proto.split(",")[0].trim().toLowerCase();
+        if (primaryProto === "https") {
+          return true;
+        }
+      }
+    }
+  }
+
+  if (process.env.COOKIE_SECURE === "true") {
+    return true;
+  }
+
+  if (process.env.NEXT_PUBLIC_APP_URL?.startsWith("https://") === true) {
+    return true;
+  }
+
+  return process.env.NODE_ENV === "production";
+}
+
 export interface UserSessionPayload {
   id: number;
   username: string;

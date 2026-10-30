@@ -3,11 +3,12 @@ import io
 import time
 import json
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import Optional, Dict, Any
 
 from fastapi import FastAPI, UploadFile, File, Form, Header, HTTPException, status, Depends
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+import paddle
 from paddleocr import PaddleOCR
 
 from extractor import process_document_bytes
@@ -29,12 +30,72 @@ async def verify_internal_secret(x_internal_secret: Optional[str] = Header(None)
             )
 
 _ocr_engine: Optional[PaddleOCR] = None
+_active_device: str = "cpu"
+_device_info: Dict[str, Any] = {}
+_device_name: str = "CPU"
+
+def detect_device_capabilities() -> Dict[str, Any]:
+    """Detect available hardware acceleration (CUDA GPU vs CPU)."""
+    cuda_available = False
+    device_count = 0
+    device_name = "CPU"
+    try:
+        cuda_available = bool(paddle.is_compiled_with_cuda())
+        if cuda_available:
+            device_count = paddle.device.cuda.device_count()
+            if device_count > 0:
+                try:
+                    device_name = paddle.device.cuda.get_device_name(0)
+                except Exception:
+                    device_name = "NVIDIA CUDA GPU"
+    except Exception as e:
+        print(f"[OCR Hardware] Device detection warning: {e}")
+
+    return {
+        "cuda_available": cuda_available,
+        "device_count": device_count,
+        "device_name": device_name,
+        "can_use_gpu": cuda_available and device_count > 0
+    }
+
+def switch_to_cpu() -> PaddleOCR:
+    """Safely rebuild OCR engine on CPU after a GPU initialization or runtime failure."""
+    global _ocr_engine, _active_device, _device_name
+    print("[OCR Service] Falling back OCR engine to CPU...")
+    try:
+        paddle.set_device("cpu")
+    except Exception as e:
+        print(f"[OCR Service] Warning setting CPU device: {e}")
+    _ocr_engine = PaddleOCR(use_angle_cls=False, lang="en", show_log=False, use_gpu=False)
+    _active_device = "cpu"
+    _device_name = "CPU (Fallback)"
+    return _ocr_engine
 
 def get_ocr_engine() -> PaddleOCR:
-    global _ocr_engine
+    global _ocr_engine, _active_device, _device_info, _device_name
     if _ocr_engine is None:
-        # Initialize PaddleOCR with English/Latin dictionary for Indonesian names
-        _ocr_engine = PaddleOCR(use_angle_cls=False, lang="en", show_log=False)
+        _device_info = detect_device_capabilities()
+        if _device_info["can_use_gpu"]:
+            try:
+                print(f"[OCR Service] CUDA GPU detected ({_device_info['device_name']}). Initializing with GPU priority...")
+                paddle.set_device("gpu")
+                _ocr_engine = PaddleOCR(use_angle_cls=False, lang="en", show_log=False, use_gpu=True)
+                _active_device = "gpu"
+                _device_name = _device_info["device_name"]
+                print(f"[OCR Service] Successfully loaded PaddleOCR on GPU: {_device_name}")
+            except Exception as e:
+                print(f"[OCR Service] GPU initialization failed ({e}). Auto-falling back to CPU...")
+                switch_to_cpu()
+        else:
+            print("[OCR Service] No CUDA GPU available. Initializing PaddleOCR on CPU...")
+            try:
+                paddle.set_device("cpu")
+            except Exception:
+                pass
+            _ocr_engine = PaddleOCR(use_angle_cls=False, lang="en", show_log=False, use_gpu=False)
+            _active_device = "cpu"
+            _device_name = "CPU"
+            print("[OCR Service] Successfully loaded PaddleOCR on CPU.")
     return _ocr_engine
 
 @asynccontextmanager
@@ -73,11 +134,17 @@ app.add_middleware(
 @app.get("/")
 @app.get("/health")
 def health_check():
+    global _device_info
+    if not _device_info:
+        _device_info = detect_device_capabilities()
     return {
         "status": "ok",
         "service": "paddleocr-roster-service",
         "version": "1.0.0",
-        "model_loaded": _ocr_engine is not None
+        "model_loaded": _ocr_engine is not None,
+        "device": _active_device,
+        "cuda_available": _device_info.get("cuda_available", False),
+        "device_name": _device_name
     }
 
 @app.post("/extract", dependencies=[Depends(verify_internal_secret)])
@@ -123,6 +190,17 @@ async def extract_roster(file: UploadFile = File(...)):
         result["processing_time_seconds"] = elapsed_sec
         return JSONResponse(content=result)
     except Exception as err:
+        if _active_device == "gpu":
+            print(f"[OCR Error] GPU inference failed ({err}). Retrying with CPU fallback...")
+            try:
+                ocr = switch_to_cpu()
+                result = process_document_bytes(file_bytes, filename, ocr)
+                elapsed_sec = round(time.time() - t0, 3)
+                result["processing_time_seconds"] = elapsed_sec
+                return JSONResponse(content=result)
+            except Exception as retry_err:
+                print(f"[OCR Error] CPU fallback also failed for {filename}: {retry_err}")
+                err = retry_err
         print(f"[OCR Error] Failed to process {filename}: {err}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -185,6 +263,17 @@ async def extract_letter(
         result["processing_time_seconds"] = elapsed_sec
         return JSONResponse(content=result)
     except Exception as err:
+        if _active_device == "gpu":
+            print(f"[OCR Error] GPU letter analysis failed ({err}). Retrying with CPU fallback...")
+            try:
+                ocr = switch_to_cpu()
+                result = process_letter_bytes(file_bytes, filename, students_list, ocr)
+                elapsed_sec = round(time.time() - t0, 3)
+                result["processing_time_seconds"] = elapsed_sec
+                return JSONResponse(content=result)
+            except Exception as retry_err:
+                print(f"[OCR Error] CPU fallback also failed for letter {filename}: {retry_err}")
+                err = retry_err
         print(f"[OCR Error] Failed to process letter {filename}: {err}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

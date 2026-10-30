@@ -165,9 +165,9 @@ if [ -f "${APP_DIR}/.env" ]; then
     
     # Update or add ALLOWED_ORIGINS
     if grep -qE '^ALLOWED_ORIGINS=' "${APP_DIR}/.env"; then
-        sed -i -E "s|^ALLOWED_ORIGINS=.*|ALLOWED_ORIGINS=\"${DOMAIN},https://${DOMAIN}\"|" "${APP_DIR}/.env"
+        sed -i -E "s|^ALLOWED_ORIGINS=.*|ALLOWED_ORIGINS=\"${DOMAIN},localhost:${BACKEND_PORT},127.0.0.1:${BACKEND_PORT}\"|" "${APP_DIR}/.env"
     else
-        echo "ALLOWED_ORIGINS=\"${DOMAIN},https://${DOMAIN}\"" >> "${APP_DIR}/.env"
+        echo "ALLOWED_ORIGINS=\"${DOMAIN},localhost:${BACKEND_PORT},127.0.0.1:${BACKEND_PORT}\"" >> "${APP_DIR}/.env"
     fi
     log_success ".env berhasil diperbarui (NEXT_PUBLIC_APP_URL: https://${DOMAIN})."
 fi

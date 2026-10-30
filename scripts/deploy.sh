@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Deploy Script: Surat Ijin Next.js (Development Port 3000 / Production Port 80)
+# Deploy Script: Surat Ijin Next.js (Development Port 3001 / Production Port 80)
 # Hands-Free, Automated Dependency Provisioning, OCR & Database Self-Healing
 # ==============================================================================
 set -euo pipefail
@@ -47,8 +47,8 @@ if [ "$TARGET_MODE" = "prod" ] || [ "$TARGET_MODE" = "production" ]; then
     MODE_LABEL="Production (Port 80)"
     IS_PROD=true
 else
-    PORT=3000
-    MODE_LABEL="Development (Port 3000)"
+    PORT=3001
+    MODE_LABEL="Development (Port 3001)"
     IS_PROD=false
     # Preserve active development port if configured in existing service
     if [ -z "$CUSTOM_PORT" ] && [ -f "$SERVICE_FILE" ]; then
@@ -204,10 +204,23 @@ if [ -d "$OCR_DIR" ] && command -v python3 >/dev/null 2>&1; then
         python3 -m venv "$OCR_VENV"
     fi
 
-    log_info "Memperbarui pip dan memasang modul requirements.txt..."
+    log_info "Memperbarui pip..."
     "$OCR_VENV/bin/pip" install --quiet --upgrade pip
-    "$OCR_VENV/bin/pip" install --quiet -r "${OCR_DIR}/requirements.txt"
-    log_success "Dependensi Python OCR terpasang dengan sukses."
+
+    if command -v nvidia-smi >/dev/null 2>&1 && [ -f "${OCR_DIR}/requirements-gpu.txt" ]; then
+        log_info "NVIDIA GPU terdeteksi di sistem host. Memasang dependensi GPU (requirements-gpu.txt)..."
+        if "$OCR_VENV/bin/pip" install --quiet -r "${OCR_DIR}/requirements-gpu.txt"; then
+            log_success "Dependensi Python OCR versi GPU berhasil dipasang."
+        else
+            log_warn "Pemasangan dependensi GPU gagal. Melakukan fallback otomatis ke dependensi CPU (requirements.txt)..."
+            "$OCR_VENV/bin/pip" install --quiet -r "${OCR_DIR}/requirements.txt"
+            log_success "Dependensi Python OCR versi CPU berhasil dipasang sebagai fallback."
+        fi
+    else
+        log_info "Memasang dependensi CPU (requirements.txt)..."
+        "$OCR_VENV/bin/pip" install --quiet -r "${OCR_DIR}/requirements.txt"
+        log_success "Dependensi Python OCR terpasang dengan sukses."
+    fi
 
     log_info "Melakukan pra-inisialisasi (pre-warming) model PaddleOCR ke cache lokal..."
     "$OCR_VENV/bin/python" -c "from paddleocr import PaddleOCR; PaddleOCR(use_angle_cls=False, lang='en', show_log=False)" 2>/dev/null || log_warn "Pre-warming selesai dengan catatan (akan dimuat otomatis saat service aktif)."
@@ -252,7 +265,10 @@ EOF
     done
 
     if [ "$OCR_PASSED" = true ]; then
-        log_success "OCR microservice aktif dan merespons sehat (HTTP 200)."
+        OCR_HEALTH_DATA=$(curl -s "$OCR_HEALTH_URL" || true)
+        ACTIVE_DEVICE=$(echo "$OCR_HEALTH_DATA" | grep -o '"device":"[^"]*"' | cut -d'"' -f4 || echo "unknown")
+        DEVICE_NAME=$(echo "$OCR_HEALTH_DATA" | grep -o '"device_name":"[^"]*"' | cut -d'"' -f4 || echo "")
+        log_success "OCR microservice aktif (HTTP 200). Mode perangkat: ${ACTIVE_DEVICE^^} (${DEVICE_NAME:-N/A})."
     else
         log_warn "OCR microservice merespons HTTP ${OCR_CODE:-gagal}, periksa: systemctl status ${OCR_SERVICE_NAME}"
     fi
@@ -296,7 +312,7 @@ WorkingDirectory=${APP_DIR}
 Environment=NODE_ENV=production
 Environment=PORT=${PORT}
 EnvironmentFile=${APP_DIR}/.env
-ExecStart=/usr/bin/npm start -- -H 0.0.0.0 -p ${PORT}
+ExecStart=/usr/bin/npm start -- -H 127.0.0.1 -p ${PORT}
 Restart=always
 RestartSec=3s
 KillMode=mixed

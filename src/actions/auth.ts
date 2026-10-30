@@ -10,6 +10,7 @@ import {
   createParentToken,
   getCurrentUser,
   hashPassword,
+  resolveCookieSecurity,
   SESSION_COOKIE_NAME,
   PARENT_COOKIE_PREFIX,
 } from "@/lib/auth";
@@ -19,7 +20,7 @@ import {
   recordDualFailedAttempt,
   resetDualRateLimit,
 } from "@/lib/rate-limiter";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
@@ -28,9 +29,16 @@ const loginSchema = z.object({
   password: z.string().min(1, "Password harus diisi."),
 });
 
-const isCookieSecure =
-  process.env.COOKIE_SECURE === "true" ||
-  process.env.NEXT_PUBLIC_APP_URL?.startsWith("https://") === true;
+async function getAuthHeaderList(): Promise<Headers | null> {
+  try {
+    if (typeof headers === "function") {
+      return await headers();
+    }
+  } catch {
+    // Safe fallback when invoked outside request context or when next/headers is mocked
+  }
+  return null;
+}
 
 export async function loginAction(
   data: FormData | { username?: string; password?: string } | Record<string, unknown>
@@ -109,6 +117,8 @@ export async function loginAction(
       role: user.role,
     });
 
+    const headerList = await getAuthHeaderList();
+    const isCookieSecure = resolveCookieSecurity(headerList);
     const cookieStore = await cookies();
     cookieStore.set(SESSION_COOKIE_NAME, token, {
       httpOnly: true,
@@ -186,6 +196,8 @@ export async function parentUnlockAction(classSlug: string, passwordPlain: strin
     classId: cls.id,
   });
 
+  const headerList = await getAuthHeaderList();
+  const isCookieSecure = resolveCookieSecurity(headerList);
   const cookieStore = await cookies();
   cookieStore.set(`${PARENT_COOKIE_PREFIX}${cls.slug}`, token, {
     httpOnly: true,
@@ -263,6 +275,8 @@ export async function updateSelfProfileAction(inputData: unknown) {
     role: user.role,
   });
 
+  const headerList = await getAuthHeaderList();
+  const isCookieSecure = resolveCookieSecurity(headerList);
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE_NAME, newToken, {
     httpOnly: true,

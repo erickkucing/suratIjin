@@ -33,7 +33,7 @@ describe("CI/CD & Deployment Scripts Verification", () => {
     expect(content).toContain("#!/usr/bin/env bash");
     expect(content).toContain("set -euo pipefail");
     expect(content).toContain("PORT=80");
-    expect(content).toContain("PORT=3000");
+    expect(content).toContain("PORT=3001");
     expect(content).toContain("systemctl stop nginx");
     expect(content).toContain("systemctl restart \"$SERVICE_NAME\"");
     expect(content).toContain("HEALTHCHECK_URL=");
