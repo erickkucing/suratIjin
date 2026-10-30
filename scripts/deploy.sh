@@ -136,11 +136,15 @@ check_pkg "curl" "curl"
 check_pkg "git" "git"
 check_pkg "python3" "python3"
 
-# Check python venv & pip
-if ! python3 -m venv --help >/dev/null 2>&1; then
+# Check python venv & pip (mencegah kegagalan ensurepip di Debian/Ubuntu)
+PY_VER=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>/dev/null || echo "")
+if ! python3 -c "import ensurepip" >/dev/null 2>&1 || (command -v dpkg >/dev/null 2>&1 && ! dpkg -s python3-venv >/dev/null 2>&1); then
     NEEDED_PKGS+=("python3-venv")
+    if [ -n "$PY_VER" ] && apt-cache show "python${PY_VER}-venv" >/dev/null 2>&1; then
+        NEEDED_PKGS+=("python${PY_VER}-venv")
+    fi
 fi
-if ! python3 -m pip --version >/dev/null 2>&1; then
+if ! python3 -m pip --version >/dev/null 2>&1 || (command -v dpkg >/dev/null 2>&1 && ! dpkg -s python3-pip >/dev/null 2>&1); then
     NEEDED_PKGS+=("python3-pip")
 fi
 
@@ -279,9 +283,30 @@ OCR_SERVICE_FILE="/etc/systemd/system/${OCR_SERVICE_NAME}.service"
 
 if [ -d "$OCR_DIR" ] && command -v python3 >/dev/null 2>&1; then
     log_info "Menyiapkan dependensi Python OCR microservice..."
-    if [ ! -d "$OCR_VENV" ]; then
-        log_info "Membuat Python virtual environment di ${OCR_VENV}..."
-        python3 -m venv "$OCR_VENV"
+    # Pastikan venv valid (harus ada biner python dan pip)
+    if [ ! -f "$OCR_VENV/bin/python" ] || [ ! -f "$OCR_VENV/bin/pip" ]; then
+        log_info "Membuat atau memulihkan Python virtual environment di ${OCR_VENV}..."
+        rm -rf "$OCR_VENV"
+        
+        # Coba buat venv standar
+        if ! python3 -m venv "$OCR_VENV" 2>/dev/null; then
+            log_warn "Pembuatan venv standar memerlukan paket python venv tambahan. Memasang otomatis..."
+            export DEBIAN_FRONTEND=noninteractive
+            PY_VENV_PKG="python3-venv"
+            PY_SUB_VER=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>/dev/null || echo "")
+            if [ -n "$PY_SUB_VER" ] && apt-cache show "python${PY_SUB_VER}-venv" >/dev/null 2>&1; then
+                PY_VENV_PKG="python3-venv python${PY_SUB_VER}-venv"
+            fi
+            apt-get update -qq || true
+            apt-get install -y --no-install-recommends $PY_VENV_PKG python3-pip 2>/dev/null || true
+            
+            # Coba buat venv kembali
+            if ! python3 -m venv "$OCR_VENV" 2>/dev/null; then
+                log_warn "ensurepip masih tidak tersedia, membuat venv mandiri (--without-pip)..."
+                python3 -m venv --without-pip "$OCR_VENV"
+                curl -sS https://bootstrap.pypa.io/get-pip.py | "$OCR_VENV/bin/python" - --quiet 2>/dev/null || true
+            fi
+        fi
     fi
 
     log_info "Memperbarui pip dan memasang modul requirements.txt..."
