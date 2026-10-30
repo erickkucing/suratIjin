@@ -223,12 +223,19 @@ EOF
     fi
 fi
 
-# Ensure strong JWT_SECRET
-if grep -qE '^JWT_SECRET="?ganti_dengan_random_secret_string' "${APP_DIR}/.env" || grep -qE '^JWT_SECRET=""' "${APP_DIR}/.env"; then
+# Ensure strong, production-grade JWT_SECRET (mencegah SECURITY ERROR 500 di runtime)
+CURRENT_JWT=$(grep -E '^\s*JWT_SECRET=' "${APP_DIR}/.env" 2>/dev/null | head -n1 | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d ' ' || true)
+FALLBACK_SECRET="surat_ijin_super_secret_jwt_key_2026_modern_academic_system"
+
+if [ -z "$CURRENT_JWT" ] || [ ${#CURRENT_JWT} -lt 32 ] || [ "$CURRENT_JWT" = "$FALLBACK_SECRET" ] || [[ "$CURRENT_JWT" == *"ganti_dengan_random_secret_string"* ]]; then
     log_info "Menghasilkan JWT_SECRET acak yang aman..."
     NEW_SECRET=$(openssl rand -hex 32 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(32))")
-    sed -i -E "s|^JWT_SECRET=.*|JWT_SECRET=\"${NEW_SECRET}\"|" "${APP_DIR}/.env"
-    log_success "JWT_SECRET berhasil diperbarui dengan kunci 256-bit yang aman."
+    if grep -qE '^\s*JWT_SECRET=' "${APP_DIR}/.env"; then
+        sed -i -E "s|^\s*JWT_SECRET=.*|JWT_SECRET=\"${NEW_SECRET}\"|" "${APP_DIR}/.env"
+    else
+        echo "JWT_SECRET=\"${NEW_SECRET}\"" >> "${APP_DIR}/.env"
+    fi
+    log_success "JWT_SECRET berhasil diperbarui dengan kunci 256-bit acak yang aman."
 fi
 
 # Ensure storage directory exists with proper permissions
@@ -435,19 +442,24 @@ log_success "Service ${SERVICE_NAME} berhasil direstart di bawah user '${APP_USE
 
 # 16. Post-Deployment Healthcheck (Next.js Application)
 log_info "Menjalankan healthcheck verifikasi respon HTTP aplikasi pada port ${PORT}..."
-HEALTHCHECK_URL="http://127.0.0.1:${PORT}/login"
+HEALTHCHECK_URL="http://127.0.0.1:${PORT}/"
+HEALTHCHECK_URL_LOGIN="http://127.0.0.1:${PORT}/login"
 MAX_RETRIES=25
 WAIT_SECONDS=2
 HEALTH_PASSED=false
 
 for ((i=1; i<=MAX_RETRIES; i++)); do
-    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTHCHECK_URL" || true)
-    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "307" ] || [ "$HTTP_CODE" = "302" ]; then
-        log_success "Healthcheck berhasil! Respon HTTP ${HTTP_CODE} dari ${HEALTHCHECK_URL}"
+    HTTP_CODE_ROOT=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTHCHECK_URL" || true)
+    HTTP_CODE_LOGIN=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTHCHECK_URL_LOGIN" || true)
+    
+    # Validasi bahwa endpoint utama dan login tidak menghasilkan 500 error
+    if ([ "$HTTP_CODE_ROOT" = "200" ] || [ "$HTTP_CODE_ROOT" = "307" ] || [ "$HTTP_CODE_ROOT" = "302" ]) && \
+       ([ "$HTTP_CODE_LOGIN" = "200" ] || [ "$HTTP_CODE_LOGIN" = "307" ] || [ "$HTTP_CODE_LOGIN" = "302" ]); then
+        log_success "Healthcheck berhasil! Respon HTTP Root (/): ${HTTP_CODE_ROOT}, Login (/login): ${HTTP_CODE_LOGIN}"
         HEALTH_PASSED=true
         break
     fi
-    log_info "Percobaan ke-${i}/${MAX_RETRIES}: Respon '${HTTP_CODE}', menunggu ${WAIT_SECONDS} detik..."
+    log_info "Percobaan ke-${i}/${MAX_RETRIES}: Respon Root='${HTTP_CODE_ROOT}', Login='${HTTP_CODE_LOGIN}', menunggu ${WAIT_SECONDS} detik..."
     sleep "$WAIT_SECONDS"
 done
 
