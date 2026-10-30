@@ -22,7 +22,7 @@ try:
                         "libcudnn_ops_infer.so.8", "libcudnn_ops_infer.so",
                         "libcudnn_cnn_infer.so.8", "libcudnn_cnn_infer.so",
                         "libcudnn_adv_infer.so.8", "libcudnn_adv_infer.so",
-                        "libcudnn.so.8", "libcudnn.so.9", "libcudnn.so",
+                        "libcudnn.so.8", "libcudnn.so",
                         "libcublas.so.12", "libcublas.so.11", "libcublas.so"
                     ]:
                         _so_file = os.path.join(_lib_dir, _so_name)
@@ -37,7 +37,8 @@ except Exception:
 # Compatibility flags for Pascal sm_61 architecture (Quadro P1000) and cuDNN
 os.environ.setdefault("FLAGS_enable_pir_api", "0")
 os.environ.setdefault("FLAGS_cudnn_exhaustive_search", "0")
-os.environ.setdefault("FLAGS_cudnn_deterministic", "1")
+os.environ.setdefault("FLAGS_cudnn_deterministic", "0")
+os.environ.setdefault("FLAGS_conv_workspace_size_limit", "512")
 
 from fastapi import FastAPI, UploadFile, File, Form, Header, HTTPException, status, Depends
 from fastapi.responses import JSONResponse

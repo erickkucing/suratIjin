@@ -417,15 +417,24 @@ if [ -d "$OCR_DIR" ] && command -v python3 >/dev/null 2>&1; then
         log_info "Terdeteksi driver NVIDIA dengan dukungan CUDA ${CUDA_DRIVER_VER} (Major: ${CUDA_MAJOR})."
 
         # Pastikan pustaka cuDNN & cuBLAS dari NVIDIA terpasang
-        if [ "$CUDA_MAJOR" = "11" ]; then
-            log_info "Memasang dependensi cuDNN & cuBLAS CUDA 11 via pip..."
-            "$OCR_VENV/bin/pip" install --upgrade "nvidia-cudnn-cu11" "nvidia-cublas-cu11" 2>&1 | tail -n 2 || true
-        else
-            log_info "Memasang dependensi cuDNN & cuBLAS CUDA 12 via pip..."
-            "$OCR_VENV/bin/pip" install --upgrade "nvidia-cudnn-cu12" "nvidia-cublas-cu12" 2>&1 | tail -n 2 || true
+        # Penting: PaddlePaddle 2.6.x dikompilasi terhadap cuDNN 8.9 (libcudnn.so.8).
+        # cuDNN 9 (versi 9.x) tidak kompatibel dan memicu galat CUDNN_STATUS_EXECUTION_FAILED_CUDART (5003).
+        if "$OCR_VENV/bin/pip" list 2>/dev/null | grep -qE "nvidia-cudnn-cu1[12]\s+9\."; then
+            log_info "Mendeteksi cuDNN 9 (tidak kompatibel dengan Paddle 2.6 & Pascal). Menghapus versi 9..."
+            "$OCR_VENV/bin/pip" uninstall -y nvidia-cudnn-cu12 nvidia-cudnn-cu11 2>/dev/null || true
+            find "$OCR_VENV" -type f -name "libcudnn*so.9*" -delete 2>/dev/null || true
+            find "$OCR_VENV" -type l -name "libcudnn*so*" -delete 2>/dev/null || true
         fi
 
-        # Buat symlink libcudnn.so -> libcudnn.so.X jika belum ada di venv
+        if [ "$CUDA_MAJOR" = "11" ]; then
+            log_info "Memasang dependensi cuDNN 8.9 & cuBLAS CUDA 11 via pip..."
+            "$OCR_VENV/bin/pip" install "nvidia-cudnn-cu11==8.9.7.29" "nvidia-cublas-cu11" 2>&1 | tail -n 2 || true
+        else
+            log_info "Memasang dependensi cuDNN 8.9 & cuBLAS CUDA 12 via pip..."
+            "$OCR_VENV/bin/pip" install "nvidia-cudnn-cu12==8.9.7.29" "nvidia-cublas-cu12" 2>&1 | tail -n 2 || true
+        fi
+
+        # Buat symlink libcudnn.so -> libcudnn.so.8 jika belum ada di venv
         find "$OCR_VENV" -type f \( -name "libcudnn.so*" -o -name "libcudnn_*.so*" \) 2>/dev/null | while read -r so_path; do
             dir=$(dirname "$so_path")
             fname=$(basename "$so_path")
@@ -501,7 +510,16 @@ if [ -d "$OCR_DIR" ] && command -v python3 >/dev/null 2>&1; then
     log_success "Dependensi Python OCR terpasang dengan sukses."
 
     log_info "Melakukan pra-inisialisasi (pre-warming) model PaddleOCR ke cache lokal..."
-    HOME="${APP_DIR}" PADDLE_HOME="${PADDLE_CACHE_DIR}" "$OCR_VENV/bin/python" -c "from paddleocr import PaddleOCR; import numpy as np; ocr = PaddleOCR(use_angle_cls=False, lang='en', show_log=False); dummy = np.full((64, 256, 3), 255, dtype=np.uint8); ocr.ocr(dummy, cls=False)" 2>/dev/null || log_warn "Pre-warming selesai dengan catatan (akan dimuat otomatis saat service aktif)."
+    (
+        cd "$OCR_SERVICE_DIR"
+        HOME="${APP_DIR}" PADDLE_HOME="${PADDLE_CACHE_DIR}" "$OCR_VENV/bin/python" -c "
+import main
+import numpy as np
+print(f'[Deploy Prewarm] Perangkat OCR aktif: {main._active_device} ({main._device_name})')
+if main._gpu_fallback_error:
+    print(f'[Deploy Prewarm] Catatan fallback: {main._gpu_fallback_error}')
+" || log_warn "Pre-warming selesai dengan catatan (akan dimuat otomatis saat service aktif)."
+    )
 
     log_info "Memperbarui konfigurasi systemd OCR service (${OCR_SERVICE_FILE})..."
     cat <<EOF > "$OCR_SERVICE_FILE"
