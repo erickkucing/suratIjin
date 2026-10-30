@@ -13,12 +13,18 @@ try:
         _venv_site = os.path.join(_site_parent, "venv")
         if os.path.isdir(_venv_site):
             for _root, _dirs, _files in os.walk(_venv_site):
-                if "nvidia" in _root and "lib" in _dirs:
-                    _lib_dir = os.path.join(_root, "lib")
+                if any(k in _root for k in ["cudnn", "cublas", "nvidia"]) and ("lib" in _dirs or any("libcudnn" in f for f in _files)):
+                    _lib_dir = os.path.join(_root, "lib") if "lib" in _dirs else _root
                     _curr_ld = os.environ.get("LD_LIBRARY_PATH", "")
                     if _lib_dir not in _curr_ld:
                         os.environ["LD_LIBRARY_PATH"] = f"{_lib_dir}:{_curr_ld}" if _curr_ld else _lib_dir
-                    for _so_name in ["libcudnn.so.8", "libcudnn.so.9", "libcudnn.so", "libcublas.so.12", "libcublas.so.11"]:
+                    for _so_name in [
+                        "libcudnn_ops_infer.so.8", "libcudnn_ops_infer.so",
+                        "libcudnn_cnn_infer.so.8", "libcudnn_cnn_infer.so",
+                        "libcudnn_adv_infer.so.8", "libcudnn_adv_infer.so",
+                        "libcudnn.so.8", "libcudnn.so.9", "libcudnn.so",
+                        "libcublas.so.12", "libcublas.so.11", "libcublas.so"
+                    ]:
                         _so_file = os.path.join(_lib_dir, _so_name)
                         if os.path.isfile(_so_file):
                             try:

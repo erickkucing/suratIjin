@@ -416,26 +416,45 @@ if [ -d "$OCR_DIR" ] && command -v python3 >/dev/null 2>&1; then
         CUDA_MAJOR=$(echo "$CUDA_DRIVER_VER" | cut -d. -f1)
         log_info "Terdeteksi driver NVIDIA dengan dukungan CUDA ${CUDA_DRIVER_VER} (Major: ${CUDA_MAJOR})."
 
-        # Pastikan pustaka cuDNN 8.9 dari NVIDIA terpasang (wajib untuk Paddle dynamic loader libcudnn.so)
+        # Pastikan pustaka cuDNN & cuBLAS dari NVIDIA terpasang
         if [ "$CUDA_MAJOR" = "11" ]; then
-            log_info "Memastikan pustaka cuDNN 8.9 (nvidia-cudnn-cu11) terpasang..."
-            "$OCR_VENV/bin/pip" install --quiet "nvidia-cudnn-cu11==8.9.7.29" || true
+            log_info "Memasang dependensi cuDNN & cuBLAS CUDA 11 via pip..."
+            "$OCR_VENV/bin/pip" install --upgrade "nvidia-cudnn-cu11" "nvidia-cublas-cu11" 2>&1 | tail -n 2 || true
         else
-            log_info "Memastikan pustaka cuDNN 8.9 (nvidia-cudnn-cu12) terpasang..."
-            "$OCR_VENV/bin/pip" install --quiet "nvidia-cudnn-cu12==8.9.7.29" || true
+            log_info "Memasang dependensi cuDNN & cuBLAS CUDA 12 via pip..."
+            "$OCR_VENV/bin/pip" install --upgrade "nvidia-cudnn-cu12" "nvidia-cublas-cu12" 2>&1 | tail -n 2 || true
         fi
 
-        # Registrasi path library nvidia pip ke konfigurasi dynamic linker sistem (/etc/ld.so.conf.d/)
-        NVIDIA_PIP_CONF="/etc/ld.so.conf.d/nvidia-paddle-cudnn.conf"
-        rm -f "$NVIDIA_PIP_CONF"
-        find "$OCR_VENV" -type d -path "*/nvidia/*/lib" 2>/dev/null | sort -u | while read -r lib_path; do
-            if [ -n "$lib_path" ]; then
-                echo "$lib_path" >> "$NVIDIA_PIP_CONF"
+        # Buat symlink libcudnn.so -> libcudnn.so.X jika belum ada di venv
+        find "$OCR_VENV" -type f \( -name "libcudnn.so*" -o -name "libcudnn_*.so*" \) 2>/dev/null | while read -r so_path; do
+            dir=$(dirname "$so_path")
+            fname=$(basename "$so_path")
+            if [[ "$fname" =~ ^libcudnn\.so\.[0-9]+ ]]; then
+                major_ver="${fname#libcudnn.so.}"
+                major_ver="${major_ver%%.*}"
+                [ ! -e "$dir/libcudnn.so.$major_ver" ] && ln -sf "$fname" "$dir/libcudnn.so.$major_ver" 2>/dev/null || true
+                [ ! -e "$dir/libcudnn.so" ] && ln -sf "$fname" "$dir/libcudnn.so" 2>/dev/null || true
             fi
         done
-        if [ -f "$NVIDIA_PIP_CONF" ]; then
+
+        # Daftarkan semua path lib nvidia ke ldconfig sistem
+        NVIDIA_PIP_CONF="/etc/ld.so.conf.d/nvidia-paddle-cudnn.conf"
+        rm -f "$NVIDIA_PIP_CONF"
+        find "$OCR_VENV" -type f -name "libcudnn*" 2>/dev/null | while read -r so_path; do
+            dirname "$so_path"
+        done | sort -u > "$NVIDIA_PIP_CONF"
+        find "$OCR_VENV" -type f -name "libcublas*" 2>/dev/null | while read -r so_path; do
+            dirname "$so_path"
+        done | sort -u >> "$NVIDIA_PIP_CONF"
+
+        if [ -s "$NVIDIA_PIP_CONF" ]; then
             ldconfig 2>/dev/null || true
-            log_success "Path runtime cuDNN & CUDA libraries terdaftar di ldconfig sistem."
+            log_success "Path runtime cuDNN & CUDA libraries terdaftar di ldconfig sistem:"
+            cat "$NVIDIA_PIP_CONF" | sed 's/^/    - /'
+        else
+            log_warn "File libcudnn belum ditemukan di venv. Mencoba instalasi cuDNN sistem via apt..."
+            apt-get update -qq && apt-get install -y -qq libcudnn8 libcudnn8-dev 2>/dev/null || true
+            ldconfig 2>/dev/null || true
         fi
 
         # Cek apakah paddle sudah compiled with CUDA
