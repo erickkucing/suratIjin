@@ -39,6 +39,7 @@ def detect_device_capabilities() -> Dict[str, Any]:
     cuda_available = False
     device_count = 0
     device_name = "CPU"
+    error_detail = None
     try:
         cuda_available = bool(paddle.is_compiled_with_cuda())
         if cuda_available:
@@ -46,16 +47,23 @@ def detect_device_capabilities() -> Dict[str, Any]:
             if device_count > 0:
                 try:
                     device_name = paddle.device.cuda.get_device_name(0)
-                except Exception:
+                except Exception as ex:
                     device_name = "NVIDIA CUDA GPU"
+                    error_detail = str(ex)
+            else:
+                error_detail = "Paddle dikompilasi dengan CUDA tetapi device_count == 0 (driver GPU mungkin belum siap)."
+        else:
+            error_detail = "Paket paddlepaddle saat ini adalah build CPU. Untuk GPU, instal paddlepaddle-gpu."
     except Exception as e:
+        error_detail = str(e)
         print(f"[OCR Hardware] Device detection warning: {e}")
 
     return {
         "cuda_available": cuda_available,
         "device_count": device_count,
         "device_name": device_name,
-        "can_use_gpu": cuda_available and device_count > 0
+        "can_use_gpu": cuda_available and device_count > 0,
+        "error_detail": error_detail
     }
 
 def switch_to_cpu() -> PaddleOCR:
@@ -144,7 +152,8 @@ def health_check():
         "model_loaded": _ocr_engine is not None,
         "device": _active_device,
         "cuda_available": _device_info.get("cuda_available", False),
-        "device_name": _device_name
+        "device_name": _device_name,
+        "error_detail": _device_info.get("error_detail")
     }
 
 @app.post("/extract", dependencies=[Depends(verify_internal_secret)])

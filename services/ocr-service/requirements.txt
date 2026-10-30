@@ -1,10 +1,11 @@
 fastapi>=0.100.0
 uvicorn[standard]>=0.20.0
 python-multipart>=0.0.9
-paddlepaddle==2.6.2
+# paddlepaddle diinstal otomatis oleh deploy.sh (paddlepaddle-gpu jika ada GPU, paddlepaddle jika CPU)
 paddleocr==2.8.1
 opencv-python-headless==4.10.0.84
 numpy==1.26.4
 pypdfium2>=4.0.0
 pillow>=10.0.0
 beautifulsoup4>=4.12.0
+

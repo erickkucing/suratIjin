@@ -319,6 +319,48 @@ if [ -d "$OCR_DIR" ] && command -v python3 >/dev/null 2>&1; then
     log_info "Memperbarui pip dan memasang modul requirements.txt..."
     "$OCR_VENV/bin/pip" install --quiet --upgrade pip
     "$OCR_VENV/bin/pip" install --quiet -r "${OCR_DIR}/requirements.txt"
+
+    # Deteksi akselerasi GPU NVIDIA (nvidia-smi) & Manajemen Paket PaddlePaddle
+    HAS_NVIDIA_GPU=false
+    if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
+        HAS_NVIDIA_GPU=true
+        GPU_DETECTED_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -n1 || echo "NVIDIA GPU")
+        log_info "Terdeteksi hardware GPU: ${GPU_DETECTED_NAME}"
+    fi
+
+    if [ "$HAS_NVIDIA_GPU" = true ]; then
+        # Cek apakah paddle sudah compiled with CUDA
+        PADDLE_CUDA_OK=false
+        if "$OCR_VENV/bin/python" -c "import paddle; assert paddle.is_compiled_with_cuda()" 2>/dev/null; then
+            PADDLE_CUDA_OK=true
+        fi
+
+        if [ "$PADDLE_CUDA_OK" = false ]; then
+            log_info "GPU NVIDIA terdeteksi. Memasang paddlepaddle-gpu untuk akselerasi perangkat keras..."
+            "$OCR_VENV/bin/pip" uninstall -y paddlepaddle paddlepaddle-gpu 2>/dev/null || true
+            if "$OCR_VENV/bin/pip" install paddlepaddle-gpu==2.6.2; then
+                log_success "Paket paddlepaddle-gpu berhasil dipasang."
+            else
+                log_warn "Pemasangan paddlepaddle-gpu PyPI gagal, mencoba wheel resmi..."
+                if "$OCR_VENV/bin/pip" install paddlepaddle-gpu==2.6.2.post120 -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html 2>/dev/null || \
+                   "$OCR_VENV/bin/pip" install paddlepaddle-gpu==2.6.2.post118 -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html 2>/dev/null; then
+                    log_success "paddlepaddle-gpu berhasil dipasang via official wheel."
+                else
+                    log_warn "Gagal memasang paket GPU. Menggunakan versi CPU standar..."
+                    "$OCR_VENV/bin/pip" install --quiet paddlepaddle==2.6.2
+                fi
+            fi
+        else
+            log_success "paddlepaddle-gpu dengan akselerasi CUDA sudah siap."
+        fi
+    else
+        # Jika tidak ada GPU, pastikan paddlepaddle CPU terpasang
+        if ! "$OCR_VENV/bin/python" -c "import paddle" 2>/dev/null; then
+            log_info "Memasang paket paddlepaddle (CPU)..."
+            "$OCR_VENV/bin/pip" install --quiet paddlepaddle==2.6.2
+        fi
+    fi
+
     log_success "Dependensi Python OCR terpasang dengan sukses."
 
     log_info "Melakukan pra-inisialisasi (pre-warming) model PaddleOCR ke cache lokal..."
