@@ -136,6 +136,8 @@ export async function POST(request: NextRequest) {
       const cachedResult = await getCache<{
         detected: Record<string, unknown>;
         processingTimeSeconds?: number;
+        device?: string;
+        deviceName?: string;
       }>(ocrCacheKey);
 
       if (cachedResult && cachedResult.detected) {
@@ -143,6 +145,8 @@ export async function POST(request: NextRequest) {
           success: true,
           detected: cachedResult.detected,
           processingTimeSeconds: cachedResult.processingTimeSeconds ?? 0,
+          device: cachedResult.device,
+          deviceName: cachedResult.deviceName,
           cached: true,
         });
       }
@@ -305,6 +309,8 @@ export async function POST(request: NextRequest) {
         {
           detected,
           processingTimeSeconds: data?.processing_time_seconds ?? 0,
+          device: data?.device,
+          deviceName: data?.device_name,
         },
         86400
       );
@@ -316,6 +322,9 @@ export async function POST(request: NextRequest) {
       success: true,
       detected,
       processingTimeSeconds: data.processing_time_seconds,
+      device: data.device,
+      deviceName: data.device_name,
+      gpuFallbackError: data.gpu_fallback_error,
     });
   } catch (err: unknown) {
     console.error("Letter OCR API route error:", err);

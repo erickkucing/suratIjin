@@ -181,6 +181,8 @@ export async function POST(request: NextRequest) {
         totalStudents: number;
         students: Array<{ name: string; nis?: string }>;
         processingTimeSeconds?: number;
+        device?: string;
+        deviceName?: string;
       }>(ocrCacheKey);
 
       if (cachedResult && Array.isArray(cachedResult.students)) {
@@ -190,6 +192,8 @@ export async function POST(request: NextRequest) {
           totalStudents: cachedResult.totalStudents,
           students: cachedResult.students,
           processingTimeSeconds: cachedResult.processingTimeSeconds ?? 0,
+          device: cachedResult.device,
+          deviceName: cachedResult.deviceName,
           cached: true,
         });
       }
@@ -297,6 +301,9 @@ export async function POST(request: NextRequest) {
       totalStudents: students.length,
       students,
       processingTimeSeconds: data.processing_time_seconds,
+      device: data.device,
+      deviceName: data.device_name,
+      gpuFallbackError: data.gpu_fallback_error,
     };
 
     // Save to Redis cache for 24 hours (86400 seconds)

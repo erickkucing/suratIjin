@@ -140,10 +140,20 @@ if ! id -u "$APP_USER" >/dev/null 2>&1; then
     log_info "Membuat user sistem khusus '${APP_USER}'..."
     groupadd -r "$APP_GROUP" 2>/dev/null || true
     useradd -r -g "$APP_GROUP" -G www-data -d "$APP_DIR" -s /usr/sbin/nologin -c "Surat Ijin App Service User" "$APP_USER"
+    for grp in video render; do
+        if getent group "$grp" >/dev/null 2>&1; then
+            usermod -a -G "$grp" "$APP_USER" 2>/dev/null || true
+        fi
+    done
     log_success "User sistem '${APP_USER}' berhasil dibuat."
 else
-    # Pastikan grup tambahan www-data terpasang
+    # Pastikan grup tambahan www-data, video, dan render terpasang untuk akses file dan akselerasi GPU
     usermod -a -G www-data "$APP_USER" 2>/dev/null || true
+    for grp in video render; do
+        if getent group "$grp" >/dev/null 2>&1; then
+            usermod -a -G "$grp" "$APP_USER" 2>/dev/null || true
+        fi
+    done
     log_info "User sistem '${APP_USER}' sudah tersedia."
 fi
 
@@ -436,7 +446,7 @@ if [ -d "$OCR_DIR" ] && command -v python3 >/dev/null 2>&1; then
     log_success "Dependensi Python OCR terpasang dengan sukses."
 
     log_info "Melakukan pra-inisialisasi (pre-warming) model PaddleOCR ke cache lokal..."
-    HOME="${APP_DIR}" PADDLE_HOME="${PADDLE_CACHE_DIR}" "$OCR_VENV/bin/python" -c "from paddleocr import PaddleOCR; PaddleOCR(use_angle_cls=False, lang='en', show_log=False)" 2>/dev/null || log_warn "Pre-warming selesai dengan catatan (akan dimuat otomatis saat service aktif)."
+    HOME="${APP_DIR}" PADDLE_HOME="${PADDLE_CACHE_DIR}" "$OCR_VENV/bin/python" -c "from paddleocr import PaddleOCR; import numpy as np; ocr = PaddleOCR(use_angle_cls=False, lang='en', show_log=False); dummy = np.full((64, 256, 3), 255, dtype=np.uint8); ocr.ocr(dummy, cls=False)" 2>/dev/null || log_warn "Pre-warming selesai dengan catatan (akan dimuat otomatis saat service aktif)."
 
     log_info "Memperbarui konfigurasi systemd OCR service (${OCR_SERVICE_FILE})..."
     cat <<EOF > "$OCR_SERVICE_FILE"

@@ -59,6 +59,7 @@ _ocr_engine: Optional[PaddleOCR] = None
 _active_device: str = "cpu"
 _device_info: Dict[str, Any] = {}
 _device_name: str = "CPU"
+_gpu_fallback_error: Optional[str] = None
 
 def detect_device_capabilities() -> Dict[str, Any]:
     """Detect available hardware acceleration (CUDA GPU vs CPU)."""
@@ -92,52 +93,93 @@ def detect_device_capabilities() -> Dict[str, Any]:
         "error_detail": error_detail
     }
 
-def switch_to_cpu() -> PaddleOCR:
+def switch_to_cpu(err_detail: Optional[str] = None) -> PaddleOCR:
     """Safely rebuild OCR engine on CPU after a GPU initialization or runtime failure."""
-    global _ocr_engine, _active_device, _device_name
-    print("[OCR Service] Falling back OCR engine to CPU...")
+    global _ocr_engine, _active_device, _device_name, _gpu_fallback_error
+    print(f"[OCR Service] Falling back OCR engine to CPU... Error: {err_detail}")
+    _gpu_fallback_error = err_detail
     try:
         paddle.set_device("cpu")
     except Exception as e:
         print(f"[OCR Service] Warning setting CPU device: {e}")
-    _ocr_engine = PaddleOCR(use_angle_cls=False, lang="en", show_log=False, use_gpu=False, rec_batch_num=16)
+    cpu_cores = min(4, os.cpu_count() or 4)
+    _ocr_engine = PaddleOCR(
+        use_angle_cls=False,
+        lang="en",
+        show_log=False,
+        use_gpu=False,
+        rec_batch_num=32,
+        enable_mkldnn=True,
+        cpu_threads=cpu_cores
+    )
     _active_device = "cpu"
     _device_name = "CPU (Fallback)"
     return _ocr_engine
 
 def get_ocr_engine() -> PaddleOCR:
-    global _ocr_engine, _active_device, _device_info, _device_name
+    global _ocr_engine, _active_device, _device_info, _device_name, _gpu_fallback_error
     if _ocr_engine is None:
         _device_info = detect_device_capabilities()
         if _device_info["can_use_gpu"]:
             try:
                 print(f"[OCR Service] CUDA GPU detected ({_device_info['device_name']}). Initializing with GPU priority...")
                 paddle.set_device("gpu")
-                _ocr_engine = PaddleOCR(use_angle_cls=False, lang="en", show_log=False, use_gpu=True, rec_batch_num=16)
+                _ocr_engine = PaddleOCR(
+                    use_angle_cls=False,
+                    lang="en",
+                    show_log=False,
+                    use_gpu=True,
+                    rec_batch_num=32
+                )
                 _active_device = "gpu"
                 _device_name = _device_info["device_name"]
+                _gpu_fallback_error = None
                 print(f"[OCR Service] Successfully loaded PaddleOCR on GPU: {_device_name}")
             except Exception as e:
                 print(f"[OCR Service] GPU initialization failed ({e}). Auto-falling back to CPU...")
-                switch_to_cpu()
+                switch_to_cpu(str(e))
         else:
             print("[OCR Service] No CUDA GPU available. Initializing PaddleOCR on CPU...")
             try:
                 paddle.set_device("cpu")
             except Exception:
                 pass
-            _ocr_engine = PaddleOCR(use_angle_cls=False, lang="en", show_log=False, use_gpu=False, rec_batch_num=16)
+            cpu_cores = min(4, os.cpu_count() or 4)
+            _ocr_engine = PaddleOCR(
+                use_angle_cls=False,
+                lang="en",
+                show_log=False,
+                use_gpu=False,
+                rec_batch_num=32,
+                enable_mkldnn=True,
+                cpu_threads=cpu_cores
+            )
             _active_device = "cpu"
             _device_name = "CPU"
             print("[OCR Service] Successfully loaded PaddleOCR on CPU.")
     return _ocr_engine
 
+def prewarm_ocr_engine(ocr: PaddleOCR):
+    """Run a single forward pass with dummy pixels so CUDA kernel compilation and cuDNN workspaces are pre-warmed."""
+    try:
+        import numpy as np
+        # 64x256 RGB dummy image with high-contrast text-like stripe
+        dummy_img = np.full((64, 256, 3), 255, dtype=np.uint8)
+        dummy_img[28:36, 20:236] = 0
+        ocr.ocr(dummy_img, cls=False)
+        print(f"[OCR Service] Dummy forward pass successful on device: {_active_device}")
+    except Exception as e:
+        print(f"[OCR Service] Pre-warm forward pass encountered exception: {e}")
+        if _active_device == "gpu":
+            switch_to_cpu(str(e))
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Pre-warm PaddleOCR in memory so first user request has minimal latency
-    print("[OCR Service] Pre-warming PaddleOCR model into memory...")
+    # Pre-warm PaddleOCR in memory and run warm-up inference pass
+    print("[OCR Service] Pre-warming PaddleOCR model into memory and GPU context...")
     t0 = time.time()
-    get_ocr_engine()
+    engine = get_ocr_engine()
+    prewarm_ocr_engine(engine)
     print(f"[OCR Service] Model warmed up in {time.time() - t0:.2f}s")
     yield
     print("[OCR Service] Shutting down...")
@@ -179,7 +221,7 @@ def health_check():
         "device": _active_device,
         "cuda_available": _device_info.get("cuda_available", False),
         "device_name": _device_name,
-        "error_detail": _device_info.get("error_detail")
+        "error_detail": _device_info.get("error_detail") or _gpu_fallback_error
     }
 
 @app.post("/extract", dependencies=[Depends(verify_internal_secret)])
@@ -223,15 +265,22 @@ async def extract_roster(file: UploadFile = File(...)):
         result = process_document_bytes(file_bytes, filename, ocr)
         elapsed_sec = round(time.time() - t0, 3)
         result["processing_time_seconds"] = elapsed_sec
+        result["device"] = _active_device
+        result["device_name"] = _device_name
+        if _gpu_fallback_error:
+            result["gpu_fallback_error"] = _gpu_fallback_error
         return JSONResponse(content=result)
     except Exception as err:
         if _active_device == "gpu":
             print(f"[OCR Error] GPU inference failed ({err}). Retrying with CPU fallback...")
             try:
-                ocr = switch_to_cpu()
+                ocr = switch_to_cpu(str(err))
                 result = process_document_bytes(file_bytes, filename, ocr)
                 elapsed_sec = round(time.time() - t0, 3)
                 result["processing_time_seconds"] = elapsed_sec
+                result["device"] = _active_device
+                result["device_name"] = _device_name
+                result["gpu_fallback_error"] = str(err)
                 return JSONResponse(content=result)
             except Exception as retry_err:
                 print(f"[OCR Error] CPU fallback also failed for {filename}: {retry_err}")
@@ -296,15 +345,22 @@ async def extract_letter(
         result = process_letter_bytes(file_bytes, filename, students_list, ocr)
         elapsed_sec = round(time.time() - t0, 3)
         result["processing_time_seconds"] = elapsed_sec
+        result["device"] = _active_device
+        result["device_name"] = _device_name
+        if _gpu_fallback_error:
+            result["gpu_fallback_error"] = _gpu_fallback_error
         return JSONResponse(content=result)
     except Exception as err:
         if _active_device == "gpu":
             print(f"[OCR Error] GPU letter analysis failed ({err}). Retrying with CPU fallback...")
             try:
-                ocr = switch_to_cpu()
+                ocr = switch_to_cpu(str(err))
                 result = process_letter_bytes(file_bytes, filename, students_list, ocr)
                 elapsed_sec = round(time.time() - t0, 3)
                 result["processing_time_seconds"] = elapsed_sec
+                result["device"] = _active_device
+                result["device_name"] = _device_name
+                result["gpu_fallback_error"] = str(err)
                 return JSONResponse(content=result)
             except Exception as retry_err:
                 print(f"[OCR Error] CPU fallback also failed for letter {filename}: {retry_err}")

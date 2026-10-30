@@ -76,6 +76,7 @@ export function AttendanceFormModal({
     endDate: string;
     isMultiDay: boolean;
     description: string;
+    hardwareInfo?: string;
   } | null>(null);
 
   const { sheetRef, sheetStyle, touchHandlers } = useBottomSheetGesture({
@@ -263,6 +264,14 @@ export function AttendanceFormModal({
           }
         }
 
+        const hwTag = data.cached
+          ? "Cache Cepat"
+          : data.deviceName
+          ? `${data.deviceName} • ${data.processingTimeSeconds ?? ocrElapsedSeconds}s`
+          : data.device === "gpu"
+          ? `GPU • ${data.processingTimeSeconds ?? ocrElapsedSeconds}s`
+          : `${data.processingTimeSeconds ?? ocrElapsedSeconds}s`;
+
         setOcrResultBanner({
           studentName: detected.studentName,
           candidateName: detected.candidateName,
@@ -273,6 +282,7 @@ export function AttendanceFormModal({
           endDate: detected.endDate,
           isMultiDay: isMultiDayDetected,
           description: detected.description,
+          hardwareInfo: hwTag,
         });
       }
     } catch (err: unknown) {
@@ -721,6 +731,11 @@ export function AttendanceFormModal({
                       {ocrResultBanner.description && (
                         <span className="italic truncate block sm:inline sm:ml-1 text-[var(--ink-subtle)]">
                           (&ldquo;{ocrResultBanner.description}&rdquo;)
+                        </span>
+                      )}
+                      {ocrResultBanner.hardwareInfo && (
+                        <span className="text-[var(--ink-subtle)] text-[10px] ml-1">
+                          ({ocrResultBanner.hardwareInfo})
                         </span>
                       )}
                     </div>

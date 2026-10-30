@@ -392,10 +392,19 @@ export function StudentRosterModal({
 
       setOcrStudents(data.students);
       setOcrPagesProcessed(data.pagesProcessed || 1);
+
+      const hardwareTag = data.cached
+        ? "Cache Cepat"
+        : data.deviceName
+        ? `${data.deviceName} • ${data.processingTimeSeconds ?? scanElapsedSeconds}s`
+        : data.device === "gpu"
+        ? `GPU • ${data.processingTimeSeconds ?? scanElapsedSeconds}s`
+        : `${data.processingTimeSeconds ?? scanElapsedSeconds}s`;
+
       setMessage({
-        text: `Berhasil memindai ${data.students.length} siswa${
+        text: `Berhasil memindai ${data.students.length} siswa (${hardwareTag})${
           data.pagesProcessed > 1 ? ` dari ${data.pagesProcessed} halaman PDF` : ""
-        }${data.cached ? " (dari Cache Cepat)" : ""}. Anda dapat mengoreksi typo atau melengkapi data pada tabel di bawah sebelum menyimpan.`,
+        }. Anda dapat mengoreksi typo atau melengkapi data pada tabel di bawah sebelum menyimpan.`,
         isError: false,
       });
     } catch (err: unknown) {

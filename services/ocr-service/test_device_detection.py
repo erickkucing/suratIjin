@@ -63,7 +63,7 @@ class TestDeviceDetectionAndFallback(unittest.TestCase):
         self.assertEqual(main._active_device, "gpu")
         self.assertEqual(main._device_name, "NVIDIA GeForce RTX 4090")
         mock_set_dev.assert_called_with("gpu")
-        mock_ocr_cls.assert_called_with(use_angle_cls=False, lang="en", show_log=False, use_gpu=True, rec_batch_num=16)
+        mock_ocr_cls.assert_called_with(use_angle_cls=False, lang="en", show_log=False, use_gpu=True, rec_batch_num=32)
 
     @patch("main.PaddleOCR")
     @patch("main.paddle.set_device")
@@ -89,6 +89,13 @@ class TestDeviceDetectionAndFallback(unittest.TestCase):
         self.assertEqual(engine, cpu_instance)
         self.assertEqual(main._active_device, "cpu")
         self.assertIn("CPU", main._device_name)
+
+    def test_prewarm_ocr_engine(self):
+        """Verify prewarm_ocr_engine executes dummy forward pass without error."""
+        mock_engine = MagicMock()
+        mock_engine.ocr.return_value = []
+        main.prewarm_ocr_engine(mock_engine)
+        self.assertTrue(mock_engine.ocr.called)
 
 if __name__ == "__main__":
     unittest.main()
