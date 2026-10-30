@@ -47,6 +47,22 @@ function isNoiseStudentName(name: string): boolean {
   if (!name || name.trim().length < 2) return true;
   const lower = name.toLowerCase().trim();
 
+  // Valid student names must never contain digits (e.g. Ember.202 or 2024)
+  if (/\d/.test(lower)) {
+    return true;
+  }
+
+  // Standalone month names or OCR fragments (while preserving names with month roots like Aprilia, Agustina, Febri, Julius)
+  const STANDALONE_MONTH_NOISE = new Set([
+    "januari", "februari", "maret", "april", "mei", "juni",
+    "juli", "agustus", "september", "oktober", "november", "desember",
+    "ember", "wmber", "jan", "feb", "mar", "apr", "jun", "jul", "agu", "ags", "sep", "okt", "nov", "des"
+  ]);
+  const cleanAlpha = lower.replace(/[^a-z]/g, "");
+  if (STANDALONE_MONTH_NOISE.has(cleanAlpha)) {
+    return true;
+  }
+
   // Header patterns
   if (
     lower.includes("data nama siswa") ||
@@ -75,9 +91,14 @@ function isNoiseStudentName(name: string): boolean {
 
   // Footer / update date patterns
   if (
-    lower.includes("update per") ||
-    /\bper\s+\d{1,2}\s+(?:januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember)\b/.test(lower) ||
-    /\b\d{1,2}\s+(?:januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember)\s+\d{4}\b/.test(lower) ||
+    lower.includes("update") ||
+    lower.includes("revisi") ||
+    lower.includes("cetak") ||
+    /\bper\s+\d{1,2}\b/.test(lower) ||
+    /\bper\s+\d{1,2}\s+(?:januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember|ember|wmber)\b/.test(lower) ||
+    /\b\d{1,2}\s+(?:januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember|ember|wmber)\b/.test(lower) ||
+    /\b(?:januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember|ember|wmber)\s+(?:20\d\d|\d{2,4})\b/.test(lower) ||
+    /\b20[2-9]\d\b/.test(lower) ||
     lower.startsWith("halaman ")
   ) {
     return true;

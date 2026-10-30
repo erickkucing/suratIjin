@@ -393,18 +393,17 @@ export function StudentRosterModal({
       setOcrStudents(data.students);
       setOcrPagesProcessed(data.pagesProcessed || 1);
 
-      const hardwareTag = data.cached
-        ? "Cache Cepat"
-        : data.deviceName
-        ? `${data.deviceName} • ${data.processingTimeSeconds ?? scanElapsedSeconds}s`
-        : data.device === "gpu"
-        ? `GPU • ${data.processingTimeSeconds ?? scanElapsedSeconds}s`
-        : `${data.processingTimeSeconds ?? scanElapsedSeconds}s`;
+      const isCpuFallback =
+        Boolean(data.gpu_fallback_error) ||
+        data.device === "cpu" ||
+        (typeof data.deviceName === "string" && data.deviceName.toLowerCase().includes("cpu"));
+
+      const fallbackTag = isCpuFallback ? " (CPU)" : "";
 
       setMessage({
-        text: `Berhasil memindai ${data.students.length} siswa (${hardwareTag})${
+        text: `Berhasil memindai ${data.students.length} siswa${fallbackTag}${
           data.pagesProcessed > 1 ? ` dari ${data.pagesProcessed} halaman PDF` : ""
-        }. Anda dapat mengoreksi typo atau melengkapi data pada tabel di bawah sebelum menyimpan.`,
+        }. Periksa kembali nama dan NIS sebelum menyimpan.`,
         isError: false,
       });
     } catch (err: unknown) {

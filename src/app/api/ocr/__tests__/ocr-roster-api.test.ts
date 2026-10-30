@@ -211,15 +211,19 @@ describe("OCR Roster API Route (/api/ocr/roster)", () => {
           json: async () => ({
             success: true,
             pages_processed: 1,
-            total_students: 5,
+            total_students: 9,
             students: [
               { name: "DATA NAMA SISWA KELAS XII TEKNIK KOMPUTER DAN JARINGAN - 2", nis: null },
               { name: "Wali Kelas : Erick Kresnamurti, S.Kom. Gr.", nis: null },
               { name: "Adrian Manuel Hartono", nis: "9259 / 110 / 066" },
+              { name: "Aprilia Rahmawati", nis: "9260 / 111 / 066" },
+              { name: "Agustinus Prasetyo", nis: "9261 / 112 / 066" },
               { name: "Yohanes Elkan Nathanael", nis: "9509/181/066" },
               { name: "Update per 02 Desember 2024", nis: null },
+              { name: "Ember.202", nis: null },
+              { name: "Wmber", nis: null },
             ],
-            raw_text: "DATA NAMA SISWA KELAS XII\nWali Kelas\nAdrian\nYohanes\nUpdate per 02 Desember 2024",
+            raw_text: "DATA NAMA SISWA KELAS XII\nWali Kelas\nAdrian\nAprilia\nAgustinus\nYohanes\nUpdate per 02 Desember 2024\nEmber.202\nWmber",
           }),
         } as any;
       }
@@ -243,11 +247,15 @@ describe("OCR Roster API Route (/api/ocr/roster)", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.success).toBe(true);
-      expect(body.totalStudents).toBe(2);
+      expect(body.totalStudents).toBe(4);
       expect(body.students[0].name).toBe("Adrian Manuel Hartono");
       expect(body.students[0].nis).toBe("9259/110/066");
-      expect(body.students[1].name).toBe("Yohanes Elkan Nathanael");
-      expect(body.students[1].nis).toBe("9509/181/066");
+      expect(body.students[1].name).toBe("Aprilia Rahmawati");
+      expect(body.students[1].nis).toBe("9260/111/066");
+      expect(body.students[2].name).toBe("Agustinus Prasetyo");
+      expect(body.students[2].nis).toBe("9261/112/066");
+      expect(body.students[3].name).toBe("Yohanes Elkan Nathanael");
+      expect(body.students[3].nis).toBe("9509/181/066");
       expect(body.students.some((s: any) => s.name.includes("DATA NAMA"))).toBe(false);
       expect(body.students.some((s: any) => s.name.includes("Wali Kelas"))).toBe(false);
       expect(body.students.some((s: any) => s.name.includes("Update per"))).toBe(false);

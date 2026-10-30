@@ -56,11 +56,21 @@ SIGNATURE_ROW_PATTERNS = [
 ]
 
 FOOTER_ROW_PATTERNS = [
-    r'update\s+per\b',
-    r'\bper\s+\d{1,2}\s+(?:januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember)\b',
-    r'\b\d{1,2}\s+(?:januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember)\s+\d{4}\b',
+    r'update\s*(?:per)?\b',
+    r'\b(?:revisi|cetak|printed)\b',
+    r'\bper\s+\d{1,2}\b',
+    r'\bper\s+\d{1,2}\s+(?:januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember|ember|wmber)\b',
+    r'\b\d{1,2}\s+(?:januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember|ember|wmber)\b',
+    r'\b(?:januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember|ember|wmber)\s+(?:20\d\d|\d{2,4})\b',
+    r'\b20[2-9]\d\b',
     r'\bhalaman\s+\d+',
 ]
+
+STANDALONE_MONTH_NOISE = {
+    'januari', 'februari', 'maret', 'april', 'mei', 'juni',
+    'juli', 'agustus', 'september', 'oktober', 'november', 'desember',
+    'ember', 'wmber', 'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'agu', 'ags', 'sep', 'okt', 'nov', 'des'
+}
 
 SUMMARY_ROW_PATTERNS = [
     r'\bjumlah\b|\btotal\b|\brata-rata\b|\brerata\b|\bpersentase\b|\bpersen\b',
@@ -151,6 +161,17 @@ def is_noise_text(text: str) -> bool:
     if lower in ALL_FILTER_KEYWORDS or clean_lower in ALL_FILTER_KEYWORDS:
         return True
 
+    # Standalone month names or OCR month noise (e.g. 'Ember', 'Wmber', 'Desember')
+    # Real names with month roots (e.g. 'Aprilia', 'Febri', 'Agustina', 'Julius', 'Desi') are preserved
+    clean_alpha = re.sub(r'[^a-z]', '', lower)
+    if clean_alpha in STANDALONE_MONTH_NOISE:
+        return True
+
+    # Check if text contains year pattern or metadata alongside month or update words
+    if re.search(r'\b20[2-9]\d\b', lower):
+        if any(w in lower for w in ['update', 'per', 'cetak', 'revisi', 'desember', 'ember', 'wmber']):
+            return True
+
     # Check prefix block
     for p in PREFIX_BLOCK_KEYWORDS:
         if lower.startswith(p + ' ') or lower.startswith(p + ':') or lower.startswith(p + ' :') or lower.startswith(p + '.'):
@@ -203,6 +224,15 @@ def clean_student_name(raw: str) -> Optional[str]:
 
     # If it's pure numbers, it's not a name
     if re.match(r'^\d+$', s):
+        return None
+
+    # Valid student names must never contain digits (e.g. 'Ember.202' or '2024')
+    if re.search(r'\d', s):
+        return None
+
+    # Standalone month names or OCR fragments (e.g. 'Ember', 'Wmber', 'Desember')
+    clean_alpha = re.sub(r'[^a-z]', '', s.lower())
+    if clean_alpha in STANDALONE_MONTH_NOISE:
         return None
 
     # Check if noise
@@ -406,7 +436,9 @@ def extract_students_from_ocr_boxes(ocr_results: List) -> List[Dict[str, Optiona
             full_name = " ".join(name_candidates)
             full_name = clean_student_name(full_name)
             if full_name and len(full_name) >= 3:
-                students.append({"name": full_name, "nis": nis or None})
+                clean_full_alpha = re.sub(r'[^a-z]', '', full_name.lower())
+                if clean_full_alpha not in STANDALONE_MONTH_NOISE and not re.search(r'\d', full_name):
+                    students.append({"name": full_name, "nis": nis or None})
 
     return students
 

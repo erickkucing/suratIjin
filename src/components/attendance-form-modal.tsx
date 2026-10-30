@@ -264,13 +264,12 @@ export function AttendanceFormModal({
           }
         }
 
-        const hwTag = data.cached
-          ? "Cache Cepat"
-          : data.deviceName
-          ? `${data.deviceName} • ${data.processingTimeSeconds ?? ocrElapsedSeconds}s`
-          : data.device === "gpu"
-          ? `GPU • ${data.processingTimeSeconds ?? ocrElapsedSeconds}s`
-          : `${data.processingTimeSeconds ?? ocrElapsedSeconds}s`;
+        const isCpuFallback =
+          Boolean(data.gpu_fallback_error) ||
+          data.device === "cpu" ||
+          (typeof data.deviceName === "string" && data.deviceName.toLowerCase().includes("cpu"));
+
+        const hwTag = isCpuFallback ? "CPU" : undefined;
 
         setOcrResultBanner({
           studentName: detected.studentName,

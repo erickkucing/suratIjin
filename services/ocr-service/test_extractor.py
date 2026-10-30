@@ -37,11 +37,22 @@ class TestExtractor(unittest.TestCase):
         self.assertEqual(clean_student_name("1. Adrian Manuel Hartono"), "Adrian Manuel Hartono")
         self.assertEqual(clean_student_name("Yohanes Elkan Nathanael"), "Yohanes Elkan Nathanael")
         self.assertEqual(clean_student_name("Angela Ardhana Reswari Pradya Paramita"), "Angela Ardhana Reswari Pradya Paramita")
+        # Real person names with month roots must never be false-positively rejected
+        self.assertEqual(clean_student_name("Aprilia Rahmawati"), "Aprilia Rahmawati")
+        self.assertEqual(clean_student_name("Agustinus Prasetyo"), "Agustinus Prasetyo")
+        self.assertEqual(clean_student_name("Muhammad Januar"), "Muhammad Januar")
+        self.assertEqual(clean_student_name("Febri Andika"), "Febri Andika")
+        self.assertEqual(clean_student_name("Julius Cesar"), "Julius Cesar")
+        self.assertEqual(clean_student_name("Desi Permatasari"), "Desi Permatasari")
+        self.assertEqual(clean_student_name("Novita Sari"), "Novita Sari")
 
     def test_clean_student_name_noise_rejected(self):
         self.assertIsNone(clean_student_name("DATA NAMA SISWA KELAS XII"))
         self.assertIsNone(clean_student_name("Wali Kelas : Erick Kresnamurti, S.Kom. Gr."))
         self.assertIsNone(clean_student_name("Update per 02 Desember 2024"))
+        self.assertIsNone(clean_student_name("Ember.202"))
+        self.assertIsNone(clean_student_name("Wmber"))
+        self.assertIsNone(clean_student_name("Desember"))
         self.assertIsNone(clean_student_name("No"))
         self.assertIsNone(clean_student_name("L"))
         self.assertIsNone(clean_student_name("P"))
@@ -62,6 +73,7 @@ class TestExtractor(unittest.TestCase):
             [[[260, 135], [280, 135], [280, 150], [260, 150]], ("L", 0.99)],
             [[[290, 135], [420, 135], [420, 150], [290, 150]], ("9509/181/066", 0.99)],
             [[[300, 200], [500, 200], [500, 215], [300, 215]], ("Update per 02 Desember 2024", 0.95)],
+            [[[310, 220], [450, 220], [450, 235], [310, 235]], ("Ember.202", 0.91)],
         ]
         students = extract_students_from_ocr_boxes([mock_boxes])
         self.assertEqual(len(students), 2)
