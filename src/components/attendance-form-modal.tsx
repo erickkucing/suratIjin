@@ -64,6 +64,8 @@ export function AttendanceFormModal({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const [scanningLetter, setScanningLetter] = useState(false);
+  const [ocrStage, setOcrStage] = useState<1 | 2 | 3>(1);
+  const [ocrElapsedSeconds, setOcrElapsedSeconds] = useState<number>(0);
   const [ocrResultBanner, setOcrResultBanner] = useState<{
     studentName: string | null;
     candidateName?: string | null;
@@ -177,7 +179,13 @@ export function AttendanceFormModal({
 
   const runOcrScan = async (fileToScan: File) => {
     setScanningLetter(true);
+    setOcrStage(2);
+    setOcrElapsedSeconds(0);
     setErrorMessage(null);
+
+    const timerInterval = setInterval(() => {
+      setOcrElapsedSeconds((prev) => +(prev + 0.1).toFixed(1));
+    }, 100);
 
     try {
       const formData = new FormData();
@@ -194,6 +202,7 @@ export function AttendanceFormModal({
         throw new Error(data.error || "Gagal memindai dokumen surat.");
       }
 
+      setOcrStage(3);
       const detected = data.detected;
       if (detected) {
         if (detected.studentId) {
@@ -273,6 +282,7 @@ export function AttendanceFormModal({
           : "Gagal memindai surat izin. Anda tetap dapat mengisi formulir secara manual."
       );
     } finally {
+      clearInterval(timerInterval);
       setScanningLetter(false);
     }
   };
@@ -309,8 +319,10 @@ export function AttendanceFormModal({
       setCompressionProgress(15);
 
       try {
-        const result = await processFileBeforeUpload(file, (p) =>
-          setCompressionProgress(Math.min(100, Math.round(p)))
+        const result = await processFileBeforeUpload(
+          file,
+          (p) => setCompressionProgress(Math.min(100, Math.round(p))),
+          { maxWidthOrHeight: 1400, maxSizeMB: 0.35, quality: 0.85 }
         );
 
         setSelectedFile(result.file);
@@ -594,9 +606,46 @@ export function AttendanceFormModal({
 
               {/* Scanning state badge */}
               {scanningLetter && !compressing && (
-                <div className="flex items-center gap-2 p-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-xs text-[var(--ink-muted)]">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--primary)] shrink-0" />
-                  <span>Sedang membaca dan mengekstrak data dari surat izin...</span>
+                <div className="p-3 rounded-xl bg-[var(--surface)] border border-[var(--border)] space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="flex items-center gap-2 font-medium text-[var(--ink)]">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--primary)] shrink-0" />
+                      Mengekstrak data surat (PaddleOCR)...
+                    </span>
+                    <span className="font-mono text-[11px] px-2 py-0.5 rounded-full bg-[var(--canvas-subtle)] border border-[var(--border)] text-[var(--ink-muted)]">
+                      {ocrElapsedSeconds.toFixed(1)}s
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-1 text-[10px] font-medium text-center">
+                    <div
+                      className={`p-1 rounded border transition-all ${
+                        ocrStage >= 1
+                          ? "bg-[var(--canvas-subtle)] border-[var(--primary)] text-[var(--primary)] font-semibold"
+                          : "border-[var(--border)] text-[var(--ink-subtle)]"
+                      }`}
+                    >
+                      1. Kompresi
+                    </div>
+                    <div
+                      className={`p-1 rounded border transition-all ${
+                        ocrStage >= 2
+                          ? "bg-[var(--canvas-subtle)] border-[var(--primary)] text-[var(--primary)] font-semibold"
+                          : "border-[var(--border)] text-[var(--ink-subtle)]"
+                      }`}
+                    >
+                      2. OCR
+                    </div>
+                    <div
+                      className={`p-1 rounded border transition-all ${
+                        ocrStage >= 3
+                          ? "bg-[var(--canvas-subtle)] border-[var(--primary)] text-[var(--primary)] font-semibold"
+                          : "border-[var(--border)] text-[var(--ink-subtle)]"
+                      }`}
+                    >
+                      3. Sinkron
+                    </div>
+                  </div>
                 </div>
               )}
 

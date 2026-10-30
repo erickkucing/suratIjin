@@ -100,7 +100,7 @@ def switch_to_cpu() -> PaddleOCR:
         paddle.set_device("cpu")
     except Exception as e:
         print(f"[OCR Service] Warning setting CPU device: {e}")
-    _ocr_engine = PaddleOCR(use_angle_cls=False, lang="en", show_log=False, use_gpu=False)
+    _ocr_engine = PaddleOCR(use_angle_cls=False, lang="en", show_log=False, use_gpu=False, rec_batch_num=16)
     _active_device = "cpu"
     _device_name = "CPU (Fallback)"
     return _ocr_engine
@@ -113,7 +113,7 @@ def get_ocr_engine() -> PaddleOCR:
             try:
                 print(f"[OCR Service] CUDA GPU detected ({_device_info['device_name']}). Initializing with GPU priority...")
                 paddle.set_device("gpu")
-                _ocr_engine = PaddleOCR(use_angle_cls=False, lang="en", show_log=False, use_gpu=True)
+                _ocr_engine = PaddleOCR(use_angle_cls=False, lang="en", show_log=False, use_gpu=True, rec_batch_num=16)
                 _active_device = "gpu"
                 _device_name = _device_info["device_name"]
                 print(f"[OCR Service] Successfully loaded PaddleOCR on GPU: {_device_name}")
@@ -126,7 +126,7 @@ def get_ocr_engine() -> PaddleOCR:
                 paddle.set_device("cpu")
             except Exception:
                 pass
-            _ocr_engine = PaddleOCR(use_angle_cls=False, lang="en", show_log=False, use_gpu=False)
+            _ocr_engine = PaddleOCR(use_angle_cls=False, lang="en", show_log=False, use_gpu=False, rec_batch_num=16)
             _active_device = "cpu"
             _device_name = "CPU"
             print("[OCR Service] Successfully loaded PaddleOCR on CPU.")

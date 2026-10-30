@@ -51,6 +51,19 @@ NAME_PREFIX_PATTERNS = [
     r'^(?:yang\s+bernama|atas\s+nama)\s*[:=.\-]?\s*',
 ]
 
+def downscale_image_if_needed(np_img: np.ndarray, max_side: int = 1400) -> np.ndarray:
+    """Downscale very high-resolution images to prevent CPU saturation while preserving letter text legibility."""
+    if np_img is None:
+        return np_img
+    h, w = np_img.shape[:2]
+    longest = max(h, w)
+    if longest > max_side:
+        scale = max_side / float(longest)
+        new_w = max(1, int(round(w * scale)))
+        new_h = max(1, int(round(h * scale)))
+        return cv2.resize(np_img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+    return np_img
+
 def preprocess_image_for_ocr(img_rgb: np.ndarray) -> np.ndarray:
     """
     Enhance contrast and clarity for handwriting and printed document recognition,
@@ -574,9 +587,10 @@ def process_letter_bytes(
         num_pages = min(len(pdf), 3) # Usually letters are 1-2 pages
         for p_idx in range(num_pages):
             page = pdf.get_page(p_idx)
-            bitmap = page.render(scale=2.0)
+            bitmap = page.render(scale=1.4)
             pil_img = bitmap.to_pil().convert("RGB")
             np_img = np.array(pil_img)
+            np_img = downscale_image_if_needed(np_img, max_side=1400)
             enhanced = preprocess_image_for_ocr(np_img)
 
             ocr_res = ocr_engine.ocr(enhanced, cls=False)
@@ -587,6 +601,7 @@ def process_letter_bytes(
     else:
         pil_img = Image.open(io.BytesIO(file_bytes)).convert("RGB")
         np_img = np.array(pil_img)
+        np_img = downscale_image_if_needed(np_img, max_side=1400)
         enhanced = preprocess_image_for_ocr(np_img)
 
         ocr_res = ocr_engine.ocr(enhanced, cls=False)

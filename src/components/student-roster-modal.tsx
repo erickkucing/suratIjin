@@ -34,6 +34,7 @@ import { exportStudentRosterExcel, downloadStudentImportTemplate } from "@/lib/e
 import { toTitleCase } from "@/lib/string-utils";
 import { useBottomSheetGesture } from "@/hooks/use-bottom-sheet";
 import { useConfirmDialog } from "@/components/confirm-dialog-provider";
+import { processFileBeforeUpload } from "@/lib/client-image-compress";
 
 interface StudentRosterModalProps {
   isOpen: boolean;
@@ -72,6 +73,8 @@ export function StudentRosterModal({
   const [ocrPagesProcessed, setOcrPagesProcessed] = useState<number>(1);
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgressStep, setScanProgressStep] = useState<string>("");
+  const [scanStage, setScanStage] = useState<1 | 2 | 3>(1);
+  const [scanElapsedSeconds, setScanElapsedSeconds] = useState<number>(0);
 
   const [editingStudentId, setEditingStudentId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
@@ -327,50 +330,39 @@ export function StudentRosterModal({
     }
 
     setIsScanning(true);
+    setScanStage(1);
+    setScanElapsedSeconds(0);
     setMessage(null);
     setOcrFileName(file.name);
-    setScanProgressStep("Menyiapkan dokumen...");
+    setScanProgressStep("Mengoptimasi dan mengompresi gambar...");
+
+    const timerInterval = setInterval(() => {
+      setScanElapsedSeconds((prev) => +(prev + 0.1).toFixed(1));
+    }, 100);
 
     try {
       let uploadFile = file;
 
-      // Convert HEIC/HEIF images on the client if necessary
-      if (
-        file.name.toLowerCase().endsWith(".heic") ||
-        file.name.toLowerCase().endsWith(".heif") ||
-        file.type.includes("heic")
-      ) {
-        setScanProgressStep("Mengonversi format foto HEIC ke JPG...");
+      // 1. Client-side adaptive compression (1600px, 0.85 quality) for rapid network transfer
+      if (!file.name.toLowerCase().endsWith(".pdf") && file.type !== "application/pdf") {
         try {
-          const { heicTo } = await import("heic-to");
-          const blob = await heicTo({
-            blob: file,
-            type: "image/jpeg",
-            quality: 0.92,
-          });
-          uploadFile = new File([blob], file.name.replace(/\.heic$/i, ".jpg"), {
-            type: "image/jpeg",
-          });
-        } catch (heicErr) {
-          console.warn("HEIC client conversion failed, continuing with raw file:", heicErr);
-        }
-      } else if (file.type.startsWith("image/") && file.size > 2 * 1024 * 1024) {
-        // Compress very large camera photos to speed up network transfer
-        setScanProgressStep("Mengompres resolusi foto kamera...");
-        try {
-          const imageCompression = (await import("browser-image-compression")).default;
-          const compressedBlob = await imageCompression(file, {
-            maxSizeMB: 2,
-            maxWidthOrHeight: 2500,
-            useWebWorker: true,
-          });
-          uploadFile = new File([compressedBlob], file.name, { type: file.type });
+          const compResult = await processFileBeforeUpload(
+            file,
+            (p) => {
+              setScanProgressStep(`Mengompresi resolusi gambar (${p}%)...`);
+            },
+            { maxWidthOrHeight: 1600, maxSizeMB: 0.5, quality: 0.85 }
+          );
+          uploadFile = compResult.file;
         } catch (compErr) {
-          console.warn("Client compression skipped:", compErr);
+          console.warn("Client-side compression fallback to original file:", compErr);
         }
       }
 
-      setScanProgressStep("Menganalisis baris tabel dan nama siswa menggunakan PaddleOCR...");
+      // 2. Inference stage
+      setScanStage(2);
+      setScanProgressStep("Menganalisis baris tabel dan nama siswa (PaddleOCR)...");
+
       const formData = new FormData();
       formData.append("classId", String(classId));
       formData.append("file", uploadFile);
@@ -384,6 +376,10 @@ export function StudentRosterModal({
       if (!res.ok || !data.success) {
         throw new Error(data.error || "Gagal memindai formulir siswa.");
       }
+
+      // 3. Final synchronization stage
+      setScanStage(3);
+      setScanProgressStep("Menyelaraskan data siswa terdeteksi...");
 
       if (!data.students || data.students.length === 0) {
         setMessage({
@@ -399,7 +395,7 @@ export function StudentRosterModal({
       setMessage({
         text: `Berhasil memindai ${data.students.length} siswa${
           data.pagesProcessed > 1 ? ` dari ${data.pagesProcessed} halaman PDF` : ""
-        }. Anda dapat mengoreksi typo atau melengkapi data pada tabel di bawah sebelum menyimpan.`,
+        }${data.cached ? " (dari Cache Cepat)" : ""}. Anda dapat mengoreksi typo atau melengkapi data pada tabel di bawah sebelum menyimpan.`,
         isError: false,
       });
     } catch (err: unknown) {
@@ -410,6 +406,7 @@ export function StudentRosterModal({
       });
       setOcrStudents([]);
     } finally {
+      clearInterval(timerInterval);
       setIsScanning(false);
       setScanProgressStep("");
     }
@@ -1116,21 +1113,61 @@ export function StudentRosterModal({
 
                   {/* State 2: Scanning in progress */}
                   {isScanning && (
-                    <div className="border border-[var(--border)] rounded-2xl p-8 bg-[var(--canvas-subtle)] text-center space-y-3">
+                    <div className="border border-[var(--border)] rounded-2xl p-6 bg-[var(--canvas-subtle)] text-center space-y-4">
                       <div className="w-12 h-12 rounded-2xl bg-[var(--primary-light)] text-[var(--primary)] flex items-center justify-center mx-auto shadow-xs">
                         <Loader2 className="w-6 h-6 animate-spin" />
                       </div>
                       <div>
-                        <h4 className="text-sm font-bold text-[var(--ink)]">
-                          Sedang Menganalisis Dokumen...
-                        </h4>
-                        <p className="text-xs text-[var(--primary)] font-medium mt-1">
+                        <div className="flex items-center justify-center gap-2 mb-1">
+                          <h4 className="text-sm font-bold text-[var(--ink)]">
+                            Sedang Memindai Formulir Siswa
+                          </h4>
+                          <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-[var(--surface)] border border-[var(--border)] text-[var(--ink-muted)]">
+                            {scanElapsedSeconds.toFixed(1)}s
+                          </span>
+                        </div>
+                        <p className="text-xs text-[var(--primary)] font-medium">
                           {scanProgressStep || "Menganalisis baris tabel formulir..."}
                         </p>
-                        <p className="text-[11px] text-[var(--ink-subtle)] mt-2">
-                          File: {ocrFileName || "dokumen"}. Proses membutuhkan beberapa detik tergantung jumlah halaman.
-                        </p>
                       </div>
+
+                      {/* 3-Step Progress Indicator */}
+                      <div className="grid grid-cols-3 gap-1.5 max-w-sm mx-auto text-[11px] font-medium pt-1">
+                        <div
+                          className={`p-1.5 rounded-lg border transition-all ${
+                            scanStage >= 1
+                              ? "bg-[var(--surface)] border-[var(--primary)] text-[var(--primary)] shadow-xs"
+                              : "bg-transparent border-[var(--border)] text-[var(--ink-subtle)]"
+                          }`}
+                        >
+                          <span className="block text-[10px] uppercase tracking-wider text-[var(--ink-subtle)]">Tahap 1</span>
+                          <span>Optimasi</span>
+                        </div>
+                        <div
+                          className={`p-1.5 rounded-lg border transition-all ${
+                            scanStage >= 2
+                              ? "bg-[var(--surface)] border-[var(--primary)] text-[var(--primary)] shadow-xs"
+                              : "bg-transparent border-[var(--border)] text-[var(--ink-subtle)]"
+                          }`}
+                        >
+                          <span className="block text-[10px] uppercase tracking-wider text-[var(--ink-subtle)]">Tahap 2</span>
+                          <span>PaddleOCR</span>
+                        </div>
+                        <div
+                          className={`p-1.5 rounded-lg border transition-all ${
+                            scanStage >= 3
+                              ? "bg-[var(--surface)] border-[var(--primary)] text-[var(--primary)] shadow-xs"
+                              : "bg-transparent border-[var(--border)] text-[var(--ink-subtle)]"
+                          }`}
+                        >
+                          <span className="block text-[10px] uppercase tracking-wider text-[var(--ink-subtle)]">Tahap 3</span>
+                          <span>Sinkronisasi</span>
+                        </div>
+                      </div>
+
+                      <p className="text-[11px] text-[var(--ink-subtle)]">
+                        File: {ocrFileName || "dokumen"}. Resolusi dioptimasi adaptif untuk inferensi cepat tanpa mengurangi akurasi teks.
+                      </p>
                     </div>
                   )}
 

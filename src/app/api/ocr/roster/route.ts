@@ -5,6 +5,8 @@ import { classes } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { checkRateLimit, recordFailedAttempt } from "@/lib/rate-limiter";
 import { getAiRouterConfig, parseRosterWithAi } from "@/lib/ai-router";
+import crypto from "crypto";
+import { getCache, setCache } from "@/lib/redis";
 
 const OCR_SERVICE_URL = process.env.OCR_SERVICE_URL || "http://127.0.0.1:8001";
 const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15 MB
@@ -169,6 +171,32 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Hash-based caching: check if this identical roster document has already been processed for this class
+    const fileHash = crypto.createHash("sha256").update(buffer).digest("hex");
+    const ocrCacheKey = `cache:ocr:roster:${fileHash}:${classId}`;
+
+    try {
+      const cachedResult = await getCache<{
+        pagesProcessed: number;
+        totalStudents: number;
+        students: Array<{ name: string; nis?: string }>;
+        processingTimeSeconds?: number;
+      }>(ocrCacheKey);
+
+      if (cachedResult && Array.isArray(cachedResult.students)) {
+        return NextResponse.json({
+          success: true,
+          pagesProcessed: cachedResult.pagesProcessed || 1,
+          totalStudents: cachedResult.totalStudents,
+          students: cachedResult.students,
+          processingTimeSeconds: cachedResult.processingTimeSeconds ?? 0,
+          cached: true,
+        });
+      }
+    } catch (cacheErr) {
+      console.warn("[Roster OCR] Redis getCache failed, proceeding with live inference:", cacheErr);
+    }
+
     // Forward to internal OCR microservice
     const forwardFormData = new FormData();
     const blob = new Blob([buffer], { type: file.type || "application/octet-stream" });
@@ -263,13 +291,22 @@ export async function POST(request: NextRequest) {
         nis: s.nis ? s.nis.replace(/\s*\/\s*/g, "/").trim() : undefined,
       }));
 
-    return NextResponse.json({
+    const responsePayload = {
       success: true,
       pagesProcessed: data.pages_processed || 1,
       totalStudents: students.length,
       students,
       processingTimeSeconds: data.processing_time_seconds,
-    });
+    };
+
+    // Save to Redis cache for 24 hours (86400 seconds)
+    try {
+      await setCache(ocrCacheKey, responsePayload, 86400);
+    } catch (cacheSetErr) {
+      console.warn("[Roster OCR] Failed to set Redis cache:", cacheSetErr);
+    }
+
+    return NextResponse.json(responsePayload);
   } catch (err: unknown) {
     console.error("OCR API route error:", err);
     return NextResponse.json(

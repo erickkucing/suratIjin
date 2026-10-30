@@ -5,7 +5,9 @@ from extractor import (
     is_header_or_footer_row,
     is_noise_text,
     extract_students_from_ocr_boxes,
+    downscale_image_if_needed,
 )
+import numpy as np
 
 class TestExtractor(unittest.TestCase):
     def test_header_row_detection(self):
@@ -67,6 +69,18 @@ class TestExtractor(unittest.TestCase):
         self.assertEqual(students[0]["nis"], "9259/110/066")
         self.assertEqual(students[1]["name"], "Yohanes Elkan Nathanael")
         self.assertEqual(students[1]["nis"], "9509/181/066")
+
+    def test_downscale_image_if_needed(self):
+        # 1. Image with dimension larger than max_side
+        large_img = np.zeros((3000, 2000, 3), dtype=np.uint8)
+        scaled = downscale_image_if_needed(large_img, max_side=1600)
+        self.assertEqual(scaled.shape[0], 1600)
+        self.assertEqual(scaled.shape[1], 1067)
+
+        # 2. Image already smaller than max_side remains unchanged
+        small_img = np.zeros((800, 600, 3), dtype=np.uint8)
+        unchanged = downscale_image_if_needed(small_img, max_side=1600)
+        self.assertEqual(unchanged.shape, (800, 600, 3))
 
 if __name__ == "__main__":
     unittest.main()

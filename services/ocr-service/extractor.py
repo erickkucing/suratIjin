@@ -1,11 +1,25 @@
 import io
 import re
 from typing import List, Dict, Optional, Tuple, Any
+import cv2
 import numpy as np
 from PIL import Image
 import pypdfium2
 
 ROMAN_NUMERALS = {"II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"}
+
+def downscale_image_if_needed(np_img: np.ndarray, max_side: int = 1600) -> np.ndarray:
+    """Downscale very high-resolution images to prevent CPU saturation while preserving text legibility."""
+    if np_img is None:
+        return np_img
+    h, w = np_img.shape[:2]
+    longest = max(h, w)
+    if longest > max_side:
+        scale = max_side / float(longest)
+        new_w = max(1, int(round(w * scale)))
+        new_h = max(1, int(round(h * scale)))
+        return cv2.resize(np_img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+    return np_img
 
 HEADER_ROW_PATTERNS = [
     r'pemerintah(?:an)?\s+(?:kabupaten|provinsi|kota|daerah)',
@@ -426,14 +440,18 @@ def process_document_bytes(
 
     if is_pdf:
         pdf = pypdfium2.PdfDocument(file_bytes)
-        pages_processed = len(pdf)
+        max_pdf_pages = 5
+        total_pages = len(pdf)
+        pages_to_process = min(total_pages, max_pdf_pages)
+        pages_processed = pages_to_process
 
-        for page_idx in range(pages_processed):
+        for page_idx in range(pages_to_process):
             page = pdf.get_page(page_idx)
-            # Render at 2.0 scale (~150-200 DPI) for optimal OCR accuracy
-            bitmap = page.render(scale=2.0)
+            # Render at 1.4 scale (~100-120 DPI) for optimal balance of speed and text crispness
+            bitmap = page.render(scale=1.4)
             pil_img = bitmap.to_pil().convert("RGB")
             np_img = np.array(pil_img)
+            np_img = downscale_image_if_needed(np_img, max_side=1600)
 
             ocr_res = ocr_engine.ocr(np_img, cls=False)
             if ocr_res and len(ocr_res) > 0:
@@ -450,6 +468,7 @@ def process_document_bytes(
         pages_processed = 1
         pil_img = Image.open(io.BytesIO(file_bytes)).convert("RGB")
         np_img = np.array(pil_img)
+        np_img = downscale_image_if_needed(np_img, max_side=1600)
 
         ocr_res = ocr_engine.ocr(np_img, cls=False)
         if ocr_res and len(ocr_res) > 0:

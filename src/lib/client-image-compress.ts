@@ -7,16 +7,23 @@ export interface CompressionResult {
   reductionPercentage: number;
 }
 
+export interface CompressionOptions {
+  maxWidthOrHeight?: number;
+  maxSizeMB?: number;
+  quality?: number;
+}
+
 export async function processFileBeforeUpload(
   file: File,
-  onProgress?: (progress: number) => void
+  onProgress?: (progress: number) => void,
+  customOptions?: CompressionOptions
 ): Promise<CompressionResult> {
   const originalSize = file.size;
 
-  // 1. If PDF, pass through without compression (just validate max 10MB)
+  // 1. If PDF, pass through without compression (just validate max 15MB)
   if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
-    if (file.size > 10 * 1024 * 1024) {
-      throw new Error("Ukuran file PDF melebihi batas maksimal 10 MB.");
+    if (file.size > 15 * 1024 * 1024) {
+      throw new Error("Ukuran file PDF melebihi batas maksimal 15 MB.");
     }
     return {
       file,
@@ -42,7 +49,7 @@ export async function processFileBeforeUpload(
       const jpegBlob = await heicTo({
         blob: file,
         type: "image/jpeg",
-        quality: 0.85,
+        quality: customOptions?.quality ?? 0.85,
       });
       const newName = file.name.replace(/\.(heic|heif)$/i, ".jpg");
       fileToCompress = new File([jpegBlob], newName, { type: "image/jpeg" });
@@ -57,8 +64,8 @@ export async function processFileBeforeUpload(
   try {
     const imageCompression = (await import("browser-image-compression")).default;
     const options = {
-      maxSizeMB: 0.4, // Max ~400 KB
-      maxWidthOrHeight: 1600, // Keeps text in document sharp and legible
+      maxSizeMB: customOptions?.maxSizeMB ?? 0.4, // Max ~400 KB
+      maxWidthOrHeight: customOptions?.maxWidthOrHeight ?? 1600, // Keeps text sharp
       useWebWorker: true,
       onProgress: (p: number) => {
         // Map 30% to 90%
