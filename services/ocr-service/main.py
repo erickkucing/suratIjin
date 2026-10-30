@@ -34,6 +34,11 @@ try:
 except Exception:
     pass
 
+# Compatibility flags for Pascal sm_61 architecture (Quadro P1000) and cuDNN
+os.environ.setdefault("FLAGS_enable_pir_api", "0")
+os.environ.setdefault("FLAGS_cudnn_exhaustive_search", "0")
+os.environ.setdefault("FLAGS_cudnn_deterministic", "1")
+
 from fastapi import FastAPI, UploadFile, File, Form, Header, HTTPException, status, Depends
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -138,6 +143,7 @@ def switch_to_cpu(err_detail: Optional[str] = None) -> PaddleOCR:
         show_log=False,
         use_gpu=False,
         rec_batch_num=32,
+        ir_optim=False,
         enable_mkldnn=True,
         cpu_threads=cpu_cores
     )
@@ -158,7 +164,8 @@ def get_ocr_engine() -> PaddleOCR:
                     lang="en",
                     show_log=False,
                     use_gpu=True,
-                    rec_batch_num=32
+                    rec_batch_num=32,
+                    ir_optim=False
                 )
                 _active_device = "gpu"
                 _device_name = _device_info["device_name"]
@@ -180,6 +187,7 @@ def get_ocr_engine() -> PaddleOCR:
                 show_log=False,
                 use_gpu=False,
                 rec_batch_num=32,
+                ir_optim=False,
                 enable_mkldnn=True,
                 cpu_threads=cpu_cores
             )
