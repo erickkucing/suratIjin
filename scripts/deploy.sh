@@ -531,6 +531,11 @@ Environment=PYTHONUNBUFFERED=1
 Environment=HOME=${APP_DIR}
 Environment=PADDLE_HOME=${PADDLE_CACHE_DIR}
 Environment=LD_LIBRARY_PATH=/usr/local/cuda/lib64:${OCR_VENV}/lib/python3.11/site-packages/nvidia/cudnn/lib:${OCR_VENV}/lib/python3.11/site-packages/nvidia/cublas/lib:${OCR_VENV}/lib/python3.12/site-packages/nvidia/cudnn/lib:${OCR_VENV}/lib/python3.10/site-packages/nvidia/cudnn/lib:\${LD_LIBRARY_PATH}
+Environment=FLAGS_allocator_strategy=auto_growth
+Environment=FLAGS_fraction_of_gpu_memory_to_use=0.5
+Environment=FLAGS_conv_workspace_size_limit=64
+Environment=FLAGS_initial_gpu_memory_in_mb=256
+Environment=FLAGS_reallocate_gpu_memory_in_mb=128
 EnvironmentFile=-${APP_DIR}/.env
 ExecStart=${OCR_VENV}/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8001 --workers 1
 Restart=always
