@@ -9,7 +9,9 @@ node_modules/
 *.tsbuildinfo
 
 # Environment files
-.env*.local
+.env
+.env.*
+!.env.example
 
 # Storage uploads (preserve directory structure)
 storage/uploads/*

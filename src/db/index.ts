@@ -12,7 +12,9 @@ const globalForDb = globalThis as unknown as {
   conn: mysql.Pool | undefined;
 };
 
-const poolUri = process.env.DATABASE_URL || "mysql://root:@localhost:3306/db_suratizin";
+const poolUri =
+  process.env.DATABASE_URL ||
+  "mysql://surat_user:surat_pass_2026@127.0.0.1:3306/db_suratizin";
 const connectionLimit = parseInt(process.env.DB_CONNECTION_LIMIT || "15", 10);
 const maxIdle = parseInt(process.env.DB_MAX_IDLE || "10", 10);
 const idleTimeout = parseInt(process.env.DB_IDLE_TIMEOUT || "60000", 10);
