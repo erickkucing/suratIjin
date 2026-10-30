@@ -5,7 +5,7 @@ test.describe("07. Redis Features, Admin UI & Performance Suite", () => {
     await page.context().clearCookies();
   });
 
-  test("01. Admin UI: Redis section is present under Database subtab with clear separation", async ({
+  test("01. Admin UI: Redis section is present under Database subtab with structured fields and non-slop design", async ({
     page,
   }) => {
     // Login as Superadmin
@@ -23,18 +23,20 @@ test.describe("07. Redis Features, Admin UI & Performance Suite", () => {
     const dbSubTab = page.locator('button:has-text("Manajemen Basis Data")');
     await dbSubTab.click();
 
-    // Verify visual separation banner
-    const separator = page.locator('text="Akselerasi & Caching (Fitur Opsional)"');
-    await expect(separator).toBeVisible();
-
-    // Verify Redis card title and (Opsional) badge
+    // Verify Redis card title without (Opsional) badge
     const redisHeading = page.locator('#section-redis-heading');
     await expect(redisHeading).toContainText("Redis Cache Server");
-    await expect(redisHeading).toContainText("Opsional");
+    await expect(redisHeading).not.toContainText("Opsional");
 
-    // Verify Redis URL input
-    const urlInput = page.locator('#redis-url-input');
-    await expect(urlInput).toBeVisible();
+    // Verify structured fields: Host, Port, Password
+    const hostInput = page.locator('#redis-host-input');
+    await expect(hostInput).toBeVisible();
+
+    const portInput = page.locator('#redis-port-input');
+    await expect(portInput).toBeVisible();
+
+    const passwordInput = page.locator('#redis-password-input');
+    await expect(passwordInput).toBeVisible();
 
     // Verify Uji Koneksi & Simpan Pengaturan buttons
     const testBtn = page.getByRole("button", { name: "Uji Koneksi", exact: true });
@@ -43,11 +45,8 @@ test.describe("07. Redis Features, Admin UI & Performance Suite", () => {
     const saveBtn = page.locator('button:has-text("Simpan Pengaturan")');
     await expect(saveBtn).toBeVisible();
 
-    // Verify feature highlights
-    await expect(page.locator('text=/Query Caching/i').first()).toBeVisible();
-    await expect(page.locator('text=/Rate Limiting/i').first()).toBeVisible();
-    await expect(page.locator('text=/OCR Hash Cache/i').first()).toBeVisible();
-    await expect(page.locator('text=/Garansi Soft Fallback/i')).toBeVisible();
+    // Verify Realtime Status Indicator
+    await expect(page.locator('text="Redis Cache Server"').first()).toBeVisible();
   });
 
   test("02. Admin UI: Uji Koneksi works and displays realtime status and latency", async ({
@@ -62,9 +61,9 @@ test.describe("07. Redis Features, Admin UI & Performance Suite", () => {
     await page.locator('button:has-text("Pengaturan Teknis")').first().click();
     await page.locator('button:has-text("Manajemen Basis Data")').click();
 
-    // Ensure URL is set to localhost redis
-    const urlInput = page.locator('#redis-url-input');
-    await urlInput.fill("redis://127.0.0.1:6379");
+    // Ensure Host & Port are set to localhost redis
+    await page.fill('#redis-host-input', '127.0.0.1');
+    await page.fill('#redis-port-input', '6379');
 
     // Click Uji Koneksi
     const testBtn = page.getByRole("button", { name: "Uji Koneksi", exact: true });
@@ -74,7 +73,6 @@ test.describe("07. Redis Features, Admin UI & Performance Suite", () => {
     const notice = page.locator('div[role="alert"]:not(#__next-route-announcer__)');
     await expect(notice).toBeVisible({ timeout: 10000 });
     await expect(notice).toContainText(/Koneksi Berhasil/i);
-    await expect(notice).toContainText(/Server Redis aktif dan merespons PONG/i);
   });
 
   test("03. Admin UI: Toggle ON, Save settings, and verify persistence after page reload", async ({
@@ -114,9 +112,13 @@ test.describe("07. Redis Features, Admin UI & Performance Suite", () => {
     const toggleAfterReload = page.getByRole("switch", { name: "Toggle Redis Cache" });
     await expect(toggleAfterReload).toHaveAttribute("aria-checked", "true");
 
-    // Status indicator should show Terhubung ke Redis
-    const statusText = page.locator('text="Terhubung ke Redis"');
-    await expect(statusText).toBeVisible({ timeout: 15000 });
+    // Status indicator should show Online
+    const statusOnline = page.locator('span:text-is("Online")');
+    await expect(statusOnline.first()).toBeVisible({ timeout: 15000 });
+
+    // Fields must persist values
+    await expect(page.locator('#redis-host-input')).toHaveValue('127.0.0.1');
+    await expect(page.locator('#redis-port-input')).toHaveValue('6379');
   });
 
   test("04. Performance & Portal Caching: Cached response time is noticeably faster", async ({

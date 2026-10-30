@@ -116,23 +116,30 @@ describe("Redis Cache Server UI in Database Subtab", () => {
 
     navigateToDatabaseSubtab();
 
-    // Verify visual separation banner
-    expect(screen.getByText(/Akselerasi & Caching \(Fitur Opsional\)/i)).toBeTruthy();
+    // Verify Card 4 Title (clean, no "Opsional" badge)
+    const redisHeading = screen.getByRole("heading", { name: /^Redis Cache Server$/i });
+    expect(redisHeading).toBeTruthy();
 
-    // Verify Card 4 Title
-    expect(screen.getByRole("heading", { name: /Redis Cache Server/i })).toBeTruthy();
+    // Verify structured fields exist with default values
+    const hostInput = screen.getByLabelText(/Host \/ Alamat Server Redis/i) as HTMLInputElement;
+    expect(hostInput).toBeTruthy();
+    expect(hostInput.value).toBe("127.0.0.1");
 
-    // Verify URL input exists with default value
-    const urlInput = screen.getByLabelText(/URL Koneksi Redis/i) as HTMLInputElement;
-    expect(urlInput).toBeTruthy();
-    expect(urlInput.value).toBe("redis://127.0.0.1:6379");
+    const portInput = screen.getByLabelText(/Port Redis/i) as HTMLInputElement;
+    expect(portInput).toBeTruthy();
+    expect(portInput.value).toBe("6379");
+
+    const passInput = screen.getByLabelText(/Password Redis \(Opsional\)/i) as HTMLInputElement;
+    expect(passInput).toBeTruthy();
+    expect(passInput.value).toBe("");
 
     // Verify action buttons exist
     expect(screen.getByRole("button", { name: /^Uji Koneksi$/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Simpan Pengaturan/i })).toBeTruthy();
+    expect(screen.getByTitle(/Periksa status koneksi Redis sekarang/i)).toBeTruthy();
   });
 
-  it("should call testRedisConnectionAction when Uji Koneksi button is clicked", async () => {
+  it("should call testRedisConnectionAction and auto-save when Uji Koneksi button is clicked", async () => {
     render(
       <AdminClient
         initialClasses={[]}
@@ -150,6 +157,10 @@ describe("Redis Cache Server UI in Database Subtab", () => {
     });
 
     expect(redisAdminActions.testRedisConnectionAction).toHaveBeenCalledWith("redis://127.0.0.1:6379");
+    expect(redisAdminActions.updateRedisSettingsAction).toHaveBeenCalledWith({
+      redisEnabled: false,
+      redisUrl: "redis://127.0.0.1:6379",
+    });
     expect(screen.getByText(/Koneksi Berhasil \(2 ms\)/i)).toBeTruthy();
   });
 
@@ -186,7 +197,7 @@ describe("Redis Cache Server UI in Database Subtab", () => {
         initialSettings={{
           ...baseSettings,
           redisEnabled: true,
-          redisUrl: "redis://10.0.0.5:6379",
+          redisUrl: "redis://:secret123@10.0.0.5:6380",
         }}
         superadminName="Superadmin"
       />
@@ -197,7 +208,40 @@ describe("Redis Cache Server UI in Database Subtab", () => {
     const toggleBtn = screen.getByRole("switch", { name: /Toggle Redis Cache/i });
     expect(toggleBtn.getAttribute("aria-checked")).toBe("true");
 
-    const urlInput = screen.getByLabelText(/URL Koneksi Redis/i) as HTMLInputElement;
-    expect(urlInput.value).toBe("redis://10.0.0.5:6379");
+    const hostInput = screen.getByLabelText(/Host \/ Alamat Server Redis/i) as HTMLInputElement;
+    expect(hostInput.value).toBe("10.0.0.5");
+
+    const portInput = screen.getByLabelText(/Port Redis/i) as HTMLInputElement;
+    expect(portInput.value).toBe("6380");
+
+    const passInput = screen.getByLabelText(/Password Redis \(Opsional\)/i) as HTMLInputElement;
+    expect(passInput.value).toBe("secret123");
+  });
+
+  it("should toggle password visibility between password and text", async () => {
+    render(
+      <AdminClient
+        initialClasses={[]}
+        initialTeachers={[]}
+        initialSettings={{
+          ...baseSettings,
+          redisUrl: "redis://:mypassword@127.0.0.1:6379",
+        }}
+        superadminName="Superadmin"
+      />
+    );
+
+    navigateToDatabaseSubtab();
+
+    const passInput = screen.getByLabelText(/Password Redis \(Opsional\)/i) as HTMLInputElement;
+    expect(passInput.type).toBe("password");
+
+    const togglePassBtn = screen.getByTitle(/Lihat password Redis/i);
+    fireEvent.click(togglePassBtn);
+    expect(passInput.type).toBe("text");
+
+    const hidePassBtn = screen.getByTitle(/Sembunyikan password Redis/i);
+    fireEvent.click(hidePassBtn);
+    expect(passInput.type).toBe("password");
   });
 });

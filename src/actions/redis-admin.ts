@@ -127,7 +127,7 @@ export async function updateRedisSettingsAction(input: {
     }
 
     // 3. Invalidate local settings cache
-    invalidateSystemSettingsCache();
+    await invalidateSystemSettingsCache();
 
     try {
       revalidatePath("/admin");

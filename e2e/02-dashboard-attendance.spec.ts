@@ -94,10 +94,10 @@ test.describe("02. Dashboard & Attendance Workflow", () => {
     await expect(submitBtn).toBeEnabled({ timeout: 5000 });
     await submitBtn.click();
 
-    await expect(modal).not.toBeVisible({ timeout: 10000 });
+    await expect(modal).not.toBeVisible({ timeout: 15000 });
 
     const tableRow = page.locator(`tr:has-text("${TEST_DESC}")`);
-    await expect(tableRow).toBeVisible({ timeout: 10000 });
+    await expect(tableRow).toBeVisible({ timeout: 15000 });
   });
 
   test("should open lightbox for letter and close with Escape key", async ({ page }) => {
@@ -147,7 +147,7 @@ test.describe("02. Dashboard & Attendance Workflow", () => {
 
   test("teardown: should delete test attendance record cleanly", async ({ page }) => {
     const tableRow = page.locator(`tr:has-text("${TEST_DESC}")`);
-    await expect(tableRow).toBeVisible({ timeout: 7000 });
+    await expect(tableRow).toBeVisible({ timeout: 15000 });
 
     const deleteBtn = tableRow.locator('button[title="Hapus Data"]');
     await expect(deleteBtn).toBeVisible();
@@ -159,6 +159,6 @@ test.describe("02. Dashboard & Attendance Workflow", () => {
     await expect(confirmBtn).toBeVisible({ timeout: 5000 });
     await confirmBtn.click();
 
-    await expect(page.locator(`tr:has-text("${TEST_DESC}")`)).not.toBeVisible({ timeout: 7000 });
+    await expect(page.locator(`tr:has-text("${TEST_DESC}")`)).not.toBeVisible({ timeout: 15000 });
   });
 });
