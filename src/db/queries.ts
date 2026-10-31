@@ -22,6 +22,18 @@ export function getClassDashboardCacheKey(classId: number | string, filters: Das
   return `cache:dashboard:class:${classId}:${hash}`;
 }
 
+export async function invalidateClassAiInsightsCache(classId?: string | number): Promise<void> {
+  try {
+    const pattern =
+      classId !== undefined && classId !== null
+        ? `cache:ai:insights:${classId}:*`
+        : "cache:ai:insights:*";
+    await deleteCachePattern(pattern);
+  } catch {
+    // Soft fallback
+  }
+}
+
 export async function invalidateClassDashboardCache(classId?: string | number): Promise<void> {
   try {
     if (classId !== undefined && classId !== null) {
@@ -32,6 +44,7 @@ export async function invalidateClassDashboardCache(classId?: string | number): 
         ? `cache:dashboard:class:${classId}:*`
         : "cache:dashboard:class:*";
     await deleteCachePattern(pattern);
+    await invalidateClassAiInsightsCache(classId);
   } catch {
     // Soft fallback
   }

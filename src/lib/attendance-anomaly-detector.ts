@@ -67,6 +67,15 @@ export interface AtRiskStudent {
 
 export type StudentAnomalyItem = AtRiskStudent;
 
+export interface DayOfWeekDistribution {
+  senin: number;
+  selasa: number;
+  rabu: number;
+  kamis: number;
+  jumat: number;
+  sabtu: number;
+}
+
 export interface AnomalySummary {
   totalActiveStudents: number;
   totalAtRiskStudents: number;
@@ -79,6 +88,9 @@ export interface AnomalySummary {
     pendingDoctorNote: number;
     chronicAbsence: number;
   };
+  dayOfWeekDistribution?: DayOfWeekDistribution;
+  doctorNoteCompliancePercent?: number;
+  peakAbsenceDay?: string | null;
 }
 
 export interface AnomalyDetectionResult {
@@ -113,6 +125,14 @@ function formatMonthLabel(monthKey: string): string {
   return `${INDONESIAN_MONTHS[idx] || m} ${y}`;
 }
 
+// Fast zero-allocation day of week (0=Sunday, 1=Monday, ..., 6=Saturday) via Sakamoto's algorithm
+function getFastDayOfWeek(y: number, m: number, d: number): number {
+  const t = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4];
+  let year = y;
+  if (m < 3) year -= 1;
+  return (year + Math.floor(year / 4) - Math.floor(year / 100) + Math.floor(year / 400) + t[m - 1] + d) % 7;
+}
+
 export function detectAttendanceAnomalies(
   students: AnomalyStudentInput[],
   records: AnomalyRecordInput[],
@@ -122,8 +142,9 @@ export function detectAttendanceAnomalies(
     ? students
     : students.filter((s) => s.isActive !== false);
 
-  // 1. Date range filtering
+  // 1. Date range filtering and fast input sanitization
   const filteredRecords = records.filter((r) => {
+    if (!r.attendanceDate || r.attendanceDate.length !== 10) return false;
     if (options.targetMonth && !r.attendanceDate.startsWith(options.targetMonth)) return false;
     if (options.dateStart && r.attendanceDate < options.dateStart) return false;
     if (options.dateEnd && r.attendanceDate > options.dateEnd) return false;
@@ -160,9 +181,54 @@ export function detectAttendanceAnomalies(
     }
   }
 
+  // Class-wide day of week distribution & compliance stats (Single pass for high-volume benchmark < 50ms)
+  const dayOfWeekDistribution: DayOfWeekDistribution = {
+    senin: 0,
+    selasa: 0,
+    rabu: 0,
+    kamis: 0,
+    jumat: 0,
+    sabtu: 0,
+  };
+  let totalSakitAll = 0;
+  let totalSuratBelumAll = 0;
+
   for (const r of dedupMap.values()) {
     studentRecordsMap.get(r.studentId)?.push(r);
+
+    const y = parseInt(r.attendanceDate.slice(0, 4), 10);
+    const m = parseInt(r.attendanceDate.slice(5, 7), 10);
+    const d = parseInt(r.attendanceDate.slice(8, 10), 10);
+    const dow = getFastDayOfWeek(y, m, d);
+    if (dow === 1) dayOfWeekDistribution.senin++;
+    else if (dow === 2) dayOfWeekDistribution.selasa++;
+    else if (dow === 3) dayOfWeekDistribution.rabu++;
+    else if (dow === 4) dayOfWeekDistribution.kamis++;
+    else if (dow === 5) dayOfWeekDistribution.jumat++;
+    else if (dow === 6) dayOfWeekDistribution.sabtu++;
+
+    if (r.status === "Sakit") {
+      totalSakitAll++;
+      if (r.letterStatus === "Belum") {
+        totalSuratBelumAll++;
+      }
+    }
   }
+
+  const daysRanking = [
+    { name: "Senin", count: dayOfWeekDistribution.senin },
+    { name: "Selasa", count: dayOfWeekDistribution.selasa },
+    { name: "Rabu", count: dayOfWeekDistribution.rabu },
+    { name: "Kamis", count: dayOfWeekDistribution.kamis },
+    { name: "Jumat", count: dayOfWeekDistribution.jumat },
+    { name: "Sabtu", count: dayOfWeekDistribution.sabtu },
+  ];
+  daysRanking.sort((a, b) => b.count - a.count);
+  const peakAbsenceDay = daysRanking[0].count > 0 ? `${daysRanking[0].name} (${daysRanking[0].count} kejadian)` : null;
+  const doctorNoteCompliancePercent =
+    totalSakitAll > 0
+      ? Math.round(((totalSakitAll - totalSuratBelumAll) / totalSakitAll) * 100)
+      : 100;
 
   const atRiskStudents: AtRiskStudent[] = [];
   const ruleBreakdown = {
@@ -196,8 +262,10 @@ export function detectAttendanceAnomalies(
       }
 
       // Monday/Friday calculation in UTC
-      const [y, m, d] = r.attendanceDate.split("-").map(Number);
-      const dayOfWeek = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+      const y = parseInt(r.attendanceDate.slice(0, 4), 10);
+      const m = parseInt(r.attendanceDate.slice(5, 7), 10);
+      const d = parseInt(r.attendanceDate.slice(8, 10), 10);
+      const dayOfWeek = getFastDayOfWeek(y, m, d);
       if (dayOfWeek === 1 || dayOfWeek === 5) {
         monFriCount++;
       }
@@ -323,6 +391,12 @@ export function detectAttendanceAnomalies(
         }
       }
 
+      // Hardening: Multi-Factor Risk Scoring Escalation
+      // When multiple distinct risk rules trigger simultaneously
+      if (triggeredTypes.length >= 2 && highestUrgency === "Perhatian") {
+        highestUrgency = "Waspada";
+      }
+
       atRiskStudents.push({
         studentId: st.id,
         studentName: st.name,
@@ -360,6 +434,9 @@ export function detectAttendanceAnomalies(
     waspadaCount: atRiskStudents.filter((s) => s.urgency === "Waspada").length,
     perhatianCount: atRiskStudents.filter((s) => s.urgency === "Perhatian").length,
     ruleBreakdown,
+    dayOfWeekDistribution,
+    doctorNoteCompliancePercent,
+    peakAbsenceDay,
   };
 
   return { summary, atRiskStudents };

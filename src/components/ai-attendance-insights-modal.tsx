@@ -19,9 +19,11 @@ import {
 import { Student } from "@/db/schema";
 import { AttendanceRecordWithStudent } from "@/db/queries";
 import {
+  detectAttendanceAnomalies,
   detectAtRiskStudents,
   AtRiskStudent,
   AnomalyUrgency,
+  DayOfWeekDistribution,
 } from "@/lib/attendance-anomaly-detector";
 import { useBottomSheetGesture } from "@/hooks/use-bottom-sheet";
 
@@ -47,6 +49,9 @@ interface InsightsApiResponse {
     totalSakit: number;
     totalSuratBelum: number;
     attendanceRatePercent?: number;
+    dayOfWeekDistribution?: DayOfWeekDistribution;
+    doctorNoteCompliancePercent?: number;
+    peakAbsenceDay?: string | null;
   };
   atRiskStudents: AtRiskStudent[];
   narratives: {
@@ -80,10 +85,12 @@ export function AiAttendanceInsightsModal({
   const [error, setError] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // 0ms instant local anomaly calculation as baseline
-  const localAtRiskStudents = useMemo(() => {
-    return detectAtRiskStudents(studentsList, records, { period });
+  // 0ms instant local anomaly & stats calculation as baseline
+  const localAnomalyResult = useMemo(() => {
+    return detectAttendanceAnomalies(studentsList, records, { period });
   }, [studentsList, records, period]);
+
+  const localAtRiskStudents = localAnomalyResult.atRiskStudents;
 
   const { sheetRef, sheetStyle, touchHandlers } = useBottomSheetGesture({
     isOpen,
@@ -180,6 +187,26 @@ export function AiAttendanceInsightsModal({
   const kritisCount = effectiveAtRisk.filter((s) => s.urgency === "Kritis").length;
   const waspadaCount = effectiveAtRisk.filter((s) => s.urgency === "Waspada").length;
   const perhatianCount = effectiveAtRisk.filter((s) => s.urgency === "Perhatian").length;
+
+  const effectiveDayDist =
+    data?.summaryStats?.dayOfWeekDistribution ||
+    localAnomalyResult.summary.dayOfWeekDistribution || {
+      senin: 0,
+      selasa: 0,
+      rabu: 0,
+      kamis: 0,
+      jumat: 0,
+      sabtu: 0,
+    };
+
+  const effectiveCompliance =
+    data?.summaryStats?.doctorNoteCompliancePercent ??
+    localAnomalyResult.summary.doctorNoteCompliancePercent ??
+    100;
+
+  const effectivePeakDay =
+    data?.summaryStats?.peakAbsenceDay ||
+    localAnomalyResult.summary.peakAbsenceDay;
 
   if (!isOpen) return null;
 
@@ -297,7 +324,7 @@ export function AiAttendanceInsightsModal({
               setIsExpanded(true);
             }
           }}
-          className="flex-1 overflow-y-auto min-h-0 p-4 sm:p-6 space-y-4"
+          className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 p-4 sm:p-6 space-y-4 max-w-full"
         >
           {error && (
             <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-200 flex items-start gap-2">
@@ -309,6 +336,19 @@ export function AiAttendanceInsightsModal({
           {/* TAB 1: EARLY WARNING */}
           {activeTab === "early-warning" && (
             <div className="space-y-4">
+              {/* Prioritas Tindakan Darurat BK/Wali Kelas */}
+              {kritisCount > 0 && (
+                <div className="p-3.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-xs text-red-800 dark:text-red-200 flex items-start gap-2.5 shadow-xs">
+                  <ShieldAlert className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold">Prioritas Tindakan Kesiswaan &amp; BK:</p>
+                    <p className="mt-0.5 text-[11px] leading-relaxed">
+                      Terdapat {kritisCount} siswa berstatus <strong>Kritis</strong>. Segera agendakan dialog tatap muka dengan orang tua/wali untuk klarifikasi ketidakhadiran berulang.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Summary Urgency Bar */}
               <div className="grid grid-cols-3 gap-2 p-3 rounded-xl bg-[var(--canvas-subtle)] border border-[var(--border)]">
                 <div className="text-center p-2 rounded-lg bg-[var(--surface)] border border-[var(--border)]">
@@ -323,6 +363,51 @@ export function AiAttendanceInsightsModal({
                   <p className="text-[11px] font-semibold text-yellow-600 dark:text-yellow-400">Perhatian</p>
                   <p className="text-lg font-black text-yellow-700 dark:text-yellow-300">{perhatianCount}</p>
                 </div>
+              </div>
+
+              {/* Intelijen Kehadiran Kelas & Distribusi Hari */}
+              <div className="p-3.5 rounded-xl bg-[var(--canvas-subtle)] border border-[var(--border)] space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center gap-1.5 font-bold text-[var(--ink)]">
+                    <Calendar className="w-3.5 h-3.5 text-[var(--primary)]" />
+                    <span>Distribusi Ketidakhadiran Hari Sekolah</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-[11px]">
+                    <span className="text-[var(--ink-muted)]">Kepatuhan Surat:</span>
+                    <span className={`font-bold px-2 py-0.5 rounded-full text-[10px] ${effectiveCompliance < 75 ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300" : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"}`}>
+                      {effectiveCompliance}% Terverifikasi
+                    </span>
+                  </div>
+                </div>
+
+                {/* Day Distribution Pills */}
+                <div className="grid grid-cols-5 gap-1.5 text-center">
+                  {[
+                    { label: "Senin", short: "Sen", count: effectiveDayDist.senin },
+                    { label: "Selasa", short: "Sel", count: effectiveDayDist.selasa },
+                    { label: "Rabu", short: "Rab", count: effectiveDayDist.rabu },
+                    { label: "Kamis", short: "Kam", count: effectiveDayDist.kamis },
+                    { label: "Jumat", short: "Jum", count: effectiveDayDist.jumat },
+                  ].map((day) => (
+                    <div
+                      key={day.label}
+                      className={`p-2 rounded-lg border transition-colors ${
+                        day.count > 0
+                          ? "bg-[var(--surface)] border-[var(--border)] text-[var(--ink)] shadow-xs"
+                          : "bg-transparent border-transparent text-[var(--ink-muted)] opacity-60"
+                      }`}
+                    >
+                      <div className="text-[10px] font-semibold text-[var(--ink-muted)]">{day.short}</div>
+                      <div className="text-sm font-bold mt-0.5">{day.count}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {effectivePeakDay && (
+                  <p className="text-[11px] text-[var(--ink-muted)] pt-0.5">
+                    💡 Hari paling rawan ketidakhadiran: <strong className="text-[var(--ink)]">{effectivePeakDay}</strong>
+                  </p>
+                )}
               </div>
 
               {/* Student Anomaly Cards */}
@@ -445,14 +530,14 @@ export function AiAttendanceInsightsModal({
               )}
 
               {/* Principal Formal Report */}
-              <div className="p-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] space-y-3">
-                <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] pb-2.5">
-                  <div>
-                    <h3 className="text-xs font-bold text-[var(--ink)] uppercase tracking-wider flex items-center gap-1.5">
-                      <FileText className="w-3.5 h-3.5 text-[var(--primary)]" />
+              <div className="p-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] space-y-3 max-w-full overflow-hidden">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-[var(--border)] pb-2.5">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-xs font-bold text-[var(--ink)] uppercase tracking-wider flex items-center gap-1.5 flex-wrap">
+                      <FileText className="w-3.5 h-3.5 text-[var(--primary)] shrink-0" />
                       <span>Laporan Formal Pimpinan Sekolah</span>
                     </h3>
-                    <p className="text-[11px] text-[var(--ink-muted)]">
+                    <p className="text-[11px] text-[var(--ink-muted)] mt-0.5">
                       Draf narasi resmi untuk Kepala Sekolah atau lembar evaluasi dinas.
                     </p>
                   </div>
@@ -466,7 +551,7 @@ export function AiAttendanceInsightsModal({
                         "Laporan Resmi"
                       )
                     }
-                    className="touch-target inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--border)] text-xs font-semibold hover:bg-[var(--canvas-subtle)] text-[var(--ink)] transition-colors shrink-0"
+                    className="touch-target inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--border)] text-xs font-semibold hover:bg-[var(--canvas-subtle)] text-[var(--ink)] transition-colors self-start sm:self-auto shrink-0"
                   >
                     {copiedKey === "principal" ? (
                       <>
@@ -482,25 +567,25 @@ export function AiAttendanceInsightsModal({
                   </button>
                 </div>
 
-                <div className="p-3.5 rounded-lg bg-[var(--canvas-subtle)] border border-[var(--border)] text-xs sm:text-sm text-[var(--ink)] font-mono whitespace-pre-wrap leading-relaxed select-all">
+                <div className="p-3.5 rounded-lg bg-[var(--canvas-subtle)] border border-[var(--border)] text-xs sm:text-sm text-[var(--ink)] font-mono whitespace-pre-wrap break-words break-all sm:break-normal max-w-full overflow-hidden leading-relaxed select-all">
                   {data?.narratives?.principalReport || "Memuat narasi laporan..."}
                 </div>
               </div>
 
               {/* Parent Group Message (WhatsApp) */}
-              <div className="p-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] space-y-3">
-                <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] pb-2.5">
-                  <div>
-                    <h3 className="text-xs font-bold text-[var(--ink)] uppercase tracking-wider flex items-center gap-1.5">
-                      <Share2 className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Draf Pesan Paguyuban WhatsApp Orang Tua</span>
+              <div className="p-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] space-y-3 max-w-full overflow-hidden">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-[var(--border)] pb-2.5">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-xs font-bold text-[var(--ink)] uppercase tracking-wider flex items-center gap-1.5 flex-wrap">
+                      <Share2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span>Draf Pesan Paguyuban WhatsApp</span>
                     </h3>
-                    <p className="text-[11px] text-[var(--ink-muted)]">
-                      Pesan santun &amp; edukatif (tanpa menyebut nama individu) siap kirim ke grup WA.
+                    <p className="text-[11px] text-[var(--ink-muted)] mt-0.5">
+                      Pesan ringkas &amp; santun tanpa nama siswa, siap kirim ke grup WA orang tua.
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 self-start sm:self-auto shrink-0">
                     <button
                       type="button"
                       onClick={() =>
@@ -510,7 +595,7 @@ export function AiAttendanceInsightsModal({
                           "Pesan WhatsApp"
                         )
                       }
-                      className="touch-target inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--border)] text-xs font-semibold hover:bg-[var(--canvas-subtle)] text-[var(--ink)] transition-colors shrink-0"
+                      className="touch-target inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--border)] text-xs font-semibold hover:bg-[var(--canvas-subtle)] text-[var(--ink)] transition-colors"
                     >
                       {copiedKey === "parent-wa" ? (
                         <>
@@ -527,7 +612,7 @@ export function AiAttendanceInsightsModal({
                   </div>
                 </div>
 
-                <div className="p-3.5 rounded-lg bg-[var(--canvas-subtle)] border border-[var(--border)] text-xs sm:text-sm text-[var(--ink)] font-mono whitespace-pre-wrap leading-relaxed select-all">
+                <div className="p-3.5 rounded-lg bg-[var(--canvas-subtle)] border border-[var(--border)] text-xs sm:text-sm text-[var(--ink)] font-mono whitespace-pre-wrap break-words break-all sm:break-normal max-w-full overflow-hidden leading-relaxed select-all">
                   {data?.narratives?.parentGroupMessage || "Memuat draf pesan WhatsApp..."}
                 </div>
               </div>

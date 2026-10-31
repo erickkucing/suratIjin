@@ -8,6 +8,7 @@ import { getCache, setCache } from "@/lib/redis";
 import { getLocalDateString } from "@/lib/date-utils";
 import { getAutoAcademicPeriod } from "@/lib/academic-year";
 import {
+  detectAttendanceAnomalies,
   detectAtRiskStudents,
   AtRiskStudent,
 } from "@/lib/attendance-anomaly-detector";
@@ -64,6 +65,16 @@ export interface AttendanceInsightsApiResponse {
     totalIzin: number;
     totalSakit: number;
     totalSuratBelum: number;
+    dayOfWeekDistribution?: {
+      senin: number;
+      selasa: number;
+      rabu: number;
+      kamis: number;
+      jumat: number;
+      sabtu: number;
+    };
+    doctorNoteCompliancePercent?: number;
+    peakAbsenceDay?: string | null;
   };
   atRiskStudents: AtRiskStudent[];
   narratives: {
@@ -271,6 +282,19 @@ async function handleAttendanceInsights(
       }
     }
 
+    const studentMap = new Map(activeStudents.map((s) => [s.id, s.name]));
+    const recordsWithStudent = records.map((r) => ({
+      ...r,
+      studentName: studentMap.get(r.studentId) || "Siswa",
+    }));
+
+    const { summary: anomalySummary, atRiskStudents } = detectAttendanceAnomalies(activeStudents, recordsWithStudent, {
+      period,
+      targetMonth: period === "month" ? effectiveMonth : undefined,
+      dateStart: startDate,
+      dateEnd: endDate,
+    });
+
     const summaryStats = {
       totalStudents: activeStudents.length,
       totalAbsences: records.length,
@@ -278,20 +302,10 @@ async function handleAttendanceInsights(
       totalIzin,
       totalSakit,
       totalSuratBelum,
+      dayOfWeekDistribution: anomalySummary.dayOfWeekDistribution,
+      doctorNoteCompliancePercent: anomalySummary.doctorNoteCompliancePercent,
+      peakAbsenceDay: anomalySummary.peakAbsenceDay,
     };
-
-    const studentMap = new Map(activeStudents.map((s) => [s.id, s.name]));
-    const recordsWithStudent = records.map((r) => ({
-      ...r,
-      studentName: studentMap.get(r.studentId) || "Siswa",
-    }));
-
-    const atRiskStudents = detectAtRiskStudents(activeStudents, recordsWithStudent, {
-      period,
-      targetMonth: period === "month" ? effectiveMonth : undefined,
-      dateStart: startDate,
-      dateEnd: endDate,
-    });
 
     // 9. Synthesis Narrative Generation (AI Router with Local Fallback)
     let aiResult: AttendanceInsightsAiResult;

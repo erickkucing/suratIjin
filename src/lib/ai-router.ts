@@ -1037,8 +1037,19 @@ export function generateFallbackAttendanceInsights(
 
   principalReport += `\n\nDemikian laporan ini kami sampaikan sebagai bahan evaluasi dan koordinasi pembinaan kesiswaan.`;
 
-  // 3. Parent Group Message (WhatsApp Paguyuban - Strictly NO individual student names)
-  const parentGroupMessage = `Yth. Bapak/Ibu Orang Tua/Wali Murid Kelas ${className},\n\nSemoga Bapak/Ibu beserta keluarga senantiasa dilimpahi kesehatan dan keberkahan.\n\nMemasuki evaluasi presensi periode ${periodLabel}, kami menyampaikan apresiasi dan terima kasih yang tulus atas kerja sama serta perhatian Bapak/Ibu dalam mendampingi kedisiplinan belajar ananda. Bagi ananda yang sedang dalam masa pemulihan kesehatan, mari kita doakan bersama agar segera pulih dan dapat kembali beraktivitas dengan ceria di sekolah.\n\nKami mengimbau Bapak/Ibu untuk selalu mengabarkan kepada pihak sekolah dan melampirkan surat keterangan dokter apabila ananda berhalangan hadir lebih dari dua hari. Mari bersama-sama terus membimbing putra-putri kita agar tetap bersemangat menuntut ilmu.\n\nSalam hangat,\nWali Kelas ${className}`;
+  // 3. Parent Group Message (WhatsApp Paguyuban - Humanized, Ultra-Concise, Zero AI-Slop)
+  const parentGroupMessage = `Yth. Bapak/Ibu Wali Murid ${className},
+
+Terima kasih atas kerja sama mendampingi kedisiplinan ananda selama ${periodLabel}.
+
+Pengingat singkat:
+• Mohon berkabar ke wali kelas jika ananda berhalangan hadir.
+• Bila sakit > 2 hari, mohon sertakan surat dokter saat kembali ke sekolah.
+
+Semoga ananda yang sedang kurang sehat lekas pulih. Terima kasih atas perhatiannya.
+
+Salam hangat,
+Wali Kelas ${className}`;
 
   // 4. BK Recommendations (Per At-Risk Student)
   const bkRecommendations: AttendanceInsightsBkRecommendation[] = atRiskStudents.map((student) => {
@@ -1136,8 +1147,16 @@ Tugas Anda adalah membaca ringkasan statistik ketidakhadiran kelas dan daftar si
 
 1. "executiveSummary": Ringkasan 2-3 kalimat mengenai status kesehatan presensi kelas secara menyeluruh, tren umum, dan status siswa berisiko.
 2. "principalReport": Narasi laporan formal yang ditujukan kepada Kepala Sekolah / Pimpinan Sekolah. Memuat rincian statistik (Sakit, Izin, Alpa), evaluasi kedisiplinan kelas, serta langkah pembinaan yang disiapkan wali kelas bersama guru BK.
-3. "parentGroupMessage": Draf pesan pengumuman untuk grup Paguyuban WhatsApp Orang Tua/Wali Murid. Bahasa santun, ramah, apresiatif atas kerja sama orang tua, dan mengingatkan pentingnya komunikasi/surat dokter jika sakit > 2 hari.
-   ATURAN PRIVASI MUTLAK: DILARANG KERAS MENYEBUTKAN NAMA SISWA TERTENTU pada parentGroupMessage! Pesan ini dibaca oleh seluruh orang tua di grup kelas, sehingga menyebut nama individu melanggar privasi dan menstigma siswa.
+3. "parentGroupMessage": Draf pesan pengumuman WhatsApp Paguyuban Orang Tua/Wali Murid.
+   ATURAN ANTI-SLOP & HUMANISME GAYA WALI KELAS:
+   - WAJIB SANGAT RINGKAS, PADAT, DAN EFISIEN (dapat dibaca tuntas dalam waktu < 15 detik di layar HP).
+   - Hapus seluruh filler basa-basi dan klise formalitas AI ("semoga senantiasa dilimpahi keberkahan dan kesehatan", dsb).
+   - Format wajib:
+     a. Sapaan singkat: "Yth. Bapak/Ibu Wali Murid {nama_kelas},"
+     b. Ucapan terima kasih 1 kalimat atas pendampingan kedisiplinan belajar.
+     c. Poin pengingat singkat dengan bullet point (• kabari wali kelas jika berhalangan hadir, • sertakan surat dokter jika sakit > 2 hari).
+     d. Doa lekas sembuh singkat & salam penutup.
+   - ATURAN PRIVASI MUTLAK: DILARANG KERAS MENYEBUTKAN NAMA SISWA TERTENTU pada parentGroupMessage! Pesan ini dibaca oleh seluruh orang tua di grup kelas, sehingga menyebut nama individu melanggar privasi dan menstigma siswa.
 4. "bkRecommendations": Array rekomendasi tindak lanjut bagi Guru Bimbingan Konseling (BK) untuk setiap siswa berisiko yang tertera pada daftar. Rekomendasi harus bersifat empatik, solutif, pedagogis, dan terarah.
 
 ATURAN ZERO-HALUSINASI ANGKA:
