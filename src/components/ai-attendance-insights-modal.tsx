@@ -15,6 +15,7 @@ import {
   ShieldAlert,
   ChevronRight,
   Info,
+  Bell,
 } from "lucide-react";
 import { Student } from "@/db/schema";
 import { AttendanceRecordWithStudent } from "@/db/queries";
@@ -78,6 +79,7 @@ export function AiAttendanceInsightsModal({
   const [data, setData] = useState<InsightsApiResponse | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   // 0ms instant local anomaly calculation as baseline
   const localAtRiskStudents = useMemo(() => {
@@ -87,6 +89,7 @@ export function AiAttendanceInsightsModal({
   const { sheetRef, sheetStyle, touchHandlers } = useBottomSheetGesture({
     isOpen,
     onClose,
+    onExpand: () => setIsExpanded(true),
   });
 
   const fetchInsights = useCallback(
@@ -128,6 +131,7 @@ export function AiAttendanceInsightsModal({
 
   useEffect(() => {
     if (isOpen) {
+      setIsExpanded(false);
       fetchInsights(false);
     }
   }, [isOpen, fetchInsights]);
@@ -180,26 +184,38 @@ export function AiAttendanceInsightsModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs p-0 sm:p-4 overflow-y-auto"
       role="dialog"
       aria-modal="true"
       aria-labelledby="insights-modal-title"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 pt-[env(safe-area-inset-top,1.5rem)] sm:p-4 bg-black/75 backdrop-blur-xs overflow-hidden sm:overflow-y-auto"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
       <div
         ref={sheetRef}
         style={sheetStyle}
-        className="w-full max-w-3xl max-h-[92vh] sm:max-h-[88vh] bg-[var(--surface)] text-[var(--ink)] rounded-t-2xl sm:rounded-2xl border border-[var(--border)] shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+        {...touchHandlers}
+        className={`relative w-full max-w-3xl min-h-0 rounded-t-3xl sm:rounded-2xl rounded-b-none sm:rounded-b-2xl bg-[var(--surface)] text-[var(--ink)] shadow-2xl border-t border-x sm:border border-[var(--border)] overflow-hidden flex flex-col modal-bottom-sheet ${
+          isExpanded ? "max-h-[85dvh] expanded" : "max-h-[68dvh]"
+        } sm:max-h-[88vh] animate-in fade-in duration-200`}
       >
-        {/* Mobile Swipe Handle */}
-        <div {...touchHandlers} className="sm:hidden flex justify-center pt-2 pb-1 cursor-grab">
-          <div className="w-12 h-1.5 rounded-full bg-[var(--border)]" />
+        {/* Mobile Tactile Drag Handle */}
+        <div
+          data-drag-handle
+          className="sm:hidden flex justify-center pt-3 pb-2 touch-none cursor-grab active:cursor-grabbing bg-[var(--canvas-subtle)] shrink-0"
+        >
+          <div className="w-12 h-1.5 rounded-full bg-[var(--border-strong)]/60" />
         </div>
 
         {/* Header */}
-        <header className="px-4 sm:px-6 py-3.5 border-b border-[var(--border)] flex items-center justify-between shrink-0 bg-[var(--surface)]">
+        <header
+          data-sheet-header
+          className="px-4 sm:px-6 py-3.5 border-b border-[var(--border)] flex items-center justify-between shrink-0 bg-[var(--surface)] touch-none select-none"
+        >
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="p-2 rounded-xl bg-[var(--primary)]/15 text-[var(--primary)] shrink-0">
-              <Sparkles className="w-5 h-5" />
+              <Bell className="w-5 h-5 text-[var(--primary)]" />
             </div>
             <div className="min-w-0">
               <h2 id="insights-modal-title" className="text-base sm:text-lg font-bold font-heading truncate text-[var(--ink)]">
@@ -291,7 +307,14 @@ export function AiAttendanceInsightsModal({
         </div>
 
         {/* Content Body */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+        <div
+          onScroll={(e) => {
+            if (!isExpanded && e.currentTarget.scrollTop > 15) {
+              setIsExpanded(true);
+            }
+          }}
+          className="flex-1 overflow-y-auto min-h-0 p-4 sm:p-6 space-y-4"
+        >
           {error && (
             <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-200 flex items-start gap-2">
               <Info className="w-4 h-4 shrink-0 mt-0.5" />
@@ -536,14 +559,6 @@ export function AiAttendanceInsightsModal({
               {data?.cached ? "Data dimuat dari cache (12 jam)" : data?.aiGenerated ? "Disintesis oleh 9router AI" : "Kalkulasi lokal aman"}
             </span>
           </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="touch-target px-4 py-2 rounded-xl bg-[var(--canvas-subtle)] hover:bg-[var(--border)] text-[var(--ink)] font-semibold transition-colors shrink-0"
-          >
-            Tutup
-          </button>
         </footer>
       </div>
     </div>

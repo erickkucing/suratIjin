@@ -84,11 +84,13 @@ export function ParentPortalSettingsModal({
   const [message, setMessage] = useState<{ text: string; isError: boolean } | null>(null);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [savedPassNotice, setSavedPassNotice] = useState<string | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const { sheetRef, sheetStyle, touchHandlers } = useBottomSheetGesture({
     isOpen,
     onClose,
+    onExpand: () => setIsExpanded(true),
   });
 
   const isCurrentAuto = isAutoPeriod(periodTitle, academicYear);
@@ -319,10 +321,12 @@ export function ParentPortalSettingsModal({
         ref={sheetRef}
         style={sheetStyle}
         {...touchHandlers}
-        className="relative w-full max-w-lg min-h-0 modal-bottom-sheet max-h-[68dvh] sm:max-h-[85vh] rounded-t-3xl sm:rounded-2xl rounded-b-none sm:rounded-b-2xl bg-[var(--surface)] text-[var(--ink)] shadow-2xl border-t border-x sm:border border-[var(--border)] overflow-hidden flex flex-col"
+        className={`relative w-full max-w-lg min-h-0 modal-bottom-sheet ${
+          isExpanded ? "max-h-[85dvh] expanded" : "max-h-[68dvh]"
+        } sm:max-h-[85vh] rounded-t-3xl sm:rounded-2xl rounded-b-none sm:rounded-b-2xl bg-[var(--surface)] text-[var(--ink)] shadow-2xl border-t border-x sm:border border-[var(--border)] overflow-hidden flex flex-col`}
       >
         {/* Mobile Tactile Drag Handle */}
-        <div data-drag-handle className="sm:hidden flex justify-center pt-3 pb-2 touch-none cursor-grab active:cursor-grabbing bg-[var(--canvas-subtle)]">
+        <div data-drag-handle className="sm:hidden flex justify-center pt-3 pb-2 touch-none cursor-grab active:cursor-grabbing bg-[var(--canvas-subtle)] shrink-0">
           <div className="w-12 h-1.5 rounded-full bg-[var(--border-strong)]/60" />
         </div>
 
@@ -366,7 +370,14 @@ export function ParentPortalSettingsModal({
         </div>
 
         {/* Body */}
-        <div className="p-4 sm:p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:pb-6 space-y-5 overflow-y-auto min-h-0 flex-1">
+        <div
+          onScroll={(e) => {
+            if (!isExpanded && e.currentTarget.scrollTop > 15) {
+              setIsExpanded(true);
+            }
+          }}
+          className="p-4 sm:p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:pb-6 space-y-5 overflow-y-auto min-h-0 flex-1"
+        >
           {message && (
             <div
               className={`p-3 rounded-xl border text-sm font-medium ${

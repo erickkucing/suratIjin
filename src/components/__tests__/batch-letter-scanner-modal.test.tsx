@@ -665,12 +665,12 @@ describe("Milestone 2 Empirical Tests: BatchLetterScannerModal & Hybrid Approval
   it("4.1 [WCAG 2.2 AA Touch Targets] satisfies minimum 48px height across interactive elements", () => {
     renderModal();
 
-    // Tab buttons
-    const tabMultiFile = screen.getByRole("button", { name: /Pilih Banyak File/i });
-    const tabTableScan = screen.getByRole("button", { name: /Foto Meja/i });
+    // Interactive trigger buttons
+    const cameraButton = screen.getByRole("button", { name: /Jepret Kamera/i });
+    const galleryButton = screen.getByRole("button", { name: /Pilih dari Berkas \/ Galeri/i });
 
-    expect(tabMultiFile.className).toContain("min-h-[48px]");
-    expect(tabTableScan.className).toContain("min-h-[48px]");
+    expect(cameraButton.className).toContain("min-h-[52px]");
+    expect(galleryButton.className).toContain("min-h-[52px]");
 
     // Primary action button
     const scanButton = screen.getByRole("button", { name: /Mulai Pindai/i });

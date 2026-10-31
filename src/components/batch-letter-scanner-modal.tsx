@@ -9,6 +9,7 @@ import {
   Trash2,
   AlertCircle,
   CheckCircle2,
+  Check,
   Loader2,
   FileText,
   Image as ImageIcon,
@@ -74,16 +75,13 @@ export function BatchLetterScannerModal({
   onShowToast,
 }: BatchLetterScannerModalProps) {
   // Navigation & View Mode
-  const [activeTab, setActiveTab] = useState<"multi_file" | "table_scan">("multi_file");
+  const [activeTab] = useState<"multi_file">("multi_file");
   const [viewMode, setViewMode] = useState<"picker" | "review">("picker");
 
-  // Multi-File selection state
+  // Multi-File & Multi-Shot selection state
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [filePreviews, setFilePreviews] = useState<Map<File, string>>(new Map());
   const [isDraggingOver, setIsDraggingOver] = useState(false);
-
-  // Tabletop single image state
-  const [tabletopFile, setTabletopFile] = useState<File | null>(null);
-  const [tabletopPreviewUrl, setTabletopPreviewUrl] = useState<string | null>(null);
 
   // Review Drawer state
   const [items, setItems] = useState<EditableBatchLetterItem[]>([]);
@@ -104,8 +102,6 @@ export function BatchLetterScannerModal({
   // DOM Refs
   const multiFileInputRef = useRef<HTMLInputElement>(null);
   const multiCameraInputRef = useRef<HTMLInputElement>(null);
-  const tabletopCameraInputRef = useRef<HTMLInputElement>(null);
-  const tabletopGalleryInputRef = useRef<HTMLInputElement>(null);
 
   // Mobile Bottom Sheet Gesture Integration
   const { sheetRef, sheetStyle, touchHandlers } = useBottomSheetGesture({
@@ -118,17 +114,51 @@ export function BatchLetterScannerModal({
     onExpand: () => setIsExpanded(true),
   });
 
+  // Keep thumbnail previews in sync with selectedFiles
+  useEffect(() => {
+    const nextMap = new Map<File, string>();
+    selectedFiles.forEach((file) => {
+      if (file.type.startsWith("image/")) {
+        const existing = filePreviews.get(file);
+        if (existing) {
+          nextMap.set(file, existing);
+        } else {
+          try {
+            nextMap.set(file, URL.createObjectURL(file));
+          } catch {
+            // ignore
+          }
+        }
+      }
+    });
+
+    filePreviews.forEach((url, file) => {
+      if (!nextMap.has(file)) {
+        try {
+          URL.revokeObjectURL(url);
+        } catch {
+          // ignore
+        }
+      }
+    });
+
+    setFilePreviews(nextMap);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedFiles]);
+
   // Reset state on modal open
   useEffect(() => {
     if (isOpen) {
-      setActiveTab("multi_file");
       setViewMode("picker");
       setSelectedFiles([]);
-      setTabletopFile(null);
-      if (tabletopPreviewUrl) {
-        URL.revokeObjectURL(tabletopPreviewUrl);
-        setTabletopPreviewUrl(null);
-      }
+      filePreviews.forEach((url) => {
+        try {
+          URL.revokeObjectURL(url);
+        } catch {
+          // ignore
+        }
+      });
+      setFilePreviews(new Map());
       setItems([]);
       setIsProcessing(false);
       setProgressPercent(0);
@@ -146,11 +176,15 @@ export function BatchLetterScannerModal({
   // Clean up object URLs on unmount
   useEffect(() => {
     return () => {
-      if (tabletopPreviewUrl) {
-        URL.revokeObjectURL(tabletopPreviewUrl);
-      }
+      filePreviews.forEach((url) => {
+        try {
+          URL.revokeObjectURL(url);
+        } catch {
+          // ignore
+        }
+      });
     };
-  }, [tabletopPreviewUrl]);
+  }, [filePreviews]);
 
   // Keyboard navigation (Escape key)
   useEffect(() => {
@@ -227,31 +261,6 @@ export function BatchLetterScannerModal({
     setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // Tabletop scan file handler
-  const handleTabletopFileSelected = (file?: File) => {
-    if (!file) return;
-    setErrorMessage(null);
-
-    if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
-      setErrorMessage("Mode foto meja hanya mendukung file foto (JPG, PNG, WebP), bukan dokumen PDF.");
-      return;
-    }
-
-    const err = validateFile(file);
-    if (err) {
-      setErrorMessage(err);
-      return;
-    }
-
-    if (tabletopPreviewUrl) {
-      URL.revokeObjectURL(tabletopPreviewUrl);
-    }
-
-    setTabletopFile(file);
-    const url = URL.createObjectURL(file);
-    setTabletopPreviewUrl(url);
-  };
-
   // Drag & drop handlers
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -267,11 +276,7 @@ export function BatchLetterScannerModal({
     e.preventDefault();
     setIsDraggingOver(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      if (activeTab === "multi_file") {
-        handleAddFiles(e.dataTransfer.files);
-      } else {
-        handleTabletopFileSelected(e.dataTransfer.files[0]);
-      }
+      handleAddFiles(e.dataTransfer.files);
     }
   };
 
@@ -280,11 +285,10 @@ export function BatchLetterScannerModal({
   // -------------------------------------------------------------
   const handleStartScan = async () => {
     setErrorMessage(null);
-    const filesToProcess =
-      activeTab === "multi_file" ? selectedFiles : tabletopFile ? [tabletopFile] : [];
+    const filesToProcess = selectedFiles;
 
     if (filesToProcess.length === 0) {
-      setErrorMessage("Pilih minimal 1 berkas surat sebelum memulai pemindaian.");
+      setErrorMessage("Pilih atau ambil minimal 1 foto/berkas surat sebelum memulai pemindaian.");
       return;
     }
 
@@ -340,13 +344,8 @@ export function BatchLetterScannerModal({
 
       const formData = new FormData();
       formData.append("classId", String(classId));
-      formData.append("mode", activeTab);
-
-      if (activeTab === "multi_file") {
-        compressedFiles.forEach((f) => formData.append("files", f));
-      } else {
-        formData.append("file", compressedFiles[0]);
-      }
+      formData.append("mode", "multi_file");
+      compressedFiles.forEach((f) => formData.append("files", f));
 
       const uploadTicker = setInterval(() => {
         setProgressPercent((p) => (p < 58 ? p + 3 : p));
@@ -364,11 +363,7 @@ export function BatchLetterScannerModal({
         clearInterval(uploadTicker);
         setProgressStage("processing_ocr");
         setProgressPercent(60);
-        setProgressDetail(
-          activeTab === "table_scan"
-            ? "Mendeteksi posisi surat meja & menganalisis teks (Vision AI)..."
-            : "Mengekstrak teks surat & menyelaraskan nama siswa (PaddleOCR / Vision AI)..."
-        );
+        setProgressDetail("Mengekstrak teks surat & menyelaraskan nama siswa (AI Vision & OCR)...");
       }, 700);
 
       const ocrTicker = setInterval(() => {
@@ -391,9 +386,7 @@ export function BatchLetterScannerModal({
         setIsProcessing(false);
         setProgressStage("idle");
         setErrorMessage(
-          activeTab === "table_scan"
-            ? "Tidak ada lembar surat yang terdeteksi di foto meja. Pastikan pencahayaan cukup dan surat tidak saling menumpuk."
-            : "Tidak dapat mengekstrak data dari berkas yang diunggah. Pastikan foto atau dokumen terbaca jelas."
+          "Tidak dapat mengekstrak data dari berkas yang diunggah. Pastikan foto atau dokumen terbaca jelas."
         );
         return;
       }
@@ -648,7 +641,10 @@ export function BatchLetterScannerModal({
         </div>
 
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-[var(--border)] shrink-0 bg-[var(--surface)]">
+        <div
+          data-sheet-header
+          className="flex items-center justify-between px-5 py-3.5 border-b border-[var(--border)] shrink-0 bg-[var(--surface)]"
+        >
           <div className="flex items-center gap-3">
             {viewMode === "review" && (
               <button
@@ -663,7 +659,7 @@ export function BatchLetterScannerModal({
               </button>
             )}
             <div className="w-10 h-10 rounded-xl bg-[var(--primary-light)] text-[var(--primary)] flex items-center justify-center shrink-0">
-              <Files className="w-5 h-5" />
+              <Camera className="w-5 h-5" />
             </div>
             <div>
               <h2
@@ -671,14 +667,14 @@ export function BatchLetterScannerModal({
                 className="text-base sm:text-lg font-bold font-heading text-[var(--ink)] leading-tight"
               >
                 {viewMode === "picker"
-                  ? "Pindai Banyak Surat Izin"
+                  ? "Pindai Surat Izin"
                   : `Tinjau Hasil Pemindaian (${items.length} Surat)`}
               </h2>
               <p className="text-xs text-[var(--ink-muted)] mt-0.5">
                 {viewMode === "picker"
                   ? classNameTitle
-                    ? `Kelas ${classNameTitle} • Auto-Sync & Deteksi AI`
-                    : "Auto-Sync & Deteksi Cerdas Presensi"
+                    ? `Kelas ${classNameTitle} • Auto-Deteksi & Sinkronisasi Cerdas`
+                    : "Auto-Deteksi & Sinkronisasi Cerdas Presensi"
                   : `${selectedCount} surat terpilih untuk disinkronkan`}
               </p>
             </div>
@@ -696,7 +692,14 @@ export function BatchLetterScannerModal({
         </div>
 
         {/* Main Content Area */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+        <div
+          className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4"
+          onScroll={(e) => {
+            if (!isExpanded && e.currentTarget.scrollTop > 15) {
+              setIsExpanded(true);
+            }
+          }}
+        >
           {/* Global Error Banner */}
           {errorMessage && (
             <div
@@ -719,56 +722,37 @@ export function BatchLetterScannerModal({
           )}
 
           {/* ========================================================= */}
-          {/* VIEW MODE 1: FILE PICKER & PROCESSING */}
+          {/* VIEW MODE 1: FILE PICKER & PROCESSING (Unified Multi-Shot) */}
           {/* ========================================================= */}
           {viewMode === "picker" && (
-            <>
-              {/* Tab Navigation */}
-              <div className="grid grid-cols-2 p-1 rounded-xl bg-[var(--canvas-subtle)] border border-[var(--border)] gap-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTab("multi_file");
-                    setErrorMessage(null);
-                  }}
-                  disabled={isProcessing}
-                  className={`touch-target min-h-[48px] px-3 py-2 rounded-lg text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all ${
-                    activeTab === "multi_file"
-                      ? "bg-[var(--surface)] text-[var(--ink)] shadow-xs border border-[var(--border)]"
-                      : "text-[var(--ink-muted)] hover:text-[var(--ink)]"
-                  }`}
-                >
-                  <Files className="w-4 h-4 text-[var(--primary)]" />
-                  <span>Pilih Banyak File</span>
-                  {selectedFiles.length > 0 && (
-                    <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-[var(--primary)] text-white font-bold">
-                      {selectedFiles.length}
-                    </span>
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTab("table_scan");
-                    setErrorMessage(null);
-                  }}
-                  disabled={isProcessing}
-                  className={`touch-target min-h-[48px] px-3 py-2 rounded-lg text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all ${
-                    activeTab === "table_scan"
-                      ? "bg-[var(--surface)] text-[var(--ink)] shadow-xs border border-[var(--border)]"
-                      : "text-[var(--ink-muted)] hover:text-[var(--ink)]"
-                  }`}
-                >
-                  <Camera className="w-4 h-4 text-[var(--primary)]" />
-                  <span>Foto Meja (Banyak Surat)</span>
-                  {tabletopFile && (
-                    <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-[var(--primary)] text-white font-bold">
-                      1
-                    </span>
-                  )}
-                </button>
-              </div>
+            <div className="space-y-4">
+              {/* Hidden Inputs for Native Camera & File Selection */}
+              <input
+                ref={multiCameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={(e) => {
+                  if (e.target.files && e.target.files.length > 0) {
+                    handleAddFiles(e.target.files);
+                  }
+                  e.target.value = "";
+                }}
+                className="hidden"
+              />
+              <input
+                ref={multiFileInputRef}
+                type="file"
+                multiple
+                accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf"
+                onChange={(e) => {
+                  if (e.target.files && e.target.files.length > 0) {
+                    handleAddFiles(e.target.files);
+                  }
+                  e.target.value = "";
+                }}
+                className="hidden"
+              />
 
               {/* Progress Bar (Visible during processing) */}
               {isProcessing && (
@@ -803,274 +787,178 @@ export function BatchLetterScannerModal({
                 </div>
               )}
 
-              {/* TAB 1: MULTI FILE CONTENT */}
-              {activeTab === "multi_file" && (
-                <div className="space-y-4">
-                  {/* Hidden Multi-file Input */}
-                  <input
-                    ref={multiFileInputRef}
-                    type="file"
-                    multiple
-                    accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf"
-                    onChange={(e) => {
-                      if (e.target.files && e.target.files.length > 0) {
-                        handleAddFiles(e.target.files);
-                      }
-                      e.target.value = "";
-                    }}
-                    className="hidden"
-                  />
+              {/* EMPTY STATE: Belum ada foto/berkas */}
+              {selectedFiles.length === 0 && (
+                <div
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  className={`border-2 border-dashed rounded-2xl p-6 sm:p-8 text-center transition-colors ${
+                    isDraggingOver
+                      ? "border-[var(--primary)] bg-[var(--primary-light)]/40"
+                      : "border-[var(--border)] bg-[var(--canvas-subtle)]/50"
+                  }`}
+                >
+                  <div className="w-14 h-14 rounded-2xl bg-[var(--surface)] text-[var(--primary)] border border-[var(--border)] flex items-center justify-center mx-auto mb-3.5 shadow-xs">
+                    <Camera className="w-7 h-7" />
+                  </div>
+                  <h3 className="text-base font-bold text-[var(--ink)]">
+                    Pindai Lembar Surat Izin Siswa
+                  </h3>
+                  <p className="text-xs text-[var(--ink-muted)] mt-1.5 max-w-md mx-auto leading-relaxed">
+                    Ambil foto langsung berkali-kali menggunakan kamera HP, atau letakkan beberapa surat sekaligus di atas meja untuk dideteksi otomatis oleh AI.
+                  </p>
 
-                  {/* Hidden Camera Input for direct multi-shot */}
-                  <input
-                    ref={multiCameraInputRef}
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    onChange={(e) => {
-                      if (e.target.files && e.target.files.length > 0) {
-                        handleAddFiles(e.target.files);
-                      }
-                      e.target.value = "";
-                    }}
-                    className="hidden"
-                  />
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-6">
+                    <button
+                      type="button"
+                      disabled={isProcessing}
+                      onClick={() => multiCameraInputRef.current?.click()}
+                      className="touch-target w-full sm:w-auto min-h-[52px] px-6 py-3 rounded-xl bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] active:scale-98 text-sm font-bold shadow-md shadow-[var(--primary)]/20 inline-flex items-center justify-center gap-2.5 cursor-pointer transition-all"
+                      title="Ambil foto surat langsung dengan kamera HP"
+                    >
+                      <Camera className="w-5 h-5 text-white" />
+                      <span>Jepret Kamera</span>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isProcessing}
+                      onClick={() => multiFileInputRef.current?.click()}
+                      className="touch-target w-full sm:w-auto min-h-[52px] px-5 py-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] active:scale-98 text-sm font-bold text-[var(--ink)] shadow-xs inline-flex items-center justify-center gap-2.5 cursor-pointer transition-all"
+                      title="Pilih satu atau lebih file foto / PDF dari galeri"
+                    >
+                      <Files className="w-5 h-5 text-[var(--primary)]" />
+                      <span>Pilih dari Berkas / Galeri</span>
+                    </button>
+                  </div>
+                </div>
+              )}
 
-                  {/* Drag and Drop Zone */}
-                  <div
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
-                    onDrop={handleDrop}
-                    onClick={() => {
-                      if (!isProcessing) multiFileInputRef.current?.click();
-                    }}
-                    className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-colors ${
-                      isDraggingOver
-                        ? "border-[var(--primary)] bg-[var(--primary-light)]/40"
-                        : "border-[var(--border)] hover:border-[var(--primary)]/70 bg-[var(--canvas-subtle)]/50"
-                    }`}
-                  >
-                    <div className="w-12 h-12 rounded-2xl bg-[var(--surface)] text-[var(--primary)] border border-[var(--border)] flex items-center justify-center mx-auto mb-3 shadow-xs">
-                      <Upload className="w-6 h-6" />
-                    </div>
-                    <h3 className="text-sm font-bold text-[var(--ink)]">
-                      Tarik &amp; lepas hingga 10 berkas surat ke sini
-                    </h3>
-                    <p className="text-xs text-[var(--ink-muted)] mt-1 max-w-sm mx-auto">
-                      Mendukung foto berkas (JPG, PNG, WebP) dan dokumen PDF. Maksimal 15 MB per berkas.
-                    </p>
-                    <div className="flex flex-wrap items-center justify-center gap-2.5 mt-4">
-                      <button
-                        type="button"
-                        disabled={isProcessing}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          multiCameraInputRef.current?.click();
-                        }}
-                        className="touch-target min-h-[48px] px-4 py-2.5 rounded-xl bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] text-xs font-bold shadow-xs inline-flex items-center gap-2 cursor-pointer transition-colors"
-                        title="Ambil foto surat langsung menggunakan kamera"
-                      >
-                        <Camera className="w-4 h-4 text-white" />
-                        <span>Jepret Kamera</span>
-                      </button>
-                      <button
-                        type="button"
-                        disabled={isProcessing}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          multiFileInputRef.current?.click();
-                        }}
-                        className="touch-target min-h-[48px] px-4 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-xs font-bold text-[var(--ink)] shadow-xs inline-flex items-center gap-2 cursor-pointer transition-colors"
-                        title="Pilih satu atau lebih file foto / PDF dari perangkat"
-                      >
-                        <Files className="w-4 h-4 text-[var(--primary)]" />
-                        <span>Pilih dari Berkas / Galeri</span>
-                      </button>
-                    </div>
+              {/* PHOTO COLLECTION TRAY: Kumpulan foto yang telah diambil */}
+              {selectedFiles.length > 0 && (
+                <div className="space-y-3.5">
+                  <div className="flex items-center justify-between text-xs font-bold text-[var(--ink)] px-1">
+                    <span>
+                      Kumpulan Foto &amp; Berkas ({selectedFiles.length}/{MAX_BATCH_FILES})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedFiles([])}
+                      disabled={isProcessing}
+                      className="text-[var(--status-alpa-fg)] hover:underline cursor-pointer"
+                    >
+                      Hapus Semua
+                    </button>
                   </div>
 
-                  {/* Selected Files List */}
-                  {selectedFiles.length > 0 && (
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between text-xs font-bold text-[var(--ink)] px-1">
-                        <span>
-                          Daftar Berkas Terpilih ({selectedFiles.length}/{MAX_BATCH_FILES})
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedFiles([])}
-                          disabled={isProcessing}
-                          className="text-[var(--status-alpa-fg)] hover:underline"
-                        >
-                          Hapus Semua
-                        </button>
-                      </div>
+                  {/* Thumbnail Collection Grid */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-60 overflow-y-auto pr-1">
+                    {selectedFiles.map((file, idx) => {
+                      const isPdf =
+                        file.type === "application/pdf" ||
+                        file.name.toLowerCase().endsWith(".pdf");
+                      const preview = filePreviews.get(file);
+                      const sizeMb = (file.size / (1024 * 1024)).toFixed(2);
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1">
-                        {selectedFiles.map((file, idx) => {
-                          const isPdf =
-                            file.type === "application/pdf" ||
-                            file.name.toLowerCase().endsWith(".pdf");
-                          const sizeMb = (file.size / (1024 * 1024)).toFixed(2);
-                          return (
-                            <div
-                              key={`${file.name}-${idx}`}
-                              className="flex items-center justify-between p-2.5 rounded-xl bg-[var(--surface)] border border-[var(--border)] shadow-xs"
-                            >
-                              <div className="flex items-center gap-2.5 min-w-0">
-                                <div className="w-8 h-8 rounded-lg bg-[var(--canvas-subtle)] border border-[var(--border)] flex items-center justify-center shrink-0 text-[var(--ink-muted)]">
-                                  {isPdf ? (
-                                    <FileText className="w-4 h-4 text-red-500" />
-                                  ) : (
-                                    <ImageIcon className="w-4 h-4 text-blue-500" />
-                                  )}
-                                </div>
-                                <div className="min-w-0">
-                                  <p className="text-xs font-semibold text-[var(--ink)] truncate max-w-[170px]">
-                                    {file.name}
-                                  </p>
-                                  <p className="text-[10px] text-[var(--ink-muted)]">
-                                    {sizeMb} MB • {isPdf ? "PDF" : "Foto"}
-                                  </p>
-                                </div>
+                      return (
+                        <div
+                          key={`${file.name}-${idx}`}
+                          className="relative rounded-xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden shadow-xs flex flex-col group"
+                        >
+                          <div className="relative aspect-4/3 bg-[var(--canvas-subtle)] flex items-center justify-center overflow-hidden">
+                            {preview ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={preview}
+                                alt={`Foto ${idx + 1}`}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div className="flex flex-col items-center justify-center p-2 text-center">
+                                {isPdf ? (
+                                  <FileText className="w-8 h-8 text-red-500 mb-1" />
+                                ) : (
+                                  <ImageIcon className="w-8 h-8 text-blue-500 mb-1" />
+                                )}
+                                <span className="text-[10px] font-bold text-[var(--ink-muted)] uppercase">
+                                  {isPdf ? "PDF" : "Foto"}
+                                </span>
                               </div>
-                              <button
-                                type="button"
-                                disabled={isProcessing}
-                                onClick={() => handleRemoveFile(idx)}
-                                className="touch-target p-2 text-[var(--ink-muted)] hover:text-red-500 rounded-lg hover:bg-[var(--canvas-subtle)]"
-                                aria-label={`Hapus ${file.name}`}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
+                            )}
 
-              {/* TAB 2: TABLETOP SCAN CONTENT */}
-              {activeTab === "table_scan" && (
-                <div className="space-y-4">
-                  {/* Hidden Tabletop File Inputs */}
-                  <input
-                    ref={tabletopCameraInputRef}
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    onChange={(e) => {
-                      if (e.target.files && e.target.files[0]) {
-                        handleTabletopFileSelected(e.target.files[0]);
-                      }
-                      e.target.value = "";
-                    }}
-                    className="hidden"
-                  />
-                  <input
-                    ref={tabletopGalleryInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => {
-                      if (e.target.files && e.target.files[0]) {
-                        handleTabletopFileSelected(e.target.files[0]);
-                      }
-                      e.target.value = "";
-                    }}
-                    className="hidden"
-                  />
+                            <span className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded-md bg-black/60 backdrop-blur-xs text-white text-[10px] font-bold">
+                              #{idx + 1}
+                            </span>
 
-                  {/* Tabletop Guide Card */}
-                  <div className="p-4 rounded-2xl bg-[var(--canvas-subtle)] border border-[var(--border)] space-y-2">
-                    <div className="flex items-center gap-2 text-xs font-bold text-[var(--ink)]">
-                      <Sparkles className="w-4 h-4 text-[var(--primary)]" />
-                      <span>Panduan Foto Meja (2–5 Lembar Sekaligus)</span>
-                    </div>
-                    <ul className="text-xs text-[var(--ink-muted)] space-y-1 pl-5 list-disc leading-relaxed">
-                      <li>Tata surat secara mendatar berdampingan di atas meja datar.</li>
-                      <li>Pastikan seluruh sudut surat terlihat jelas tanpa saling bertumpuk.</li>
-                      <li>Ambil foto tegak lurus dari atas dengan pencahayaan terang bebas bayangan.</li>
-                      <li>Sistem AI akan otomatis memotong dan mengenali setiap surat secara terpisah.</li>
-                    </ul>
+                            <button
+                              type="button"
+                              disabled={isProcessing}
+                              onClick={() => handleRemoveFile(idx)}
+                              className="touch-target absolute top-1.5 right-1.5 p-1.5 rounded-lg bg-black/60 hover:bg-red-600 text-white shadow-xs transition-colors"
+                              aria-label={`Hapus foto ${idx + 1}`}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          <div className="p-2 min-w-0">
+                            <p className="text-xs font-semibold text-[var(--ink)] truncate">
+                              {file.name}
+                            </p>
+                            <p className="text-[10px] text-[var(--ink-muted)]">
+                              {sizeMb} MB • {isPdf ? "PDF" : "Foto"}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
 
-                  {/* Selected Tabletop Image Preview or Action Triggers */}
-                  {tabletopFile && tabletopPreviewUrl ? (
-                    <div className="p-3 rounded-2xl bg-[var(--surface)] border border-[var(--border)] flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs">
-                      <div className="flex items-center gap-3 w-full sm:w-auto">
-                        <div className="relative w-16 h-16 rounded-xl overflow-hidden bg-black/10 border border-[var(--border)] shrink-0">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={tabletopPreviewUrl}
-                            alt="Pratinjau Foto Meja"
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-bold text-[var(--ink)] truncate">
-                            {tabletopFile.name}
-                          </p>
-                          <p className="text-[10px] text-[var(--ink-muted)]">
-                            {(tabletopFile.size / (1024 * 1024)).toFixed(2)} MB • Siap dipindai
-                          </p>
-                          <span className="inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[var(--status-success-bg)] text-[var(--status-success-fg)] border border-[var(--status-success-border)]">
-                            Foto Meja Terpilih
-                          </span>
-                        </div>
-                      </div>
+                  {/* Multi-Shot Action Buttons */}
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <button
+                      type="button"
+                      disabled={isProcessing || selectedFiles.length >= MAX_BATCH_FILES}
+                      onClick={() => multiCameraInputRef.current?.click()}
+                      className="touch-target min-h-[48px] px-3 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] active:scale-98 text-xs font-bold text-[var(--ink)] shadow-xs flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-40"
+                    >
+                      <Camera className="w-4 h-4 text-[var(--primary)]" />
+                      <span>+ Jepret Foto Lagi</span>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isProcessing || selectedFiles.length >= MAX_BATCH_FILES}
+                      onClick={() => multiFileInputRef.current?.click()}
+                      className="touch-target min-h-[48px] px-3 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] active:scale-98 text-xs font-bold text-[var(--ink)] shadow-xs flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-40"
+                    >
+                      <Files className="w-4 h-4 text-[var(--primary)]" />
+                      <span>+ Tambah Berkas</span>
+                    </button>
+                  </div>
 
-                      <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                        <button
-                          type="button"
-                          disabled={isProcessing}
-                          onClick={() => tabletopCameraInputRef.current?.click()}
-                          className="touch-target min-h-[48px] px-3 py-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-xs font-bold text-[var(--ink)]"
-                        >
-                          Foto Ulang
-                        </button>
-                        <button
-                          type="button"
-                          disabled={isProcessing}
-                          onClick={() => {
-                            if (tabletopPreviewUrl) URL.revokeObjectURL(tabletopPreviewUrl);
-                            setTabletopFile(null);
-                            setTabletopPreviewUrl(null);
-                          }}
-                          className="touch-target p-2.5 rounded-xl text-[var(--status-alpa-fg)] hover:bg-[var(--status-alpa-bg)]"
-                          aria-label="Hapus foto meja"
-                        >
-                          <Trash2 className="w-5 h-5" />
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                      <button
-                        type="button"
-                        disabled={isProcessing}
-                        onClick={() => tabletopCameraInputRef.current?.click()}
-                        className="touch-target min-h-[56px] p-4 rounded-2xl bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white flex items-center justify-center gap-3 font-bold text-sm shadow-xs transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
-                      >
-                        <Camera className="w-5 h-5" />
-                        <span>Buka Kamera Meja</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        disabled={isProcessing}
-                        onClick={() => tabletopGalleryInputRef.current?.click()}
-                        className="touch-target min-h-[56px] p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-[var(--ink)] flex items-center justify-center gap-3 font-bold text-sm shadow-xs transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
-                      >
-                        <Upload className="w-5 h-5 text-[var(--primary)]" />
-                        <span>Pilih Foto dari Galeri</span>
-                      </button>
-                    </div>
-                  )}
+                  {/* Prominent Submit Green Checkmark Button */}
+                  <button
+                    type="button"
+                    onClick={handleStartScan}
+                    disabled={isProcessing || selectedFiles.length === 0}
+                    className="touch-target w-full min-h-[52px] px-5 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white font-bold text-sm sm:text-base shadow-lg shadow-emerald-600/25 transition-all flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-50 mt-2"
+                    aria-label={`Proses dan pindai ${selectedFiles.length} berkas`}
+                  >
+                    {isProcessing ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        <span>Memproses ({progressPercent}%)...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-5 h-5 stroke-[2.5]" />
+                        <span>✓ Proses &amp; Pindai ({selectedFiles.length} Berkas)</span>
+                      </>
+                    )}
+                  </button>
                 </div>
               )}
-            </>
+            </div>
           )}
 
           {/* ========================================================= */}
@@ -1350,7 +1238,7 @@ export function BatchLetterScannerModal({
                 type="button"
                 onClick={onClose}
                 disabled={isProcessing}
-                className="touch-target min-h-[48px] px-4 py-2.5 rounded-xl border border-[var(--border)] hover:bg-[var(--canvas-subtle)] text-xs sm:text-sm font-bold text-[var(--ink)] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                className="touch-target min-h-[48px] px-4 py-2.5 rounded-xl border border-[var(--border)] hover:bg-[var(--canvas-subtle)] text-xs sm:text-sm font-bold text-[var(--ink)] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] cursor-pointer"
               >
                 Batal
               </button>
@@ -1358,12 +1246,8 @@ export function BatchLetterScannerModal({
               <button
                 type="button"
                 onClick={handleStartScan}
-                disabled={
-                  isProcessing ||
-                  (activeTab === "multi_file" && selectedFiles.length === 0) ||
-                  (activeTab === "table_scan" && !tabletopFile)
-                }
-                className="touch-target min-h-[48px] px-5 py-2.5 rounded-xl bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white font-bold text-xs sm:text-sm shadow-xs disabled:opacity-40 flex items-center gap-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                disabled={isProcessing || selectedFiles.length === 0}
+                className="touch-target min-h-[48px] px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm shadow-xs disabled:opacity-40 flex items-center gap-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600 cursor-pointer"
               >
                 {isProcessing ? (
                   <>
@@ -1372,12 +1256,8 @@ export function BatchLetterScannerModal({
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-4 h-4" />
-                    <span>
-                      {activeTab === "multi_file"
-                        ? `Mulai Pindai (${selectedFiles.length} Berkas)`
-                        : "Mulai Pindai Foto Meja"}
-                    </span>
+                    <Check className="w-4 h-4 stroke-[2.5]" />
+                    <span>Mulai Pindai ({selectedFiles.length} Berkas)</span>
                   </>
                 )}
               </button>

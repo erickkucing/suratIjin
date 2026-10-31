@@ -278,6 +278,78 @@ describe("Batch OCR Letter API Route (/api/ocr/letter/batch)", () => {
     );
   });
 
+  it("should auto-segment multiple letters from a single photo in multi_file mode", async () => {
+    const adminUser = await db.query.users.findFirst({ where: eq(users.role, "superadmin") });
+    if (!adminUser) throw new Error("Superadmin not found");
+    const testClass = await db.query.classes.findFirst();
+    if (!testClass) throw new Error("Class not found");
+
+    const testStudents = await db.query.students.findMany({
+      where: eq(students.classId, testClass.id),
+      limit: 2,
+    });
+    if (testStudents.length < 2) throw new Error("Need at least 2 students");
+    const [s1, s2] = testStudents;
+
+    const { segmentAndParseTableLettersWithAi } = await import("@/lib/ai-router");
+    (segmentAndParseTableLettersWithAi as any).mockResolvedValueOnce([
+      {
+        boundingBox: [0.05, 0.05, 0.45, 0.45],
+        studentId: s1.id,
+        studentName: s1.name,
+        candidateName: s1.name,
+        matchConfidence: 0.95,
+        status: "Izin",
+        startDate: "2026-10-31",
+        endDate: null,
+        isMultiDay: false,
+        description: "Urusan keluarga",
+      },
+      {
+        boundingBox: [0.55, 0.55, 0.95, 0.95],
+        studentId: s2.id,
+        studentName: s2.name,
+        candidateName: s2.name,
+        matchConfidence: 0.90,
+        status: "Sakit",
+        startDate: "2026-10-31",
+        endDate: null,
+        isMultiDay: false,
+        description: "Demam",
+      },
+    ]);
+
+    const token = await createSessionToken({
+      id: adminUser.id,
+      username: adminUser.username,
+      displayName: adminUser.displayName,
+      role: adminUser.role,
+    });
+
+    const formData = new FormData();
+    formData.append("classId", String(testClass.id));
+    formData.append("mode", "multi_file");
+    formData.append("files", new Blob([samplePngBuffer], { type: "image/png" }), "table_multi.png");
+
+    const req = new Request("http://localhost:3000/api/ocr/letter/batch", {
+      method: "POST",
+      headers: { cookie: `${SESSION_COOKIE_NAME}=${token}` },
+      body: formData,
+    });
+
+    const res = await POST(req as any);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+
+    expect(body.success).toBe(true);
+    expect(body.totalDetected).toBe(2);
+    expect(body.items.length).toBe(2);
+    expect(body.items[0].studentId).toBe(s1.id);
+    expect(body.items[1].studentId).toBe(s2.id);
+    expect(body.items[0].status).toBe("Izin");
+    expect(body.items[1].status).toBe("Sakit");
+  });
+
   it("should process table_scan mode and crop bounding boxes with sharp", async () => {
     const adminUser = await db.query.users.findFirst({ where: eq(users.role, "superadmin") });
     if (!adminUser) throw new Error("Superadmin not found");
