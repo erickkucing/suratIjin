@@ -1175,8 +1175,14 @@ export function DashboardClient({
         />
       )}
 
-      {/* Floating Action Button (+ Catat / Speed Dial) on Mobile */}
-      <div className="sm:hidden fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] right-4 z-50 flex flex-col items-end gap-3 pointer-events-auto">
+      {/* Floating Action Button (+ Catat / Speed Dial) on Mobile - Google Classroom Style */}
+      <div
+        style={{
+          bottom: "calc(4.75rem + env(safe-area-inset-bottom, 0px))",
+          right: "1rem",
+        }}
+        className="sm:hidden fixed z-50 flex flex-col items-end gap-3 pointer-events-auto"
+      >
         {isSpeedDialOpen && (
           <div className="w-13 flex flex-col items-center gap-3 mb-1 animate-in fade-in slide-in-from-bottom-3 duration-150">
             {/* Speed Dial Item 1: Pindai Surat (Kamera) */}

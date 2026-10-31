@@ -426,3 +426,11 @@
   background: transparent !important;
 }
 
+/* Google Classroom style mobile FAB position (floating above bottom navigation bar) */
+.fab-classroom-position {
+  position: fixed;
+  right: 1rem;
+  bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
+  z-index: 50;
+}
+

@@ -1038,7 +1038,7 @@ export function generateFallbackAttendanceInsights(
   principalReport += `\n\nDemikian laporan ini kami sampaikan sebagai bahan evaluasi dan koordinasi pembinaan kesiswaan.`;
 
   // 3. Parent Group Message (WhatsApp Paguyuban - Humanized, Ultra-Concise, Zero AI-Slop)
-  const parentGroupMessage = `Yth. Bapak/Ibu Wali Murid ${className},
+  const parentGroupMessage = `Yth. Bapak/Ibu Orang Tua/Wali Murid Kelas ${className},
 
 Terima kasih atas kerja sama mendampingi kedisiplinan ananda selama ${periodLabel}.
 
