@@ -91,8 +91,8 @@ export default async function RootLayout({
                 font-family: var(--font-jakarta, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
                 background-color: var(--canvas, #f5efeb);
                 color: var(--ink, #231f1e);
-                overflow-x: clip;
-                max-width: 100vw;
+                overflow-x: hidden;
+                max-width: 100%;
                 width: 100%;
               }
               html.dark, html.dark body {

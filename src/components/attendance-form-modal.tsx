@@ -645,9 +645,9 @@ export function AttendanceFormModal({
         ref={sheetRef}
         style={sheetStyle}
         {...touchHandlers}
-        className={`relative w-full max-w-xl min-h-0 rounded-t-3xl sm:rounded-2xl rounded-b-none sm:rounded-b-2xl bg-[var(--surface)] text-[var(--ink)] shadow-2xl border-t border-x sm:border border-[var(--border)] overflow-hidden flex flex-col modal-bottom-sheet transition-[max-height,height,transform] duration-250 ease-out ${
+        className={`relative w-full max-w-3xl min-h-0 rounded-t-3xl sm:rounded-2xl rounded-b-none sm:rounded-b-2xl bg-[var(--surface)] text-[var(--ink)] shadow-2xl border-t border-x sm:border border-[var(--border)] overflow-hidden flex flex-col modal-bottom-sheet transition-[max-height,height,transform] duration-250 ease-out ${
           isExpanded ? "h-[92dvh] max-h-[92dvh] expanded" : "max-h-[68dvh]"
-        } sm:max-h-[85vh] sm:h-auto`}
+        } sm:max-h-[88vh] sm:h-auto`}
       >
         {/* Mobile Tactile Drag Handle */}
         <div data-drag-handle className="sm:hidden flex justify-center pt-3 pb-3 touch-none cursor-grab active:cursor-grabbing bg-[var(--canvas-subtle)]">
@@ -679,7 +679,7 @@ export function AttendanceFormModal({
               setIsExpanded(true);
             }
           }}
-          className="p-4 sm:p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:pb-6 space-y-5 overflow-y-auto min-h-0 flex-1"
+          className="w-full min-w-0 p-4 sm:p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:pb-6 space-y-4 sm:space-y-5 overflow-y-auto overflow-x-hidden min-h-0 flex-1"
         >
           {/* Hidden file inputs accessible by camera and gallery buttons */}
           <input
@@ -723,7 +723,7 @@ export function AttendanceFormModal({
                 </div>
 
                 {!selectedFile && !existingFilePath && (
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-2 w-full sm:w-auto shrink-0 sm:shrink">
                     {/* Desktop button: direct file picker */}
                     <button
                       type="button"
@@ -967,8 +967,10 @@ export function AttendanceFormModal({
             </div>
           )}
 
-          {/* Combobox Pilih Siswa (Ketik & Autocomplete Jadi Satu) */}
-          <div ref={comboRef} className="relative">
+          {/* Main Form Fields Container (Responsive 2-column grid on desktop, 1-column on mobile) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 w-full min-w-0">
+            {/* Column 1: Combobox Pilih Siswa (Ketik & Autocomplete Jadi Satu) */}
+            <div ref={comboRef} className="relative w-full">
             <label htmlFor="student-combobox" className="block text-xs font-semibold text-[var(--ink-muted)] mb-1.5">
               Pilih Siswa <span className="text-red-500">*</span>
             </label>
@@ -1075,6 +1077,46 @@ export function AttendanceFormModal({
             )}
           </div>
 
+          {/* Column 2: Status Kehadiran Radio Chips */}
+          <div className="w-full">
+            <span className="block text-xs font-semibold text-[var(--ink-muted)] mb-1.5 sm:mb-2">
+              Status Kehadiran <span className="text-red-500">*</span>
+            </span>
+            <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
+              {(["Izin", "Sakit", "Alpa"] as const).map((s) => {
+                const isSelected = status === s;
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => {
+                      setStatus(s);
+                      markFieldModified("status");
+                    }}
+                    className={`touch-target flex items-center justify-center py-2.5 px-3 rounded-xl border text-sm font-semibold transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] ${
+                      isSelected
+                        ? s === "Izin"
+                          ? "bg-[var(--status-izin-bg)] text-[var(--status-izin-fg)] border-[var(--status-izin-border)] ring-2 ring-[var(--status-izin-fg)]"
+                          : s === "Sakit"
+                          ? "bg-[var(--status-sakit-bg)] text-[var(--status-sakit-fg)] border-[var(--status-sakit-border)] ring-2 ring-[var(--status-sakit-fg)]"
+                          : "bg-[var(--status-alpa-bg)] text-[var(--status-alpa-fg)] border-[var(--status-alpa-border)] ring-2 ring-[var(--status-alpa-fg)]"
+                        : "bg-[var(--surface)] border-[var(--border)] text-[var(--ink-muted)] hover:bg-[var(--canvas-subtle)]"
+                    }`}
+                  >
+                    {s}
+                  </button>
+                );
+              })}
+            </div>
+            {status === "Alpa" && (
+              <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">
+                Status Alpa otomatis menandai status surat sebagai &apos;Belum&apos; dan tidak memerlukan lampiran surat.
+              </p>
+            )}
+          </div>
+
+          {/* Column 1: Rentang Tanggal / Multi-Day Toggle & Inputs */}
+          <div className="space-y-3 w-full">
           {/* Single Day vs Multi-Day Rentang Tanggal Toggle */}
           {!editRecord && (
             <div className="flex items-center justify-between p-3 rounded-xl bg-[var(--canvas-subtle)] border border-[var(--border)]">
@@ -1149,47 +1191,10 @@ export function AttendanceFormModal({
               </div>
             )}
           </div>
-
-          {/* Status Kehadiran Radio Chips */}
-          <div>
-            <span className="block text-xs font-semibold text-[var(--ink-muted)] mb-2">
-              Status Kehadiran <span className="text-red-500">*</span>
-            </span>
-            <div className="grid grid-cols-3 gap-2.5">
-              {(["Izin", "Sakit", "Alpa"] as const).map((s) => {
-                const isSelected = status === s;
-                return (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => {
-                      setStatus(s);
-                      markFieldModified("status");
-                    }}
-                    className={`touch-target flex items-center justify-center py-2.5 px-3 rounded-xl border text-sm font-semibold transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] ${
-                      isSelected
-                        ? s === "Izin"
-                          ? "bg-[var(--status-izin-bg)] text-[var(--status-izin-fg)] border-[var(--status-izin-border)] ring-2 ring-[var(--status-izin-fg)]"
-                          : s === "Sakit"
-                          ? "bg-[var(--status-sakit-bg)] text-[var(--status-sakit-fg)] border-[var(--status-sakit-border)] ring-2 ring-[var(--status-sakit-fg)]"
-                          : "bg-[var(--status-alpa-bg)] text-[var(--status-alpa-fg)] border-[var(--status-alpa-border)] ring-2 ring-[var(--status-alpa-fg)]"
-                        : "bg-[var(--surface)] border-[var(--border)] text-[var(--ink-muted)] hover:bg-[var(--canvas-subtle)]"
-                    }`}
-                  >
-                    {s}
-                  </button>
-                );
-              })}
-            </div>
-            {status === "Alpa" && (
-              <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">
-                Status Alpa otomatis menandai status surat sebagai &apos;Belum&apos; dan tidak memerlukan lampiran surat.
-              </p>
-            )}
           </div>
 
-          {/* Info Dari Chips */}
-          <div>
+          {/* Column 2: Info Dari Chips */}
+          <div className="w-full">
             <span className="block text-xs font-semibold text-[var(--ink-muted)] mb-2">
               Informasi Dari <span className="text-red-500">*</span>
             </span>
@@ -1231,7 +1236,7 @@ export function AttendanceFormModal({
           </div>
 
           {/* Keterangan */}
-          <div>
+          <div className="md:col-span-2 w-full">
             <label htmlFor="keterangan" className="block text-xs font-semibold text-[var(--ink-muted)] mb-1.5">
               Keterangan Alasan
             </label>
@@ -1250,7 +1255,7 @@ export function AttendanceFormModal({
 
           {/* Mobile Camera & File Upload Section (Fallback / hanya tampil jika belum ada file dan bukan Alpa) */}
           {status !== "Alpa" && !selectedFile && !existingFilePath && (
-            <div className="p-4 rounded-xl border border-[var(--border)] bg-[var(--canvas-subtle)] space-y-3">
+            <div className="md:col-span-2 p-4 rounded-xl border border-[var(--border)] bg-[var(--canvas-subtle)] space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-[var(--ink-muted)]">
                   Lampiran Foto Surat (Manual)
@@ -1284,9 +1289,10 @@ export function AttendanceFormModal({
               </div>
             </div>
           )}
+          </div>
 
           {/* Action buttons */}
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-[var(--border)]">
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-[var(--border)] w-full min-w-0">
             <button
               type="button"
               onClick={onClose}

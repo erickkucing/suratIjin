@@ -16,7 +16,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const nextPath = resolvedParams.next || "/dashboard";
 
   return (
-    <div className="min-h-screen flex flex-col justify-between bg-[var(--canvas)] text-[var(--ink)]">
+    <div className="min-h-screen flex flex-col justify-between bg-[var(--canvas)] text-[var(--ink)] w-full max-w-full overflow-x-hidden">
       <header className="px-6 py-4 flex items-center justify-between border-b border-[var(--border)] bg-[var(--surface)]">
         <div className="flex items-center gap-3">
           {settings.logoUrl ? (

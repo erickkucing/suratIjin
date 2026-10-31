@@ -132,7 +132,7 @@ export function PortalClient({
 
   if (!isUnlocked || !data || !dynamicMetrics) {
     return (
-      <div className="min-h-screen flex flex-col justify-between bg-[var(--canvas)] text-[var(--ink)]">
+      <div className="min-h-screen flex flex-col justify-between bg-[var(--canvas)] text-[var(--ink)] w-full max-w-full overflow-x-hidden">
         <header className="px-6 py-4 flex items-center justify-between border-b border-[var(--border)] bg-[var(--surface)]">
           <div className="flex items-center gap-3">
             {logoUrl ? (
@@ -273,7 +273,7 @@ export function PortalClient({
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[var(--canvas)] text-[var(--ink)] pb-12">
+    <div className="min-h-screen flex flex-col bg-[var(--canvas)] text-[var(--ink)] pb-12 w-full max-w-full overflow-x-hidden">
       <header className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-[var(--border)] bg-[var(--surface)] shadow-xs">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0 flex-1">

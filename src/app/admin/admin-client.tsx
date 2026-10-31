@@ -1373,7 +1373,7 @@ export function AdminClient({
   );
 
   return (
-    <div className="min-h-screen flex flex-col bg-[var(--canvas)] text-[var(--ink)]">
+    <div className="min-h-screen flex flex-col bg-[var(--canvas)] text-[var(--ink)] w-full max-w-full overflow-x-hidden">
       {/* Navbar */}
       <header className="sticky top-0 z-30 px-4 sm:px-6 py-3.5 border-b border-[var(--border)] bg-[var(--surface)] shadow-xs">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
