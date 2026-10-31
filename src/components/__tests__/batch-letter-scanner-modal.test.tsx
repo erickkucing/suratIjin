@@ -669,16 +669,16 @@ describe("Milestone 2 Empirical Tests: BatchLetterScannerModal & Hybrid Approval
     const cameraButton = screen.getByRole("button", { name: /Jepret Kamera/i });
     const galleryButton = screen.getByRole("button", { name: /Pilih dari Berkas \/ Galeri/i });
 
-    expect(cameraButton.className).toContain("min-h-[52px]");
-    expect(galleryButton.className).toContain("min-h-[52px]");
+    expect(cameraButton.className).toContain("min-h-[50px]");
+    expect(galleryButton.className).toContain("min-h-[50px]");
 
     // Primary action button
     const scanButton = screen.getByRole("button", { name: /Mulai Pindai/i });
     expect(scanButton.className).toContain("min-h-[48px]");
 
-    // Close button and back button have touch-target class
-    const closeBtn = screen.getByLabelText("Tutup modal");
-    expect(closeBtn.className).toContain("touch-target");
+    // Batal button has touch-target class
+    const cancelBtn = screen.getByRole("button", { name: "Batal" });
+    expect(cancelBtn.className).toContain("touch-target");
 
     // Modal dialog accessibility
     const dialog = screen.getByRole("dialog");

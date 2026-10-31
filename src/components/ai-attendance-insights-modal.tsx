@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import {
-  X,
   Sparkles,
   AlertTriangle,
   FileText,
@@ -223,8 +222,8 @@ export function AiAttendanceInsightsModal({
               <h2 id="insights-modal-title" className="text-base sm:text-lg font-bold font-heading truncate text-[var(--ink)]">
                 Insight: {classNameTitle}
               </h2>
-              <p className="text-xs text-[var(--ink-muted)] truncate">
-                {data?.periodTitle || (period === "month" ? "Bulan Ini" : "Semester Ini")} • {effectiveAtRisk.length > 0 ? `${effectiveAtRisk.length} siswa perlu perhatian` : "Kondisi kehadiran prima"}
+              <p className="text-xs text-[var(--ink-muted)]">
+                {data?.periodTitle || (period === "month" ? "Bulan Ini" : "Semester Ini")}
               </p>
             </div>
           </div>
@@ -239,14 +238,6 @@ export function AiAttendanceInsightsModal({
               aria-label="Segarkan Analisis"
             >
               <RotateCw className={`w-4 h-4 ${loading ? "animate-spin text-[var(--primary)]" : ""}`} />
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="touch-target p-2 rounded-lg text-[var(--ink-muted)] hover:text-[var(--ink)] hover:bg-[var(--canvas)] transition-colors cursor-pointer"
-              aria-label="Tutup modal wawasan"
-            >
-              <X className="w-5 h-5" />
             </button>
           </div>
         </div>

@@ -674,16 +674,6 @@ export function BatchLetterScannerModal({
               </p>
             </div>
           </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={isProcessing || isSubmittingSync}
-            className="touch-target p-2 rounded-lg text-[var(--ink-muted)] hover:text-[var(--ink)] hover:bg-[var(--canvas)] disabled:opacity-40 transition-colors cursor-pointer"
-            aria-label="Tutup modal"
-          >
-            <X className="w-5 h-5" />
-          </button>
         </div>
 
         {/* Tab Navigation (Persis Kelola Daftar Siswa) */}
@@ -830,14 +820,14 @@ export function BatchLetterScannerModal({
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
-                className={`rounded-2xl border-2 border-dashed p-6 sm:p-8 text-center transition-colors ${
+                className={`rounded-2xl border-2 border-dashed p-5 sm:p-6 text-center transition-colors ${
                   isDraggingOver
                     ? "border-[var(--primary)] bg-[var(--primary-light)]/40"
                     : "border-[var(--border)] bg-[var(--canvas-subtle)]"
                 }`}
               >
-                <div className="w-14 h-14 rounded-2xl bg-[var(--surface)] text-[var(--primary)] border border-[var(--border)] flex items-center justify-center mx-auto mb-3 shadow-xs">
-                  <Camera className="w-7 h-7" />
+                <div className="w-12 h-12 rounded-xl bg-[var(--surface)] text-[var(--primary)] border border-[var(--border)] flex items-center justify-center mx-auto mb-2.5 shadow-xs">
+                  <Camera className="w-6 h-6" />
                 </div>
                 <h3 className="text-sm sm:text-base font-bold text-[var(--ink)]">
                   Unggah atau Ambil Foto Surat Izin
@@ -846,12 +836,12 @@ export function BatchLetterScannerModal({
                   Ambil foto langsung menggunakan kamera HP, atau pilih berkas foto / dokumen PDF dari galeri.
                 </p>
 
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-5">
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 mt-4">
                   <button
                     type="button"
                     disabled={isProcessing}
                     onClick={() => multiCameraInputRef.current?.click()}
-                    className="touch-target w-full sm:w-auto min-h-[52px] px-5 py-2.5 rounded-xl bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] active:scale-98 text-xs sm:text-sm font-bold shadow-xs inline-flex items-center justify-center gap-2 cursor-pointer transition-all"
+                    className="touch-target w-full sm:w-auto min-h-[50px] px-5 py-2.5 rounded-xl bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] active:scale-98 text-xs sm:text-sm font-bold shadow-xs inline-flex items-center justify-center gap-2 cursor-pointer transition-all"
                   >
                     <Camera className="w-4 h-4 text-white" />
                     <span>Jepret Kamera</span>
@@ -860,7 +850,7 @@ export function BatchLetterScannerModal({
                     type="button"
                     disabled={isProcessing}
                     onClick={() => multiFileInputRef.current?.click()}
-                    className="touch-target w-full sm:w-auto min-h-[52px] px-5 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] active:scale-98 text-xs sm:text-sm font-bold text-[var(--ink)] shadow-xs inline-flex items-center justify-center gap-2 cursor-pointer transition-all"
+                    className="touch-target w-full sm:w-auto min-h-[50px] px-5 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] active:scale-98 text-xs sm:text-sm font-bold text-[var(--ink)] shadow-xs inline-flex items-center justify-center gap-2 cursor-pointer transition-all"
                   >
                     <Files className="w-4 h-4 text-[var(--primary)]" />
                     <span>Pilih dari Berkas / Galeri</span>
@@ -1283,7 +1273,7 @@ export function BatchLetterScannerModal({
                 type="button"
                 onClick={handleStartScan}
                 disabled={isProcessing || selectedFiles.length === 0}
-                className="touch-target min-h-[48px] px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm shadow-xs disabled:opacity-40 flex items-center gap-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600 cursor-pointer"
+                className="touch-target flex-1 sm:flex-initial min-h-[48px] px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm shadow-xs disabled:opacity-40 flex items-center justify-center gap-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600 cursor-pointer"
               >
                 {isProcessing ? (
                   <>
@@ -1316,7 +1306,7 @@ export function BatchLetterScannerModal({
                 type="button"
                 onClick={handleConfirmSync}
                 disabled={isSubmittingSync || selectedCount === 0}
-                className="touch-target min-h-[48px] px-5 py-2.5 rounded-xl bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white font-bold text-xs sm:text-sm shadow-xs disabled:opacity-40 flex items-center gap-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                className="touch-target flex-1 sm:flex-initial min-h-[48px] px-5 py-2.5 rounded-xl bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white font-bold text-xs sm:text-sm shadow-xs disabled:opacity-40 flex items-center justify-center gap-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
               >
                 {isSubmittingSync ? (
                   <>

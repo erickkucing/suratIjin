@@ -303,11 +303,9 @@ describe("Mobile AI Features & Usability Integration", () => {
       expect(dialog.querySelector("[data-drag-handle]")).toBeDefined();
       expect(dialog.querySelector("[data-sheet-header]")).toBeDefined();
 
-      // Check footer: should NOT have 'Tutup' button
-      const closeButtons = screen.getAllByRole("button", { name: /tutup/i });
-      // Should only have the top header close button ('Tutup modal wawasan')
-      expect(closeButtons.length).toBe(1);
-      expect(closeButtons[0].getAttribute("aria-label")).toBe("Tutup modal wawasan");
+      // Header close button is removed; swipe down handles dismissal
+      const closeButtons = screen.queryAllByRole("button", { name: /tutup/i });
+      expect(closeButtons.length).toBe(0);
     });
   });
 
