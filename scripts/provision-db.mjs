@@ -11,22 +11,22 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const envPath = path.resolve(__dirname, "../.env");
 
-if (!fs.existsSync(envPath)) {
-  console.log("[INFO] File .env belum tersedia, melewati provisioning database.");
-  process.exit(0);
+let dbUrl = process.env.DATABASE_URL;
+
+if (!dbUrl && fs.existsSync(envPath)) {
+  const envContent = fs.readFileSync(envPath, "utf8");
+  const match = envContent.match(/^\s*DATABASE_URL=["']?([^"'\r\n]+)/m);
+  if (match) dbUrl = match[1];
 }
 
-const envContent = fs.readFileSync(envPath, "utf8");
-const match = envContent.match(/^\s*DATABASE_URL=["']?([^"'\r\n]+)/m);
-
-if (!match) {
-  console.log("[INFO] DATABASE_URL tidak ditemukan di .env, melewati provisioning database.");
+if (!dbUrl) {
+  console.log("[INFO] DATABASE_URL tidak ditemukan di environment maupun .env, melewati provisioning database.");
   process.exit(0);
 }
 
 let u;
 try {
-  u = new URL(match[1]);
+  u = new URL(dbUrl);
 } catch (e) {
   console.warn("[WARN] Format DATABASE_URL tidak valid:", e.message);
   process.exit(0);
@@ -106,9 +106,14 @@ FLUSH PRIVILEGES;
 
 try {
   execFileSync(mysqlBin, ["-e", sql], { stdio: "pipe" });
-  console.log(`[SUCCESS] Database '${db}' dan kredensial user '${user}' berhasil disiapkan di MariaDB.`);
+  console.log(`[SUCCESS] Database '${db}' dan kredensial user '${user}' berhasil disiapkan di MariaDB/MySQL.`);
 } catch (err) {
-  console.warn(`[WARN] Eksekusi root SQL gagal: ${err.message}`);
+  try {
+    execFileSync(mysqlBin, ["-u", "root", "-proot", "-e", sql], { stdio: "pipe" });
+    console.log(`[SUCCESS] Database '${db}' dan kredensial user '${user}' berhasil disiapkan via root:root.`);
+  } catch (err2) {
+    console.warn(`[WARN] Eksekusi root SQL gagal: ${err.message}`);
+  }
 }
 
 // Uji coba koneksi ulang setelah konfigurasi
