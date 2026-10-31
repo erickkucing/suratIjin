@@ -111,7 +111,9 @@ export function BatchLetterScannerModal({
         onClose();
       }
     },
+    isExpanded,
     onExpand: () => setIsExpanded(true),
+    onCollapse: () => setIsExpanded(false),
   });
 
   // Keep thumbnail previews in sync with selectedFiles
@@ -628,14 +630,14 @@ export function BatchLetterScannerModal({
         ref={sheetRef}
         style={sheetStyle}
         {...touchHandlers}
-        className={`w-full max-w-3xl bg-[var(--surface)] text-[var(--ink)] border border-[var(--border)] shadow-2xl flex flex-col transition-all overflow-hidden modal-bottom-sheet ${
-          isExpanded ? "expanded" : ""
-        } sm:rounded-2xl sm:max-h-[88vh] rounded-t-3xl max-h-[85dvh]`}
+        className={`w-full max-w-3xl bg-[var(--surface)] text-[var(--ink)] border border-[var(--border)] shadow-2xl flex flex-col transition-[max-height,height,transform] duration-250 ease-out overflow-hidden modal-bottom-sheet ${
+          isExpanded ? "h-[92dvh] max-h-[92dvh] expanded" : "max-h-[68dvh]"
+        } sm:rounded-2xl sm:max-h-[88vh] sm:h-auto rounded-t-3xl`}
       >
         {/* Mobile Tactile Drag Handle */}
         <div
           data-drag-handle
-          className="sm:hidden flex justify-center pt-3 pb-1 cursor-grab active:cursor-grabbing shrink-0"
+          className="sm:hidden flex justify-center pt-3 pb-3 touch-none cursor-grab active:cursor-grabbing bg-[var(--canvas-subtle)] shrink-0"
         >
           <div className="w-12 h-1.5 rounded-full bg-[var(--border-strong)]/60" />
         </div>

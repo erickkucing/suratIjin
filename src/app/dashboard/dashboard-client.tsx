@@ -29,6 +29,7 @@ import {
   Camera,
   X,
   Bell,
+  PenLine,
 } from "lucide-react";
 import { DashboardData, AttendanceRecordWithStudent } from "@/db/queries";
 import { ClassItem } from "@/db/schema";
@@ -1162,7 +1163,7 @@ export function DashboardClient({
       {/* Mobile Speed Dial Backdrop */}
       {isSpeedDialOpen && (
         <div
-          className="sm:hidden fixed inset-0 z-40 bg-black/55 backdrop-blur-xs transition-opacity"
+          className="sm:hidden fixed inset-0 z-40 bg-black/45 transition-opacity"
           onClick={() => setIsSpeedDialOpen(false)}
           aria-hidden="true"
         />
@@ -1171,26 +1172,22 @@ export function DashboardClient({
       {/* Floating Action Button (+ Catat / Speed Dial) on Mobile */}
       <div className="sm:hidden fixed bottom-20 right-4 z-50 flex flex-col items-end gap-3 pointer-events-auto">
         {isSpeedDialOpen && (
-          <div className="flex flex-col items-end gap-2.5 mb-1 animate-in fade-in slide-in-from-bottom-3 duration-150">
-            {/* Speed Dial Item 1: Pindai Surat */}
+          <div className="w-13 flex flex-col items-center gap-3 mb-1 animate-in fade-in slide-in-from-bottom-3 duration-150">
+            {/* Speed Dial Item 1: Pindai Surat (Kamera) */}
             <button
               type="button"
               onClick={() => {
                 setIsSpeedDialOpen(false);
                 setIsBatchScannerOpen(true);
               }}
-              className="touch-target group flex items-center gap-3 pl-4 pr-2.5 py-2 rounded-full bg-[var(--surface)] text-[var(--ink)] border border-[var(--border)] shadow-xl hover:bg-[var(--canvas-subtle)] active:scale-95 transition-all cursor-pointer"
+              className="touch-target w-11 h-11 rounded-full bg-[var(--surface)] text-[var(--primary)] border-2 border-[var(--border)] shadow-xl hover:bg-[var(--canvas-subtle)] active:scale-90 transition-all flex items-center justify-center cursor-pointer"
               aria-label="Pindai surat presensi"
+              title="Pindai Surat Presensi"
             >
-              <span className="text-xs font-bold text-[var(--ink)]">
-                Pindai Surat
-              </span>
-              <div className="w-8 h-8 rounded-full bg-[var(--primary-light)] text-[var(--primary)] flex items-center justify-center shrink-0">
-                <Camera className="w-4 h-4" />
-              </div>
+              <Camera className="w-5 h-5 text-[var(--primary)]" />
             </button>
 
-            {/* Speed Dial Item 2: Tambah Catatan */}
+            {/* Speed Dial Item 2: Tambah Catatan (Pena Catat) */}
             <button
               type="button"
               onClick={() => {
@@ -1198,15 +1195,11 @@ export function DashboardClient({
                 setEditRecord(null);
                 setIsFormModalOpen(true);
               }}
-              className="touch-target group flex items-center gap-3 pl-4 pr-2.5 py-2 rounded-full bg-[var(--surface)] text-[var(--ink)] border border-[var(--border)] shadow-xl hover:bg-[var(--canvas-subtle)] active:scale-95 transition-all cursor-pointer"
+              className="touch-target w-11 h-11 rounded-full bg-[var(--surface)] text-[var(--primary)] border-2 border-[var(--border)] shadow-xl hover:bg-[var(--canvas-subtle)] active:scale-90 transition-all flex items-center justify-center cursor-pointer"
               aria-label="Tambah catatan ketidakhadiran baru"
+              title="Tambah Catatan Ketidakhadiran"
             >
-              <span className="text-xs font-bold text-[var(--ink)]">
-                Tambah Catatan
-              </span>
-              <div className="w-8 h-8 rounded-full bg-[var(--canvas-subtle)] text-[var(--ink)] border border-[var(--border)] flex items-center justify-center shrink-0">
-                <Plus className="w-4 h-4" />
-              </div>
+              <PenLine className="w-5 h-5 text-[var(--primary)]" />
             </button>
           </div>
         )}

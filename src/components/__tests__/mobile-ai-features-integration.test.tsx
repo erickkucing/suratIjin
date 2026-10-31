@@ -198,7 +198,7 @@ describe("Mobile AI Features & Usability Integration", () => {
       expect(badge.textContent).toBe("1");
     });
 
-    it("toggles mobile speed dial and displays 'Pindai Surat' (without AI word) and 'Tambah Catatan'", async () => {
+    it("toggles mobile speed dial without text labels and uses clean floating buttons with PenLine and Camera", async () => {
       render(
         <ConfirmDialogProvider>
           <DashboardClient
@@ -221,15 +221,26 @@ describe("Mobile AI Features & Usability Integration", () => {
       // Tap FAB button to open Speed Dial
       fireEvent.click(fabButton);
 
-      // Speed dial child options should now be rendered
+      // Check backdrop has NO blur
+      const backdrop = document.querySelector(".bg-black\\/45");
+      expect(backdrop).toBeDefined();
+      expect(backdrop?.className).not.toContain("backdrop-blur");
+
+      // Speed dial child options should now be rendered as clean circular buttons without text labels
       const scanButton = screen.getByRole("button", { name: /pindai surat presensi/i });
       const recordButton = screen.getByRole("button", { name: /tambah catatan ketidakhadiran baru/i });
 
       expect(scanButton).toBeDefined();
       expect(recordButton).toBeDefined();
-      expect(scanButton.textContent).toContain("Pindai Surat");
-      expect(scanButton.textContent).not.toContain("AI");
-      expect(recordButton.textContent).toContain("Tambah Catatan");
+      // User directive: "hapus saja label teks pada anak button +"
+      expect(scanButton.textContent?.trim()).toBe("");
+      expect(recordButton.textContent?.trim()).toBe("");
+      expect(scanButton.getAttribute("title")).toBe("Pindai Surat Presensi");
+      expect(recordButton.getAttribute("title")).toBe("Tambah Catatan Ketidakhadiran");
+
+      // Verify buttons have SVG icons
+      expect(scanButton.querySelector("svg")).toBeDefined();
+      expect(recordButton.querySelector("svg")).toBeDefined();
 
       // Clicking 'Pindai Surat' opens the BatchLetterScannerModal
       fireEvent.click(scanButton);
@@ -303,6 +314,36 @@ describe("Mobile AI Features & Usability Integration", () => {
       const submitBtn = screen.getByRole("button", { name: /proses dan pindai 1 berkas/i });
       expect(submitBtn).toBeDefined();
       expect(submitBtn.className).toContain("bg-emerald-600");
+    });
+  });
+
+  describe("Bottom Sheet 2-Step Snap Gesture (Swipe Up Expand & Swipe Down Collapse)", () => {
+    it("supports drag handle gestures on mobile viewports", () => {
+      render(
+        <BatchLetterScannerModal
+          isOpen={true}
+          onClose={vi.fn()}
+          classId={1}
+          classNameTitle="Kelas 7A"
+          studentsList={mockData.studentsList}
+          onSuccess={vi.fn()}
+          onShowToast={vi.fn()}
+        />
+      );
+
+      const dragHandle = document.querySelector("[data-drag-handle]") as HTMLElement;
+      expect(dragHandle).toBeDefined();
+      const modalSheet = document.querySelector(".modal-bottom-sheet") as HTMLElement;
+      expect(modalSheet).toBeDefined();
+      expect(modalSheet.className).toContain("max-h-[68dvh]");
+
+      // Simulate touch drag
+      fireEvent.touchStart(dragHandle, { touches: [{ clientY: 300 }] });
+      fireEvent.touchMove(dragHandle, { touches: [{ clientY: 250 }] }); // swipe up
+      fireEvent.touchEnd(dragHandle);
+
+      // Check that drag handle has appropriate touch-none styling
+      expect(dragHandle.className).toContain("touch-none");
     });
   });
 });

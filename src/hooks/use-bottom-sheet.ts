@@ -5,14 +5,18 @@ import { useState, useRef, useEffect, useCallback } from "react";
 interface UseBottomSheetOptions {
   isOpen: boolean;
   onClose: () => void;
+  isExpanded?: boolean;
   onExpand?: () => void;
+  onCollapse?: () => void;
   threshold?: number; // pixels to drag down before closing, default 50
 }
 
 export function useBottomSheetGesture({
   isOpen,
   onClose,
+  isExpanded = false,
   onExpand,
+  onCollapse,
   threshold = 50,
 }: UseBottomSheetOptions) {
   const [offsetY, setOffsetY] = useState(0);
@@ -64,9 +68,11 @@ export function useBottomSheetGesture({
       const deltaY = touch.clientY - startYRef.current;
       const scrollContainer = sheetRef.current?.querySelector(".overflow-y-auto") as HTMLElement | null;
 
-      // Swiping upwards (expanding bottom sheet or beginning to scroll down)
-      if (deltaY < -20) {
-        onExpand?.();
+      // Swiping upwards on handle or content: expand bottom sheet
+      if (deltaY < -15) {
+        if (!isExpanded) {
+          onExpand?.();
+        }
         // If swiping inside scrollable content, hand over to native scroll
         if (!isDragTargetRef.current) {
           setIsDragging(false);
@@ -75,7 +81,7 @@ export function useBottomSheetGesture({
         return;
       }
 
-      // Dragging downwards (pull to dismiss)
+      // Dragging downwards (pull to collapse or dismiss)
       if (deltaY > 0) {
         if (isDragTargetRef.current) {
           // Direct 1:1 tactile drag on handle or header
@@ -92,7 +98,7 @@ export function useBottomSheetGesture({
         setOffsetY(0);
       }
     },
-    [isDragging, onExpand]
+    [isDragging, isExpanded, onExpand]
   );
 
   const handleTouchEnd = useCallback(() => {
@@ -103,7 +109,16 @@ export function useBottomSheetGesture({
     const elapsed = Date.now() - startTimeRef.current;
     const velocity = deltaY / Math.max(elapsed, 1);
 
-    // Threshold: 50px drag or a natural downward flick (> 0.25 px/ms and > 20px)
+    // 2-Step Snap: If modal is currently expanded, dragging down collapses back to normal height
+    if (isExpanded) {
+      if (deltaY > 35 || (velocity > 0.25 && deltaY > 15)) {
+        onCollapse?.();
+      }
+      setOffsetY(0);
+      return;
+    }
+
+    // Normal state: dragging down beyond threshold dismisses modal
     if (deltaY > threshold || (velocity > 0.25 && deltaY > 20)) {
       // Slide down and dismiss smoothly
       setOffsetY(window.innerHeight || 500);
@@ -115,7 +130,7 @@ export function useBottomSheetGesture({
       // Spring smoothly back to top
       setOffsetY(0);
     }
-  }, [isDragging, offsetY, threshold, onClose]);
+  }, [isDragging, isExpanded, offsetY, threshold, onCollapse, onClose]);
 
   const sheetStyle: React.CSSProperties = {
     transform: offsetY > 0 ? `translateY(${offsetY}px)` : undefined,

@@ -89,7 +89,9 @@ export function AiAttendanceInsightsModal({
   const { sheetRef, sheetStyle, touchHandlers } = useBottomSheetGesture({
     isOpen,
     onClose,
+    isExpanded,
     onExpand: () => setIsExpanded(true),
+    onCollapse: () => setIsExpanded(false),
   });
 
   const fetchInsights = useCallback(
@@ -196,14 +198,14 @@ export function AiAttendanceInsightsModal({
         ref={sheetRef}
         style={sheetStyle}
         {...touchHandlers}
-        className={`relative w-full max-w-3xl min-h-0 rounded-t-3xl sm:rounded-2xl rounded-b-none sm:rounded-b-2xl bg-[var(--surface)] text-[var(--ink)] shadow-2xl border-t border-x sm:border border-[var(--border)] overflow-hidden flex flex-col modal-bottom-sheet ${
-          isExpanded ? "max-h-[85dvh] expanded" : "max-h-[68dvh]"
-        } sm:max-h-[88vh] animate-in fade-in duration-200`}
+        className={`relative w-full max-w-3xl min-h-0 rounded-t-3xl sm:rounded-2xl rounded-b-none sm:rounded-b-2xl bg-[var(--surface)] text-[var(--ink)] shadow-2xl border-t border-x sm:border border-[var(--border)] overflow-hidden flex flex-col modal-bottom-sheet transition-[max-height,height,transform] duration-250 ease-out ${
+          isExpanded ? "h-[92dvh] max-h-[92dvh] expanded" : "max-h-[68dvh]"
+        } sm:max-h-[88vh] sm:h-auto animate-in fade-in duration-200`}
       >
         {/* Mobile Tactile Drag Handle */}
         <div
           data-drag-handle
-          className="sm:hidden flex justify-center pt-3 pb-2 touch-none cursor-grab active:cursor-grabbing bg-[var(--canvas-subtle)] shrink-0"
+          className="sm:hidden flex justify-center pt-3 pb-3 touch-none cursor-grab active:cursor-grabbing bg-[var(--canvas-subtle)] shrink-0"
         >
           <div className="w-12 h-1.5 rounded-full bg-[var(--border-strong)]/60" />
         </div>
