@@ -636,7 +636,7 @@ export function AttendanceFormModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="attendance-modal-title"
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 pt-[env(safe-area-inset-top,1.5rem)] sm:p-6 bg-black/75 backdrop-blur-xs overflow-hidden sm:overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 pt-[env(safe-area-inset-top,1.5rem)] sm:p-6 bg-black/75 backdrop-blur-xs overflow-hidden sm:overflow-y-auto w-full max-w-full touch-pan-y overscroll-none"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -645,7 +645,7 @@ export function AttendanceFormModal({
         ref={sheetRef}
         style={sheetStyle}
         {...touchHandlers}
-        className={`relative w-full max-w-3xl min-h-0 rounded-t-3xl sm:rounded-2xl rounded-b-none sm:rounded-b-2xl bg-[var(--surface)] text-[var(--ink)] shadow-2xl border-t border-x sm:border border-[var(--border)] overflow-hidden flex flex-col modal-bottom-sheet transition-[max-height,height,transform] duration-250 ease-out ${
+        className={`relative w-full max-w-full sm:max-w-3xl min-w-0 min-h-0 rounded-t-3xl sm:rounded-2xl rounded-b-none sm:rounded-b-2xl bg-[var(--surface)] text-[var(--ink)] shadow-2xl border-t border-x sm:border border-[var(--border)] overflow-hidden flex flex-col modal-bottom-sheet transition-[max-height,height,transform] duration-250 ease-out ${
           isExpanded ? "h-[92dvh] max-h-[92dvh] expanded" : "max-h-[68dvh]"
         } sm:max-h-[88vh] sm:h-auto`}
       >
@@ -706,17 +706,17 @@ export function AttendanceFormModal({
 
           {/* Bagian Paling Atas: Tombol Upload/Foto & Langsung OCR, serta Mini Preview */}
           {status !== "Alpa" && (
-            <div className="rounded-xl border border-[var(--border)] bg-[var(--canvas-subtle)] p-3 sm:p-3.5 space-y-2.5">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
-                <div className="flex items-center gap-2">
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--canvas-subtle)] p-3 sm:p-3.5 space-y-2.5 w-full min-w-0">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 w-full min-w-0">
+                <div className="flex items-center gap-2 min-w-0">
                   <div className="p-1.5 rounded-lg bg-[var(--primary-light)] text-[var(--primary)] shrink-0">
                     <ScanLine className="w-4 h-4" />
                   </div>
-                  <div>
-                    <span className="text-xs font-semibold text-[var(--ink)] block">
+                  <div className="min-w-0">
+                    <span className="text-xs font-semibold text-[var(--ink)] block truncate sm:whitespace-normal">
                       Pindai Surat Otomatis (OCR)
                     </span>
-                    <span className="text-[11px] text-[var(--ink-muted)] block">
+                    <span className="text-[11px] text-[var(--ink-muted)] block line-clamp-2">
                       Foto atau unggah surat untuk mengisi data langsung
                     </span>
                   </div>
@@ -1078,11 +1078,11 @@ export function AttendanceFormModal({
           </div>
 
           {/* Column 2: Status Kehadiran Radio Chips */}
-          <div className="w-full">
+          <div className="w-full min-w-0">
             <span className="block text-xs font-semibold text-[var(--ink-muted)] mb-1.5 sm:mb-2">
               Status Kehadiran <span className="text-red-500">*</span>
             </span>
-            <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
+            <div className="grid grid-cols-3 gap-1.5 sm:gap-2.5 w-full min-w-0">
               {(["Izin", "Sakit", "Alpa"] as const).map((s) => {
                 const isSelected = status === s;
                 return (
@@ -1093,7 +1093,7 @@ export function AttendanceFormModal({
                       setStatus(s);
                       markFieldModified("status");
                     }}
-                    className={`touch-target flex items-center justify-center py-2.5 px-3 rounded-xl border text-sm font-semibold transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] ${
+                    className={`touch-target flex items-center justify-center py-2.5 px-2 sm:px-3 rounded-xl border text-xs sm:text-sm font-semibold truncate transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] ${
                       isSelected
                         ? s === "Izin"
                           ? "bg-[var(--status-izin-bg)] text-[var(--status-izin-fg)] border-[var(--status-izin-border)] ring-2 ring-[var(--status-izin-fg)]"
@@ -1119,9 +1119,9 @@ export function AttendanceFormModal({
           <div className="space-y-3 w-full">
           {/* Single Day vs Multi-Day Rentang Tanggal Toggle */}
           {!editRecord && (
-            <div className="flex items-center justify-between p-3 rounded-xl bg-[var(--canvas-subtle)] border border-[var(--border)]">
-              <div>
-                <span className="text-sm font-semibold text-[var(--ink)]">
+            <div className="flex items-center justify-between p-3 rounded-xl bg-[var(--canvas-subtle)] border border-[var(--border)] gap-3 w-full min-w-0">
+              <div className="min-w-0 flex-1">
+                <span className="text-sm font-semibold text-[var(--ink)] block">
                   Izin beberapa hari beruntun?
                 </span>
                 <p className="text-xs text-[var(--ink-muted)]">
@@ -1150,8 +1150,8 @@ export function AttendanceFormModal({
           )}
 
           {/* Date Inputs */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 w-full min-w-0">
+            <div className="w-full min-w-0">
               <label htmlFor="start-date" className="block text-xs font-semibold text-[var(--ink-muted)] mb-1.5">
                 {isMultiDay ? "Tanggal Mulai" : "Tanggal"} <span className="text-red-500">*</span>
               </label>
@@ -1163,13 +1163,13 @@ export function AttendanceFormModal({
                   setStartDate(e.target.value);
                   markFieldModified("startDate");
                 }}
-                className="w-full px-3.5 py-2.5 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                className="w-full min-w-0 max-w-full px-3.5 py-2.5 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
                 required
               />
             </div>
 
             {isMultiDay && !editRecord && (
-              <div>
+              <div className="w-full min-w-0">
                 <label htmlFor="end-date" className="block text-xs font-semibold text-[var(--ink-muted)] mb-1.5">
                   Tanggal Selesai (Maks. 14 Hari) <span className="text-red-500">*</span>
                 </label>
@@ -1182,7 +1182,7 @@ export function AttendanceFormModal({
                     setEndDate(e.target.value);
                     markFieldModified("endDate");
                   }}
-                  className="w-full px-3.5 py-2.5 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                  className="w-full min-w-0 max-w-full px-3.5 py-2.5 text-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
                   required={isMultiDay}
                 />
                 <span className="block mt-1 text-xs text-[var(--primary)] font-medium">
@@ -1194,11 +1194,11 @@ export function AttendanceFormModal({
           </div>
 
           {/* Column 2: Info Dari Chips */}
-          <div className="w-full">
+          <div className="w-full min-w-0">
             <span className="block text-xs font-semibold text-[var(--ink-muted)] mb-2">
               Informasi Dari <span className="text-red-500">*</span>
             </span>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-1.5 sm:gap-2 w-full min-w-0">
               {["Orang tua", "Siswa sendiri", "Pengurus kelas", "Lainnya"].map((src) => {
                 const isSelected = infoSource === src;
                 return (
