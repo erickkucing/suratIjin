@@ -60,12 +60,20 @@ jobs:
           sudo service redis-server start 2>/dev/null || redis-server --daemonize yes 2>/dev/null || true
           sudo service mysql start 2>/dev/null || sudo systemctl start mysql 2>/dev/null || true
           sudo mysql -e "CREATE DATABASE IF NOT EXISTS db_suratizin; CREATE USER IF NOT EXISTS 'surat_user'@'localhost' IDENTIFIED BY 'surat_pass_2026'; GRANT ALL PRIVILEGES ON db_suratizin.* TO 'surat_user'@'localhost'; FLUSH PRIVILEGES;" 2>/dev/null || true
+          npx tsx scripts/init-db.ts || true
+        env:
+          DATABASE_URL: mysql://surat_user:surat_pass_2026@127.0.0.1:3306/db_suratizin
+          JWT_SECRET: ci_secret_key_for_testing_purposes_only_2026
 
       - name: Run ESLint
         run: npm run lint
 
       - name: Run Unit Tests
         run: npm run test:unit
+        env:
+          DATABASE_URL: mysql://surat_user:surat_pass_2026@127.0.0.1:3306/db_suratizin
+          JWT_SECRET: ci_secret_key_for_testing_purposes_only_2026
+          NEXT_PUBLIC_APP_URL: http://localhost:3000
 
       - name: Verify Production Build
         run: npm run build
