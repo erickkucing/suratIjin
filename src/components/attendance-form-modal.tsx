@@ -636,14 +636,28 @@ export function AttendanceFormModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="attendance-modal-title"
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 pt-[env(safe-area-inset-top,1.5rem)] sm:p-6 bg-black/75 backdrop-blur-xs overflow-hidden sm:overflow-y-auto w-full max-w-full touch-pan-y overscroll-none"
+      style={{
+        overflowX: "clip",
+        touchAction: "pan-y",
+        overscrollBehaviorX: "none",
+        width: "100%",
+        maxWidth: "100vw",
+      }}
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 pt-[env(safe-area-inset-top,1.5rem)] sm:p-6 bg-black/75 backdrop-blur-xs overflow-y-hidden sm:overflow-y-auto w-full max-w-full touch-pan-y overscroll-none"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
         ref={sheetRef}
-        style={sheetStyle}
+        style={{
+          ...sheetStyle,
+          overflowX: "clip",
+          touchAction: "pan-y",
+          overscrollBehaviorX: "none",
+          width: "100%",
+          maxWidth: "100vw",
+        }}
         {...touchHandlers}
         className={`relative w-full max-w-full sm:max-w-3xl min-w-0 min-h-0 rounded-t-3xl sm:rounded-2xl rounded-b-none sm:rounded-b-2xl bg-[var(--surface)] text-[var(--ink)] shadow-2xl border-t border-x sm:border border-[var(--border)] overflow-hidden flex flex-col modal-bottom-sheet transition-[max-height,height,transform] duration-250 ease-out ${
           isExpanded ? "h-[92dvh] max-h-[92dvh] expanded" : "max-h-[68dvh]"
@@ -675,11 +689,22 @@ export function AttendanceFormModal({
         <form
           onSubmit={handleSubmit}
           onScroll={(e) => {
+            if (e.currentTarget.scrollLeft !== 0) {
+              e.currentTarget.scrollLeft = 0;
+            }
             if (!isExpanded && e.currentTarget.scrollTop > 18) {
               setIsExpanded(true);
             }
           }}
-          className="w-full min-w-0 p-4 sm:p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:pb-6 space-y-4 sm:space-y-5 overflow-y-auto overflow-x-hidden min-h-0 flex-1"
+          style={{
+            overflowX: "clip",
+            touchAction: "pan-y",
+            overscrollBehaviorX: "none",
+            width: "100%",
+            maxWidth: "100%",
+            WebkitOverflowScrolling: "auto",
+          }}
+          className="w-full max-w-full min-w-0 p-4 sm:p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:pb-6 space-y-4 sm:space-y-5 overflow-y-auto min-h-0 flex-1 box-border"
         >
           {/* Hidden file inputs accessible by camera and gallery buttons */}
           <input

@@ -21,6 +21,7 @@ export function useBottomSheetGesture({
 }: UseBottomSheetOptions) {
   const [offsetY, setOffsetY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const startXRef = useRef(0);
   const startYRef = useRef(0);
   const startTimeRef = useRef(0);
   const isDragTargetRef = useRef(false);
@@ -54,6 +55,7 @@ export function useBottomSheetGesture({
     }
 
     const touch = e.touches[0];
+    startXRef.current = touch.clientX;
     startYRef.current = touch.clientY;
     startTimeRef.current = Date.now();
     isDragTargetRef.current = isDragTarget;
@@ -65,7 +67,15 @@ export function useBottomSheetGesture({
       if (!isDragging) return;
 
       const touch = e.touches[0];
+      const deltaX = Math.abs(touch.clientX - startXRef.current);
       const deltaY = touch.clientY - startYRef.current;
+
+      // Ignore horizontal swipes completely to prevent sheet interference
+      if (deltaX > 15 && deltaX > Math.abs(deltaY) * 1.2) {
+        setIsDragging(false);
+        setOffsetY(0);
+        return;
+      }
       const scrollContainer = sheetRef.current?.querySelector(".overflow-y-auto") as HTMLElement | null;
 
       // Swiping upwards on handle or content: expand bottom sheet
