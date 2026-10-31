@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { User, Lock, Eye, EyeOff, Check, Loader2, UserCheck, School, AlertCircle } from "lucide-react";
+import { User, Lock, Eye, EyeOff, Check, Loader2, UserCheck, School, AlertCircle, LogOut } from "lucide-react";
 import { UserSessionPayload } from "@/lib/auth";
-import { updateSelfProfileAction } from "@/actions/auth";
+import { updateSelfProfileAction, logoutAction } from "@/actions/auth";
 import { toTitleCase } from "@/lib/string-utils";
 import { useBottomSheetGesture } from "@/hooks/use-bottom-sheet";
 
@@ -388,6 +388,21 @@ export function TeacherProfileModal({
                 </button>
               </div>
             )}
+
+            {/* Logout Action */}
+            <div className="pt-2 border-t border-[var(--border)]">
+              <form action={logoutAction}>
+                <button
+                  type="submit"
+                  className="touch-target min-h-[48px] w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-red-200 dark:border-red-900/60 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-950/50 font-bold text-xs transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-500 cursor-pointer"
+                  title="Keluar dari akun Anda"
+                  aria-label="Keluar dari akun"
+                >
+                  <LogOut className="w-4 h-4 shrink-0" />
+                  <span>Keluar dari Akun</span>
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       </div>

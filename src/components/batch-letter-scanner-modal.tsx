@@ -103,6 +103,7 @@ export function BatchLetterScannerModal({
 
   // DOM Refs
   const multiFileInputRef = useRef<HTMLInputElement>(null);
+  const multiCameraInputRef = useRef<HTMLInputElement>(null);
   const tabletopCameraInputRef = useRef<HTMLInputElement>(null);
   const tabletopGalleryInputRef = useRef<HTMLInputElement>(null);
 
@@ -820,6 +821,21 @@ export function BatchLetterScannerModal({
                     className="hidden"
                   />
 
+                  {/* Hidden Camera Input for direct multi-shot */}
+                  <input
+                    ref={multiCameraInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files.length > 0) {
+                        handleAddFiles(e.target.files);
+                      }
+                      e.target.value = "";
+                    }}
+                    className="hidden"
+                  />
+
                   {/* Drag and Drop Zone */}
                   <div
                     onDragOver={handleDragOver}
@@ -838,23 +854,39 @@ export function BatchLetterScannerModal({
                       <Upload className="w-6 h-6" />
                     </div>
                     <h3 className="text-sm font-bold text-[var(--ink)]">
-                      Tarik & lepas hingga 10 berkas surat ke sini
+                      Tarik &amp; lepas hingga 10 berkas surat ke sini
                     </h3>
                     <p className="text-xs text-[var(--ink-muted)] mt-1 max-w-sm mx-auto">
                       Mendukung foto berkas (JPG, PNG, WebP) dan dokumen PDF. Maksimal 15 MB per berkas.
                     </p>
-                    <button
-                      type="button"
-                      disabled={isProcessing}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        multiFileInputRef.current?.click();
-                      }}
-                      className="touch-target min-h-[48px] mt-4 px-4 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-xs font-bold text-[var(--ink)] shadow-xs inline-flex items-center gap-2"
-                    >
-                      <Files className="w-4 h-4 text-[var(--primary)]" />
-                      <span>Pilih Berkas dari Perangkat</span>
-                    </button>
+                    <div className="flex flex-wrap items-center justify-center gap-2.5 mt-4">
+                      <button
+                        type="button"
+                        disabled={isProcessing}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          multiCameraInputRef.current?.click();
+                        }}
+                        className="touch-target min-h-[48px] px-4 py-2.5 rounded-xl bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] text-xs font-bold shadow-xs inline-flex items-center gap-2 cursor-pointer transition-colors"
+                        title="Ambil foto surat langsung menggunakan kamera"
+                      >
+                        <Camera className="w-4 h-4 text-white" />
+                        <span>Jepret Kamera</span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isProcessing}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          multiFileInputRef.current?.click();
+                        }}
+                        className="touch-target min-h-[48px] px-4 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-xs font-bold text-[var(--ink)] shadow-xs inline-flex items-center gap-2 cursor-pointer transition-colors"
+                        title="Pilih satu atau lebih file foto / PDF dari perangkat"
+                      >
+                        <Files className="w-4 h-4 text-[var(--primary)]" />
+                        <span>Pilih dari Berkas / Galeri</span>
+                      </button>
+                    </div>
                   </div>
 
                   {/* Selected Files List */}

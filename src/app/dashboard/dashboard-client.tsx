@@ -26,6 +26,8 @@ import {
   Files,
   Sparkles,
   AlertTriangle,
+  Camera,
+  X,
 } from "lucide-react";
 import { DashboardData, AttendanceRecordWithStudent } from "@/db/queries";
 import { ClassItem } from "@/db/schema";
@@ -99,6 +101,7 @@ export function DashboardClient({
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
   const [isBatchScannerOpen, setIsBatchScannerOpen] = useState(false);
   const [isAiInsightsModalOpen, setIsAiInsightsModalOpen] = useState(false);
+  const [isSpeedDialOpen, setIsSpeedDialOpen] = useState(false);
 
   // 0ms instant client-side attendance anomaly calculation for active month
   const atRiskStudents = useMemo(() => {
@@ -326,10 +329,28 @@ export function DashboardClient({
 
             <ThemeToggle />
 
-            <form action={logoutAction}>
+            <button
+              type="button"
+              onClick={() => setIsAiInsightsModalOpen(true)}
+              className="touch-target relative inline-flex items-center justify-center p-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] transition-colors cursor-pointer"
+              title="Wawasan Presensi AI"
+              aria-label="Buka Wawasan Presensi AI"
+            >
+              <Sparkles className="w-4 h-4 text-[var(--primary)]" />
+              {atRiskStudents.length > 0 && (
+                <span
+                  className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white shadow-xs animate-pulse"
+                  aria-label={`${atRiskStudents.length} siswa berisiko terdeteksi`}
+                >
+                  {atRiskStudents.length}
+                </span>
+              )}
+            </button>
+
+            <form action={logoutAction} className="hidden sm:inline-block">
               <button
                 type="submit"
-                className="touch-target inline-flex items-center justify-center p-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:bg-red-50 dark:hover:bg-red-950/40 text-[var(--ink-muted)] hover:text-red-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                className="touch-target inline-flex items-center justify-center p-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:bg-red-50 dark:hover:bg-red-950/40 text-[var(--ink-muted)] hover:text-red-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] cursor-pointer"
                 title="Keluar"
                 aria-label="Keluar dari akun"
               >
@@ -1137,19 +1158,74 @@ export function DashboardClient({
         <AppFooter text={footerText} className="pb-20 sm:pb-4 pt-6" />
       </main>
 
-      {/* Floating Action Button (+ Catat) on Mobile */}
-      <button
-        type="button"
-        onClick={() => {
-          setEditRecord(null);
-          setIsFormModalOpen(true);
-        }}
-        className="touch-target sm:hidden fixed bottom-20 right-4 z-40 w-12 h-12 rounded-full flex items-center justify-center bg-[var(--primary)] text-white shadow-lg hover:bg-[var(--primary-hover)] active:scale-95 transition-all border border-white/10"
-        aria-label="Catat ketidakhadiran baru"
-        title="Catat Ketidakhadiran"
-      >
-        <Plus className="w-6 h-6" />
-      </button>
+      {/* Mobile Speed Dial Backdrop */}
+      {isSpeedDialOpen && (
+        <div
+          className="sm:hidden fixed inset-0 z-40 bg-black/40 backdrop-blur-2xs transition-opacity"
+          onClick={() => setIsSpeedDialOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Floating Action Button (+ Catat / Speed Dial) on Mobile */}
+      <div className="sm:hidden fixed bottom-20 right-4 z-50 flex flex-col items-end gap-3 pointer-events-auto">
+        {isSpeedDialOpen && (
+          <div className="flex flex-col items-end gap-2.5 mb-1 animate-in fade-in slide-in-from-bottom-3 duration-150">
+            {/* Speed Dial Item 1: Pindai Surat AI */}
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-1 rounded-lg bg-[var(--surface)] text-[var(--ink)] text-xs font-bold shadow-md border border-[var(--border)] pointer-events-none select-none">
+                Pindai Surat AI
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSpeedDialOpen(false);
+                  setIsBatchScannerOpen(true);
+                }}
+                className="touch-target w-12 h-12 rounded-full flex items-center justify-center bg-[var(--surface)] text-[var(--primary)] border border-[var(--border)] shadow-lg hover:bg-[var(--canvas-subtle)] active:scale-95 transition-all cursor-pointer"
+                aria-label="Pindai banyak surat dengan AI atau kamera HP"
+                title="Pindai Banyak Surat (AI)"
+              >
+                <Camera className="w-5 h-5 text-[var(--primary)]" />
+              </button>
+            </div>
+
+            {/* Speed Dial Item 2: Tambah Catatan Manual */}
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-1 rounded-lg bg-[var(--surface)] text-[var(--ink)] text-xs font-bold shadow-md border border-[var(--border)] pointer-events-none select-none">
+                Tambah Catatan
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSpeedDialOpen(false);
+                  setEditRecord(null);
+                  setIsFormModalOpen(true);
+                }}
+                className="touch-target w-12 h-12 rounded-full flex items-center justify-center bg-[var(--surface)] text-[var(--ink)] border border-[var(--border)] shadow-lg hover:bg-[var(--canvas-subtle)] active:scale-95 transition-all cursor-pointer"
+                aria-label="Catat ketidakhadiran baru secara manual"
+                title="Tambah Catatan Manual"
+              >
+                <Plus className="w-5 h-5 text-[var(--ink)]" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Main Trigger Button */}
+        <button
+          type="button"
+          onClick={() => setIsSpeedDialOpen(!isSpeedDialOpen)}
+          className={`touch-target w-13 h-13 rounded-full flex items-center justify-center bg-[var(--primary)] text-white shadow-xl hover:bg-[var(--primary-hover)] active:scale-95 transition-all border border-white/20 cursor-pointer ${
+            isSpeedDialOpen ? "rotate-45" : ""
+          }`}
+          aria-expanded={isSpeedDialOpen}
+          aria-label={isSpeedDialOpen ? "Tutup menu opsi presensi" : "Buka menu aksi cepat presensi"}
+          title={isSpeedDialOpen ? "Tutup Menu" : "Aksi Presensi"}
+        >
+          <Plus className="w-6 h-6 transition-transform duration-200" />
+        </button>
+      </div>
 
       {/* 4-Tab Bottom Navigation Bar on Mobile */}
       <nav
