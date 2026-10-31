@@ -6,9 +6,7 @@ import {
   Users,
   Plus,
   Upload,
-  Edit2,
   Check,
-  Archive,
   Trash2,
   FileSpreadsheet,
   FileUp,
@@ -807,39 +805,18 @@ export function StudentRosterModal({
                         )}
 
                         {!isEditing && (
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditingStudentId(st.id);
-                                setEditName(st.name);
-                                setEditNis(st.nis || "");
-                              }}
-                              className="touch-target p-1.5 text-[var(--ink-muted)] hover:text-[var(--primary)] rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
-                              title="Edit Nama/NIS"
-                              aria-label={`Edit ${st.name}`}
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleToggleArchive(st)}
-                              className="touch-target p-1.5 text-[var(--ink-muted)] hover:text-amber-600 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
-                              title={st.isActive ? "Arsipkan Siswa" : "Aktifkan Siswa"}
-                              aria-label={st.isActive ? `Arsipkan ${st.name}` : `Aktifkan ${st.name}`}
-                            >
-                              <Archive className="w-4 h-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteStudent(st)}
-                              className="touch-target p-1.5 text-[var(--ink-muted)] hover:text-red-600 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-500"
-                              title="Hapus Siswa Permanen"
-                              aria-label={`Hapus ${st.name}`}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteStudent(st);
+                            }}
+                            className="touch-target p-2 text-[var(--ink-muted)] hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-500 shrink-0"
+                            title="Hapus Siswa Permanen"
+                            aria-label={`Hapus ${st.name}`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         )}
                       </div>
                     );
