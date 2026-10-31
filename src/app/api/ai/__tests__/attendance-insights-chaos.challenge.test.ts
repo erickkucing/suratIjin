@@ -543,10 +543,9 @@ describe("Adversarial Chaos Challenge: /api/ai/attendance-insights", () => {
     it("should gracefully degrade when AI service returns malformed JSON schema", async () => {
       // Mock AI returning invalid payload (missing executiveSummary, invalid types)
       vi.spyOn(aiRouterModule, "generateAttendanceInsightsWithAi").mockResolvedValue({
-        // @ts-expect-error test malformed return
         corrupted: true,
         bkRecommendations: "not an array",
-      });
+      } as any);
 
       const req = new Request("http://localhost:3000/api/ai/attendance-insights", {
         method: "POST",

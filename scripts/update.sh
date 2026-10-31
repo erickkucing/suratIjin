@@ -86,6 +86,17 @@ print_git_deploy_summary() {
     echo "=============================================================================="
 }
 
+# 0. Root / Sudo Privilege Elevation
+if [ "${EUID:-$(id -u)}" -ne 0 ]; then
+    if command -v sudo >/dev/null 2>&1; then
+        log_info "Mengeksekusi auto-update dengan hak akses sudo..."
+        exec sudo "$0" "$@"
+    else
+        log_error "Skrip update memerlukan hak akses root atau sudo (untuk mengelola systemd service dan port)."
+        exit 1
+    fi
+fi
+
 APP_DIR="$(readlink -f "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)")"
 SERVICE_FILE="/etc/systemd/system/surat-ijin.service"
 
@@ -96,10 +107,12 @@ fi
 
 cd "$APP_DIR"
 
-# Pastikan git safe.directory diizinkan untuk direktori instalasi
-if [ -d "$APP_DIR/.git" ]; then
-    git config --global --add safe.directory "$APP_DIR" 2>/dev/null || true
-fi
+# Pastikan git safe.directory diizinkan untuk direktori instalasi dan path alternatif
+for d in "$APP_DIR" "/opt/surat-ijin" "/root/project/suratIjin"; do
+    if [ -d "$d/.git" ]; then
+        git config --global --add safe.directory "$d" 2>/dev/null || true
+    fi
+done
 
 # 1. Determine Target Mode & Custom Port
 EXPLICIT_MODE="${1:-}"

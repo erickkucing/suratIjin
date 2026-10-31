@@ -231,6 +231,12 @@ if command -v dpkg >/dev/null 2>&1; then
             NEEDED_PKGS+=("mariadb-server")
         fi
     fi
+    # Check Redis server
+    if ! dpkg -s redis-server >/dev/null 2>&1 && ! dpkg -s redis >/dev/null 2>&1; then
+        if ! command -v redis-server >/dev/null 2>&1; then
+            NEEDED_PKGS+=("redis-server")
+        fi
+    fi
 fi
 
 if [ ${#NEEDED_PKGS[@]} -gt 0 ]; then
@@ -288,9 +294,16 @@ DATABASE_URL="mysql://surat_user:surat_pass_2026@127.0.0.1:3306/db_suratizin"
 JWT_SECRET=""
 STORAGE_PATH="./storage/uploads"
 NEXT_PUBLIC_APP_URL="http://localhost:${PORT}"
+REDIS_URL="redis://127.0.0.1:6379"
 AI_ROUTER_ENABLED="false"
 EOF
     fi
+fi
+
+# Ensure Redis URL exists in .env
+if ! grep -qE '^\s*REDIS_URL=' "${APP_DIR}/.env"; then
+    echo 'REDIS_URL="redis://127.0.0.1:6379"' >> "${APP_DIR}/.env"
+    log_info "REDIS_URL disinkronkan ke .env (redis://127.0.0.1:6379)."
 fi
 
 # Ensure strong, production-grade JWT_SECRET (mencegah SECURITY ERROR 500 di runtime)
@@ -320,10 +333,11 @@ if [ -z "$CURRENT_OCR_SECRET" ] || [[ "$CURRENT_OCR_SECRET" == *"ganti_dengan_to
     log_success "OCR_INTERNAL_SECRET berhasil disinkronkan ke .env."
 fi
 
-# Ensure storage directory exists with proper permissions
-mkdir -p "${APP_DIR}/storage/uploads"
-chmod 775 "${APP_DIR}/storage/uploads"
-log_success "Direktori penyimpanan arsip (${APP_DIR}/storage/uploads) siap."
+# Ensure storage directories exist with proper permissions (including batch letter scans & crops)
+mkdir -p "${APP_DIR}/storage/uploads/letters"
+mkdir -p "${APP_DIR}/storage/uploads/cache"
+chmod -R 775 "${APP_DIR}/storage"
+log_success "Direktori penyimpanan arsip (${APP_DIR}/storage/uploads/letters) siap."
 
 # 8. Setup PaddleOCR Cache Directory for Non-Root User
 PADDLE_CACHE_DIR="${APP_DIR}/.paddleocr"
@@ -336,10 +350,19 @@ if [ -d "/root/.paddleocr/whl" ] && [ ! -d "${PADDLE_CACHE_DIR}/whl" ]; then
     log_success "Cache model PaddleOCR berhasil dimigrasikan."
 fi
 
-# 9. Database Service & Schema/Admin Initialization
-log_info "Memeriksa service MariaDB / MySQL..."
+# 9. Database & Cache Services Initialization
+log_info "Memeriksa service MariaDB / MySQL & Redis..."
 systemctl start mariadb 2>/dev/null || systemctl start mysql 2>/dev/null || true
 systemctl enable mariadb --quiet 2>/dev/null || systemctl enable mysql --quiet 2>/dev/null || true
+
+systemctl start redis-server 2>/dev/null || systemctl start redis 2>/dev/null || true
+systemctl enable redis-server --quiet 2>/dev/null || systemctl enable redis --quiet 2>/dev/null || true
+
+if command -v redis-cli >/dev/null 2>&1 && redis-cli ping >/dev/null 2>&1; then
+    log_success "Service Redis Cache aktif dan merespons (PONG)."
+else
+    log_warn "Service Redis Cache belum merespons PONG (aplikasi akan menggunakan fallback in-memory jika offline)."
+fi
 
 # Auto-provisioning database & kredensial user MariaDB (mengatasi error ER_ACCESS_DENIED_NO_PASSWORD_ERROR)
 if [ -f "${APP_DIR}/scripts/provision-db.mjs" ]; then
@@ -402,18 +425,27 @@ if [ -d "$OCR_DIR" ] && command -v python3 >/dev/null 2>&1; then
     "$OCR_VENV/bin/pip" install --quiet --upgrade pip
     "$OCR_VENV/bin/pip" install --quiet -r "${OCR_DIR}/requirements.txt"
 
+    # Inisialisasi kernel module & character devices NVIDIA jika modul driver terpasang
+    if lsmod 2>/dev/null | grep -qi nvidia; then
+        if command -v nvidia-modprobe >/dev/null 2>&1; then
+            nvidia-modprobe -c 0 -u 2>/dev/null || true
+            nvidia-modprobe 2>/dev/null || true
+        fi
+    fi
+
     # Deteksi akselerasi GPU NVIDIA (nvidia-smi) & Manajemen Paket PaddlePaddle
     HAS_NVIDIA_GPU=false
     if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
         HAS_NVIDIA_GPU=true
         GPU_DETECTED_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -n1 || echo "NVIDIA GPU")
-        log_info "Terdeteksi hardware GPU: ${GPU_DETECTED_NAME}"
+        log_info "Terdeteksi hardware GPU aktif: ${GPU_DETECTED_NAME}"
     fi
 
     if [ "$HAS_NVIDIA_GPU" = true ]; then
         # Deteksi versi CUDA driver
         CUDA_DRIVER_VER=$(nvidia-smi 2>/dev/null | grep -o "CUDA Version: [0-9]*\.[0-9]*" | awk '{print $3}' || echo "12.0")
         CUDA_MAJOR=$(echo "$CUDA_DRIVER_VER" | cut -d. -f1)
+        [ -z "$CUDA_MAJOR" ] && CUDA_MAJOR="12"
         log_info "Terdeteksi driver NVIDIA dengan dukungan CUDA ${CUDA_DRIVER_VER} (Major: ${CUDA_MAJOR})."
 
         # Pastikan pustaka cuDNN & cuBLAS dari NVIDIA terpasang
@@ -427,11 +459,11 @@ if [ -d "$OCR_DIR" ] && command -v python3 >/dev/null 2>&1; then
         fi
 
         if [ "$CUDA_MAJOR" = "11" ]; then
-            log_info "Memasang dependensi cuDNN 8.9 & cuBLAS CUDA 11 via pip..."
-            "$OCR_VENV/bin/pip" install "nvidia-cudnn-cu11==8.9.7.29" "nvidia-cublas-cu11" 2>&1 | tail -n 2 || true
+            log_info "Memastikan dependensi cuDNN 8.9 & cuBLAS CUDA 11 via pip..."
+            "$OCR_VENV/bin/pip" install --quiet "nvidia-cudnn-cu11==8.9.7.29" "nvidia-cublas-cu11" 2>&1 || true
         else
-            log_info "Memasang dependensi cuDNN 8.9 & cuBLAS CUDA 12 via pip..."
-            "$OCR_VENV/bin/pip" install "nvidia-cudnn-cu12==8.9.7.29" "nvidia-cublas-cu12" 2>&1 | tail -n 2 || true
+            log_info "Memastikan dependensi cuDNN 8.9 & cuBLAS CUDA 12 via pip..."
+            "$OCR_VENV/bin/pip" install --quiet "nvidia-cudnn-cu12==8.9.7.29" "nvidia-cublas-cu12" 2>&1 || true
         fi
 
         # Buat symlink libcudnn & libcublas jika belum ada di venv
@@ -510,13 +542,33 @@ if [ -d "$OCR_DIR" ] && command -v python3 >/dev/null 2>&1; then
         HOME="${APP_DIR}" PADDLE_HOME="${PADDLE_CACHE_DIR}" "$OCR_VENV/bin/python" -c "
 import main
 import numpy as np
+
+# Inisialisasi engine OCR
+ocr = main.get_ocr_engine()
 print(f'[Deploy Prewarm] Perangkat OCR aktif: {main._active_device} ({main._device_name})')
+
+# Lakukan dry-run inferensi dengan dummy matrix untuk memvalidasi kernel forward pass
+dummy_matrix = np.zeros((100, 300, 3), dtype=np.uint8)
+try:
+    _ = ocr.ocr(dummy_matrix, cls=False)
+    print(f'[Deploy Prewarm] Dry-run inferensi OCR ({main._active_device}): Berhasil!')
+except Exception as e:
+    print(f'[Deploy Prewarm] Dry-run inferensi gagal: {e}')
+
 if main._gpu_fallback_error:
-    print(f'[Deploy Prewarm] Catatan fallback: {main._gpu_fallback_error}')
+    print(f'[Deploy Prewarm] Catatan GPU fallback: {main._gpu_fallback_error}')
 " || log_warn "Pre-warming selesai dengan catatan (akan dimuat otomatis saat service aktif)."
     )
 
     log_info "Memperbarui konfigurasi systemd OCR service (${OCR_SERVICE_FILE})..."
+    
+    # Temukan secara dinamis seluruh path direktori pustaka NVIDIA di dalam venv
+    NVIDIA_LIB_DIRS=$(find "$OCR_VENV" -type d -path "*/site-packages/nvidia/*/lib" 2>/dev/null | tr '\n' ':' | sed 's/:$//')
+    EXTRA_LD_PATH=""
+    if [ -n "$NVIDIA_LIB_DIRS" ]; then
+        EXTRA_LD_PATH="${NVIDIA_LIB_DIRS}:"
+    fi
+
     cat <<EOF > "$OCR_SERVICE_FILE"
 [Unit]
 Description=PaddleOCR Microservice for Surat Ijin
@@ -530,12 +582,15 @@ WorkingDirectory=${OCR_DIR}
 Environment=PYTHONUNBUFFERED=1
 Environment=HOME=${APP_DIR}
 Environment=PADDLE_HOME=${PADDLE_CACHE_DIR}
-Environment=LD_LIBRARY_PATH=/usr/local/cuda/lib64:${OCR_VENV}/lib/python3.11/site-packages/nvidia/cudnn/lib:${OCR_VENV}/lib/python3.11/site-packages/nvidia/cublas/lib:${OCR_VENV}/lib/python3.12/site-packages/nvidia/cudnn/lib:${OCR_VENV}/lib/python3.10/site-packages/nvidia/cudnn/lib:\${LD_LIBRARY_PATH}
+Environment=LD_LIBRARY_PATH=${EXTRA_LD_PATH}/usr/local/cuda/lib64:\${LD_LIBRARY_PATH}
 Environment=FLAGS_allocator_strategy=auto_growth
 Environment=FLAGS_fraction_of_gpu_memory_to_use=0.5
 Environment=FLAGS_conv_workspace_size_limit=64
 Environment=FLAGS_initial_gpu_memory_in_mb=256
 Environment=FLAGS_reallocate_gpu_memory_in_mb=128
+Environment=FLAGS_enable_pir_api=0
+Environment=FLAGS_cudnn_exhaustive_search=0
+Environment=FLAGS_cudnn_deterministic=0
 EnvironmentFile=-${APP_DIR}/.env
 ExecStart=${OCR_VENV}/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8001 --workers 1
 Restart=always
@@ -560,7 +615,7 @@ log_success "Kompilasi build Next.js selesai tanpa error."
 log_info "Menyetel kepemilikan berkas ke user '${APP_USER}:${APP_GROUP}' dan mengamankan izin..."
 chown -R "${APP_USER}:${APP_GROUP}" "$APP_DIR"
 chmod -R u=rwX,go=rX "$APP_DIR"
-chmod 775 "${APP_DIR}/storage/uploads"
+chmod -R 775 "${APP_DIR}/storage"
 chmod 600 "${APP_DIR}/.env"
 chmod -R 775 "$PADDLE_CACHE_DIR"
 chmod +x "${APP_DIR}/scripts/"*.sh 2>/dev/null || true
@@ -581,6 +636,7 @@ for ((j=1; j<=20; j++)); do
 done
 
 if [ "$OCR_PASSED" = true ]; then
+    OCR_HEALTH_RAW="$(curl -s "$OCR_HEALTH_URL" || true)"
     OCR_HW_INFO=$(python3 -c '
 import sys, json
 try:
@@ -588,12 +644,30 @@ try:
     dev = d.get("device", "cpu").upper()
     name = d.get("device_name", "CPU")
     cuda = "Tersedia" if d.get("cuda_available") else "Tidak Tersedia"
-    print(f"{dev} ({name}) | Akselerasi CUDA: {cuda}")
+    err = d.get("gpu_fallback_error") or d.get("error_detail")
+    res = f"{dev} ({name}) | Akselerasi CUDA: {cuda}"
+    if err and dev == "CPU":
+        res += f" | Catatan: {err[:60]}..."
+    print(res)
 except Exception:
     print("CPU")
-' "$(curl -s "$OCR_HEALTH_URL" || true)" 2>/dev/null || echo "CPU")
+' "$OCR_HEALTH_RAW" 2>/dev/null || echo "CPU")
+    
+    OCR_ACTIVE_DEV=$(python3 -c 'import sys, json; print(json.loads(sys.argv[1]).get("device", "cpu"))' "$OCR_HEALTH_RAW" 2>/dev/null || echo "cpu")
+    OCR_DEV_NAME=$(python3 -c 'import sys, json; print(json.loads(sys.argv[1]).get("device_name", "CPU"))' "$OCR_HEALTH_RAW" 2>/dev/null || echo "CPU")
+
     log_success "OCR microservice aktif dan merespons sehat (HTTP 200)."
     log_info "Akselerasi Perangkat Keras OCR: ${OCR_HW_INFO}"
+
+    if [ "$HAS_NVIDIA_GPU" = true ]; then
+        if [ "$OCR_ACTIVE_DEV" = "gpu" ]; then
+            log_success "VERIFIKASI GPU: Microservice OCR berhasil menjalankan akselerasi GPU NVIDIA (${OCR_DEV_NAME})."
+        else
+            log_warn "PERHATIAN: Hardware GPU NVIDIA terdeteksi (${GPU_DETECTED_NAME}), namun OCR berjalan pada mode CPU (Fallback)."
+            log_warn "Periksa penyebab fallback dengan: curl -s http://127.0.0.1:8001/health | jq"
+            log_warn "Atau periksa log systemd: journalctl -u ${OCR_SERVICE_NAME} -n 25 --no-pager"
+        fi
+    fi
 else
     log_warn "OCR microservice merespons HTTP ${OCR_CODE:-gagal}, periksa: journalctl -u ${OCR_SERVICE_NAME} -n 25 --no-pager"
 fi
@@ -622,7 +696,8 @@ log_info "Memperbarui konfigurasi systemd service (${SERVICE_FILE})..."
 cat <<EOF > "$SERVICE_FILE"
 [Unit]
 Description=Surat Ijin Next.js Application (${MODE_LABEL})
-After=network.target mariadb.service mysql.service
+After=network.target mariadb.service mysql.service redis-server.service redis.service surat-ijin-ocr.service
+Wants=mariadb.service redis-server.service surat-ijin-ocr.service
 
 [Service]
 Type=simple
