@@ -23,6 +23,9 @@ import {
   ClipboardCheck,
   SlidersHorizontal,
   Shield,
+  Files,
+  Sparkles,
+  AlertTriangle,
 } from "lucide-react";
 import { DashboardData, AttendanceRecordWithStudent } from "@/db/queries";
 import { ClassItem } from "@/db/schema";
@@ -48,6 +51,9 @@ import { ParentPortalSettingsModal } from "@/components/parent-portal-settings-m
 import { StudentRosterModal } from "@/components/student-roster-modal";
 import { TeacherProfileModal } from "@/components/teacher-profile-modal";
 import { MobileFilterDrawer } from "@/components/mobile-filter-drawer";
+import { BatchLetterScannerModal } from "@/components/batch-letter-scanner-modal";
+import { AiAttendanceInsightsModal } from "@/components/ai-attendance-insights-modal";
+import { detectAtRiskStudents } from "@/lib/attendance-anomaly-detector";
 import { exportAttendancePdf } from "@/lib/export-pdf";
 import { exportAttendanceExcel } from "@/lib/export-excel";
 import { computeDynamicDashboardMetrics } from "@/lib/attendance-stats";
@@ -91,6 +97,13 @@ export function DashboardClient({
   const [isRosterModalOpen, setIsRosterModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
+  const [isBatchScannerOpen, setIsBatchScannerOpen] = useState(false);
+  const [isAiInsightsModalOpen, setIsAiInsightsModalOpen] = useState(false);
+
+  // 0ms instant client-side attendance anomaly calculation for active month
+  const atRiskStudents = useMemo(() => {
+    return detectAtRiskStudents(data.studentsList, data.records, { period: "month" });
+  }, [data.studentsList, data.records]);
 
   useEffect(() => {
     setData(initialData);
@@ -384,6 +397,36 @@ export function DashboardClient({
           </div>
         </section>
 
+        {/* 0ms In-App Auto Alert Banner saat anomali terdeteksi */}
+        {atRiskStudents.length > 0 && (
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3.5 rounded-2xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 text-xs shadow-xs animate-in fade-in duration-200">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="p-2 rounded-xl bg-amber-500/20 text-amber-700 dark:text-amber-300 shrink-0">
+                <AlertTriangle className="w-4 h-4" />
+              </div>
+              <div className="min-w-0 leading-relaxed">
+                <p className="font-bold text-xs sm:text-sm">
+                  Perhatian: Terdeteksi {atRiskStudents.length} siswa memerlukan pemantauan absensi bulan ini.
+                </p>
+                <p className="text-[11px] text-amber-800/80 dark:text-amber-300/80 truncate">
+                  {atRiskStudents.filter((s) => s.urgency === "Kritis").length > 0
+                    ? `${atRiskStudents.filter((s) => s.urgency === "Kritis").length} kategori Kritis • `
+                    : ""}
+                  Pola hari kejepit, akumulasi alpa, atau surat sakit tertunda.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsAiInsightsModalOpen(true)}
+              className="touch-target inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shrink-0 cursor-pointer transition-colors shadow-xs"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Buka Wawasan AI</span>
+            </button>
+          </div>
+        )}
+
         {/* Mobile Quick Filter Chips & Drawer Trigger */}
         <div className="sm:hidden flex items-center justify-between gap-2 overflow-x-auto pb-1 no-scrollbar">
           <div className="flex items-center gap-1.5 shrink-0">
@@ -442,17 +485,42 @@ export function DashboardClient({
 
         <section className="hidden sm:block card-paper p-4 rounded-2xl space-y-3">
           <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={() => {
                   setEditRecord(null);
                   setIsFormModalOpen(true);
                 }}
-                className="touch-target flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] text-sm font-bold shadow-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] transition-colors"
+                className="touch-target flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] text-sm font-bold shadow-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] transition-colors"
               >
                 <Plus className="w-5 h-5" />
                 <span>Catat Ketidakhadiran</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsBatchScannerOpen(true)}
+                className="touch-target inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-xs font-bold text-[var(--ink)] shadow-xs transition-colors"
+                title="Pindai banyak berkas surat izin atau foto meja sekaligus"
+              >
+                <Files className="w-4 h-4 text-[var(--primary)]" />
+                <span className="hidden sm:inline">Pindai Banyak Surat</span>
+                <span className="sm:hidden">Batch Scan</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsAiInsightsModalOpen(true)}
+                className="touch-target relative inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-xs font-bold text-[var(--ink)] shadow-xs transition-colors"
+                title="Buka Wawasan Presensi & Deteksi Dini Siswa Berisiko"
+              >
+                <Sparkles className="w-4 h-4 text-[var(--primary)]" />
+                <span className="hidden sm:inline">Wawasan AI</span>
+                <span className="sm:hidden">Wawasan</span>
+                {atRiskStudents.length > 0 && (
+                  <span className="w-2 h-2 rounded-full bg-red-500 absolute top-2 right-2 animate-pulse" />
+                )}
               </button>
 
               <button
@@ -1216,6 +1284,25 @@ export function DashboardClient({
         studentsList={data.allStudentsList || data.studentsList}
         logoUrl={logoUrl}
         onSuccess={() => router.refresh()}
+      />
+
+      <BatchLetterScannerModal
+        isOpen={isBatchScannerOpen}
+        onClose={() => setIsBatchScannerOpen(false)}
+        classId={data.classInfo.id}
+        classNameTitle={data.classInfo.name}
+        studentsList={data.studentsList}
+        onSuccess={() => router.refresh()}
+        onShowToast={() => {}}
+      />
+
+      <AiAttendanceInsightsModal
+        isOpen={isAiInsightsModalOpen}
+        onClose={() => setIsAiInsightsModalOpen(false)}
+        classId={data.classInfo.id}
+        classNameTitle={data.classInfo.name}
+        studentsList={data.studentsList}
+        records={data.records}
       />
     </div>
   );
