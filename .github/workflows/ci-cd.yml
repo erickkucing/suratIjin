@@ -17,6 +17,16 @@ jobs:
   test-and-build:
     name: Lint, Test & Build
     runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -47,8 +57,8 @@ jobs:
 
       - name: Start Services for Unit Tests
         run: |
-          sudo systemctl start redis-server || true
-          sudo systemctl start mysql || true
+          sudo service redis-server start 2>/dev/null || redis-server --daemonize yes 2>/dev/null || true
+          sudo service mysql start 2>/dev/null || sudo systemctl start mysql 2>/dev/null || true
           sudo mysql -e "CREATE DATABASE IF NOT EXISTS db_suratizin; CREATE USER IF NOT EXISTS 'surat_user'@'localhost' IDENTIFIED BY 'surat_pass_2026'; GRANT ALL PRIVILEGES ON db_suratizin.* TO 'surat_user'@'localhost'; FLUSH PRIVILEGES;" 2>/dev/null || true
 
       - name: Run ESLint
