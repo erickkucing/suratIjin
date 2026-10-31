@@ -177,7 +177,7 @@ describe("Mobile AI Features & Usability Integration", () => {
   });
 
   describe("DashboardClient Mobile Speed Dial & Header AI Notification", () => {
-    it("renders Bell notification button in the header with badge when at-risk students are detected", () => {
+    it("renders Bell notification button in the header with badge when at-risk students are detected and aiEnabled is true", () => {
       render(
         <ConfirmDialogProvider>
           <DashboardClient
@@ -185,17 +185,45 @@ describe("Mobile AI Features & Usability Integration", () => {
             user={mockUser}
             classesList={[mockClass]}
             currentClassId={1}
+            aiEnabled={true}
           />
         </ConfirmDialogProvider>
       );
 
-      const bellHeaderButton = screen.getByRole("button", { name: /buka notifikasi & wawasan presensi/i });
+      const bellHeaderButton = screen.getByRole("button", { name: /buka insight presensi/i });
       expect(bellHeaderButton).toBeDefined();
 
       // At-risk student Ahmad Rizky has 3 Alpas -> badge with count should be displayed
       const badge = screen.getByLabelText(/siswa berisiko terdeteksi/i);
       expect(badge).toBeDefined();
       expect(badge.textContent).toBe("1");
+    });
+
+    it("completely hides AI bell, insight toolbar button, and risk banner when aiEnabled is false, while Speed Dial camera scan remains fully available", () => {
+      render(
+        <ConfirmDialogProvider>
+          <DashboardClient
+            initialData={mockData}
+            user={mockUser}
+            classesList={[mockClass]}
+            currentClassId={1}
+            aiEnabled={false}
+          />
+        </ConfirmDialogProvider>
+      );
+
+      // AI elements must NOT be present
+      expect(screen.queryByRole("button", { name: /buka notifikasi & wawasan presensi/i })).toBeNull();
+      expect(screen.queryByRole("button", { name: /wawasan presensi & deteksi siswa berisiko/i })).toBeNull();
+      expect(screen.queryByRole("button", { name: /buka dialog insight presensi/i })).toBeNull();
+
+      // Speed dial and Camera scan MUST remain available
+      const fabButton = screen.getByRole("button", { name: /buka menu aksi cepat presensi/i });
+      expect(fabButton).toBeDefined();
+      fireEvent.click(fabButton);
+
+      const scanButton = screen.getByRole("button", { name: /pindai surat presensi/i });
+      expect(scanButton).toBeDefined();
     });
 
     it("toggles mobile speed dial without text labels and uses clean floating buttons with PenLine and Camera", async () => {
@@ -246,7 +274,7 @@ describe("Mobile AI Features & Usability Integration", () => {
       fireEvent.click(scanButton);
 
       await waitFor(() => {
-        expect(screen.getByText(/pindai lembar surat izin siswa/i)).toBeDefined();
+        expect(screen.getByText(/pindai surat izin: kelas 7a/i)).toBeDefined();
       });
     });
 
@@ -258,11 +286,12 @@ describe("Mobile AI Features & Usability Integration", () => {
             user={mockUser}
             classesList={[mockClass]}
             currentClassId={1}
+            aiEnabled={true}
           />
         </ConfirmDialogProvider>
       );
 
-      const bellHeaderButton = screen.getByRole("button", { name: /buka notifikasi & wawasan presensi/i });
+      const bellHeaderButton = screen.getByRole("button", { name: /buka insight presensi/i });
       fireEvent.click(bellHeaderButton);
 
       await waitFor(() => {

@@ -30,6 +30,7 @@ interface AttendanceFormModalProps {
   studentsList: Student[];
   editRecord?: AttendanceRecordWithStudent | null;
   onSuccess: () => void;
+  aiEnabled?: boolean;
 }
 
 export function AttendanceFormModal({
@@ -39,6 +40,7 @@ export function AttendanceFormModal({
   studentsList,
   editRecord,
   onSuccess,
+  aiEnabled = false,
 }: AttendanceFormModalProps) {
   const [studentId, setStudentId] = useState<number>(0);
   const [studentSearch, setStudentSearch] = useState("");
@@ -914,8 +916,8 @@ export function AttendanceFormModal({
                 </div>
               )}
 
-              {/* Bilah Bantuan Saran Minimalis (Anti-Slop) */}
-              {showAiSuggestion && selectedFile && (
+              {/* Bilah Bantuan Saran Minimalis (Hanya jika AI Aktif) */}
+              {aiEnabled && showAiSuggestion && selectedFile && (
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 p-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-xs mt-1.5">
                   <div className="flex items-center gap-2 text-[var(--ink-muted)] min-w-0">
                     <Sparkles className="w-4 h-4 text-[var(--primary)] shrink-0" />
@@ -942,8 +944,8 @@ export function AttendanceFormModal({
                 </div>
               )}
 
-              {/* Tautan halus jika user ingin manual refine tulisan tangan meskipun score tinggi */}
-              {!showAiSuggestion && selectedFile && ocrResultBanner && !aiRefining && (
+              {/* Tautan halus jika user ingin manual refine tulisan tangan meskipun score tinggi (Hanya jika AI Aktif) */}
+              {aiEnabled && !showAiSuggestion && selectedFile && ocrResultBanner && !aiRefining && (
                 <div className="flex justify-end pt-0.5">
                   <button
                     type="button"

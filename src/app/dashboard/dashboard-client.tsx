@@ -70,6 +70,7 @@ interface DashboardClientProps {
   currentClassId: number;
   logoUrl?: string | null;
   footerText?: string | null;
+  aiEnabled?: boolean;
 }
 
 export function DashboardClient({
@@ -79,6 +80,7 @@ export function DashboardClient({
   currentClassId,
   logoUrl,
   footerText,
+  aiEnabled = false,
 }: DashboardClientProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -331,23 +333,25 @@ export function DashboardClient({
 
             <ThemeToggle />
 
-            <button
-              type="button"
-              onClick={() => setIsAiInsightsModalOpen(true)}
-              className="touch-target relative inline-flex items-center justify-center p-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] transition-colors cursor-pointer"
-              title="Notifikasi & Wawasan Presensi"
-              aria-label="Buka Notifikasi & Wawasan Presensi"
-            >
-              <Bell className="w-4 h-4 text-[var(--ink)]" />
-              {atRiskStudents.length > 0 && (
-                <span
-                  className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white shadow-xs animate-pulse"
-                  aria-label={`${atRiskStudents.length} siswa berisiko terdeteksi`}
-                >
-                  {atRiskStudents.length}
-                </span>
-              )}
-            </button>
+            {aiEnabled && (
+              <button
+                type="button"
+                onClick={() => setIsAiInsightsModalOpen(true)}
+                className="touch-target relative inline-flex items-center justify-center p-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] transition-colors cursor-pointer"
+                title="Insight Presensi"
+                aria-label="Buka Insight Presensi"
+              >
+                <Bell className="w-4 h-4 text-[var(--ink)]" />
+                {atRiskStudents.length > 0 && (
+                  <span
+                    className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white shadow-xs animate-pulse"
+                    aria-label={`${atRiskStudents.length} siswa berisiko terdeteksi`}
+                  >
+                    {atRiskStudents.length}
+                  </span>
+                )}
+              </button>
+            )}
 
             <form action={logoutAction} className="hidden sm:inline-block">
               <button
@@ -420,8 +424,8 @@ export function DashboardClient({
           </div>
         </section>
 
-        {/* 0ms In-App Auto Alert Banner saat anomali terdeteksi */}
-        {atRiskStudents.length > 0 && (
+        {/* In-App Auto Alert Banner saat anomali terdeteksi (Hanya tampil jika AI aktif) */}
+        {aiEnabled && atRiskStudents.length > 0 && (
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3.5 rounded-2xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 text-xs shadow-xs animate-in fade-in duration-200">
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="p-2 rounded-xl bg-amber-500/20 text-amber-700 dark:text-amber-300 shrink-0">
@@ -445,7 +449,7 @@ export function DashboardClient({
               className="touch-target inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shrink-0 cursor-pointer transition-colors shadow-xs"
             >
               <Sparkles className="w-3.5 h-3.5" />
-              <span>Buka Wawasan AI</span>
+              <span>Buka Insight</span>
             </button>
           </div>
         )}
@@ -532,19 +536,21 @@ export function DashboardClient({
                 <span className="sm:hidden">Batch Scan</span>
               </button>
 
-              <button
-                type="button"
-                onClick={() => setIsAiInsightsModalOpen(true)}
-                className="touch-target relative inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-xs font-bold text-[var(--ink)] shadow-xs transition-colors"
-                title="Buka Wawasan Presensi & Deteksi Dini Siswa Berisiko"
-              >
-                <Sparkles className="w-4 h-4 text-[var(--primary)]" />
-                <span className="hidden sm:inline">Wawasan AI</span>
-                <span className="sm:hidden">Wawasan</span>
-                {atRiskStudents.length > 0 && (
-                  <span className="w-2 h-2 rounded-full bg-red-500 absolute top-2 right-2 animate-pulse" />
-                )}
-              </button>
+              {aiEnabled && (
+                <button
+                  type="button"
+                  onClick={() => setIsAiInsightsModalOpen(true)}
+                  className="touch-target relative inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-xs font-bold text-[var(--ink)] shadow-xs transition-colors"
+                  title="Buka Insight Presensi"
+                >
+                  <Sparkles className="w-4 h-4 text-[var(--primary)]" />
+                  <span className="hidden sm:inline">Insight</span>
+                  <span className="sm:hidden">Insight</span>
+                  {atRiskStudents.length > 0 && (
+                    <span className="w-2 h-2 rounded-full bg-red-500 absolute top-2 right-2 animate-pulse" />
+                  )}
+                </button>
+              )}
 
               <button
                 type="button"
@@ -1322,6 +1328,7 @@ export function DashboardClient({
         studentsList={data.studentsList}
         editRecord={editRecord}
         onSuccess={() => router.refresh()}
+        aiEnabled={aiEnabled}
       />
 
       <LetterLightboxModal
@@ -1362,16 +1369,19 @@ export function DashboardClient({
         studentsList={data.studentsList}
         onSuccess={() => router.refresh()}
         onShowToast={() => {}}
+        aiEnabled={aiEnabled}
       />
 
-      <AiAttendanceInsightsModal
-        isOpen={isAiInsightsModalOpen}
-        onClose={() => setIsAiInsightsModalOpen(false)}
-        classId={data.classInfo.id}
-        classNameTitle={data.classInfo.name}
-        studentsList={data.studentsList}
-        records={data.records}
-      />
+      {aiEnabled && (
+        <AiAttendanceInsightsModal
+          isOpen={isAiInsightsModalOpen}
+          onClose={() => setIsAiInsightsModalOpen(false)}
+          classId={data.classInfo.id}
+          classNameTitle={data.classInfo.name}
+          studentsList={data.studentsList}
+          records={data.records}
+        />
+      )}
     </div>
   );
 }

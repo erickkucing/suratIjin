@@ -21,7 +21,7 @@ describe("Hardening & Security Verification", () => {
       expect(headersMap.get("X-Frame-Options")).toBe("SAMEORIGIN");
       expect(headersMap.get("X-Content-Type-Options")).toBe("nosniff");
       expect(headersMap.get("Referrer-Policy")).toBe("strict-origin-when-cross-origin");
-      expect(headersMap.get("Permissions-Policy")).toContain("camera=()");
+      expect(headersMap.get("Permissions-Policy")).toContain("camera=(self)");
       expect(headersMap.get("Content-Security-Policy")).toContain("frame-ancestors 'self'");
     }
   });

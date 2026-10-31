@@ -84,6 +84,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       currentClassId={selectedClassId}
       logoUrl={settings.logoUrl}
       footerText={settings.footerText}
+      aiEnabled={settings.aiEnabled}
     />
   );
 }

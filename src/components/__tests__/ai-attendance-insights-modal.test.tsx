@@ -173,7 +173,7 @@ describe("AiAttendanceInsightsModal", () => {
       />
     );
 
-    expect(screen.getByText("Wawasan Presensi & Deteksi Dini")).toBeDefined();
+    expect(screen.getByText(/Insight: Kelas XII TKJ 2/i)).toBeDefined();
     expect(screen.getByText("Deteksi Siswa Berisiko")).toBeDefined();
     expect(screen.getByText("Narasi Laporan & WhatsApp")).toBeDefined();
 

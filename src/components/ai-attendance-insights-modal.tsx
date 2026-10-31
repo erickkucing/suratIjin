@@ -211,30 +211,30 @@ export function AiAttendanceInsightsModal({
         </div>
 
         {/* Header */}
-        <header
+        <div
           data-sheet-header
-          className="px-4 sm:px-6 py-3.5 border-b border-[var(--border)] flex items-center justify-between shrink-0 bg-[var(--surface)] touch-none select-none"
+          className="flex items-center justify-between px-5 sm:px-6 py-3.5 sm:py-4 border-b border-[var(--border)] bg-[var(--canvas-subtle)] shrink-0 touch-none select-none"
         >
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="p-2 rounded-xl bg-[var(--primary)]/15 text-[var(--primary)] shrink-0">
-              <Bell className="w-5 h-5 text-[var(--primary)]" />
+            <div className="p-2 rounded-xl bg-[var(--primary-light)] text-[var(--primary)] shadow-xs shrink-0">
+              <Bell className="w-5 h-5" />
             </div>
             <div className="min-w-0">
               <h2 id="insights-modal-title" className="text-base sm:text-lg font-bold font-heading truncate text-[var(--ink)]">
-                Wawasan Presensi &amp; Deteksi Dini
+                Insight: {classNameTitle}
               </h2>
               <p className="text-xs text-[var(--ink-muted)] truncate">
-                {classNameTitle} • {data?.periodTitle || (period === "month" ? "Bulan Ini" : "Semester Ini")}
+                {data?.periodTitle || (period === "month" ? "Bulan Ini" : "Semester Ini")} • {effectiveAtRisk.length > 0 ? `${effectiveAtRisk.length} siswa perlu perhatian` : "Kondisi kehadiran prima"}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
               type="button"
               onClick={() => fetchInsights(true)}
               disabled={loading}
-              className="touch-target p-2 rounded-lg text-[var(--ink-muted)] hover:text-[var(--ink)] hover:bg-[var(--canvas-subtle)] transition-colors disabled:opacity-50"
+              className="touch-target p-2 rounded-lg text-[var(--ink-muted)] hover:text-[var(--ink)] hover:bg-[var(--canvas)] transition-colors disabled:opacity-50 cursor-pointer"
               title="Segarkan Analisis (Bypass Cache)"
               aria-label="Segarkan Analisis"
             >
@@ -243,69 +243,60 @@ export function AiAttendanceInsightsModal({
             <button
               type="button"
               onClick={onClose}
-              className="touch-target p-2 rounded-lg text-[var(--ink-muted)] hover:text-[var(--ink)] hover:bg-[var(--canvas-subtle)] transition-colors"
+              className="touch-target p-2 rounded-lg text-[var(--ink-muted)] hover:text-[var(--ink)] hover:bg-[var(--canvas)] transition-colors cursor-pointer"
               aria-label="Tutup modal wawasan"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
-        </header>
+        </div>
 
-        {/* Tabs & Period Switcher */}
-        <div className="px-4 sm:px-6 py-2.5 bg-[var(--canvas-subtle)] border-b border-[var(--border)] flex flex-wrap items-center justify-between gap-2 shrink-0">
-          <div className="flex items-center gap-1 bg-[var(--surface)] p-1 rounded-xl border border-[var(--border)]">
-            <button
-              type="button"
-              onClick={() => setActiveTab("early-warning")}
-              className={`touch-target px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                activeTab === "early-warning"
-                  ? "bg-[var(--primary)] text-white shadow-xs"
-                  : "text-[var(--ink-muted)] hover:text-[var(--ink)]"
-              }`}
-            >
-              <span className="flex items-center gap-1.5">
-                <AlertTriangle className="w-3.5 h-3.5" />
-                <span>Deteksi Siswa Berisiko</span>
-                {effectiveAtRisk.length > 0 && (
-                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${
-                    activeTab === "early-warning" ? "bg-white text-[var(--primary)]" : "bg-red-500 text-white"
-                  }`}>
-                    {effectiveAtRisk.length}
-                  </span>
-                )}
+        {/* Tab Navigation (Persis Kelola Daftar Siswa) */}
+        <div className="flex border-b border-[var(--border)] bg-[var(--surface)] px-4 sm:px-6 pt-2.5 sm:pt-3 gap-3 sm:gap-4 shrink-0 overflow-x-auto no-scrollbar">
+          <button
+            type="button"
+            onClick={() => setActiveTab("early-warning")}
+            className={`pb-2.5 text-xs font-semibold transition-colors border-b-2 flex items-center gap-1.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] cursor-pointer ${
+              activeTab === "early-warning"
+                ? "border-[var(--primary)] text-[var(--primary)] font-bold"
+                : "border-transparent text-[var(--ink-muted)] hover:text-[var(--ink)]"
+            }`}
+          >
+            <span>Deteksi Siswa Berisiko</span>
+            {effectiveAtRisk.length > 0 && (
+              <span className="w-5 h-5 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center font-bold">
+                {effectiveAtRisk.length}
               </span>
-            </button>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("narratives")}
+            className={`pb-2.5 text-xs font-semibold transition-colors border-b-2 flex items-center gap-1.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] cursor-pointer ${
+              activeTab === "narratives"
+                ? "border-[var(--primary)] text-[var(--primary)] font-bold"
+                : "border-transparent text-[var(--ink-muted)] hover:text-[var(--ink)]"
+            }`}
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span>Narasi Laporan &amp; WhatsApp</span>
+          </button>
+        </div>
 
-            <button
-              type="button"
-              onClick={() => setActiveTab("narratives")}
-              className={`touch-target px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                activeTab === "narratives"
-                  ? "bg-[var(--primary)] text-white shadow-xs"
-                  : "text-[var(--ink-muted)] hover:text-[var(--ink)]"
-              }`}
-            >
-              <span className="flex items-center gap-1.5">
-                <FileText className="w-3.5 h-3.5" />
-                <span>Narasi Laporan &amp; WhatsApp</span>
-              </span>
-            </button>
+        {/* Period Selector Sub-bar */}
+        <div className="px-4 sm:px-6 py-2 bg-[var(--canvas-subtle)] border-b border-[var(--border)] flex items-center justify-between text-xs shrink-0">
+          <div className="flex items-center gap-1.5 text-[var(--ink-muted)] font-medium">
+            <Calendar className="w-3.5 h-3.5" />
+            <span>Periode Analisis:</span>
           </div>
-
-          <div className="flex items-center gap-1.5">
-            <span className="text-[11px] font-semibold text-[var(--ink-muted)] flex items-center gap-1">
-              <Calendar className="w-3.5 h-3.5" />
-              <span>Periode:</span>
-            </span>
-            <select
-              value={period}
-              onChange={(e) => setPeriod(e.target.value as "month" | "semester")}
-              className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
-            >
-              <option value="month">Bulan Ini</option>
-              <option value="semester">Semester Ini</option>
-            </select>
-          </div>
+          <select
+            value={period}
+            onChange={(e) => setPeriod(e.target.value as "month" | "semester")}
+            className="text-xs font-semibold px-2.5 py-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+          >
+            <option value="month">Bulan Ini</option>
+            <option value="semester">Semester Ini</option>
+          </select>
         </div>
 
         {/* Content Body */}
