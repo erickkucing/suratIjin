@@ -76,19 +76,11 @@ export function BatchLetterScannerModal({
   onShowToast,
   aiEnabled = false,
 }: BatchLetterScannerModalProps) {
-  // Navigation & View Mode
-  const [activeScannerTab, setActiveScannerTab] = useState<"camera" | "upload" | "results">("camera");
+  // Navigation & View Mode (2 Tab Underline)
+  const [activeScannerTab, setActiveScannerTab] = useState<"picker" | "results">("picker");
   const [viewMode, setViewMode] = useState<"picker" | "review">("picker");
 
-  // In-App Live Camera State
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const [cameraActive, setCameraActive] = useState(false);
-  const [cameraLoading, setCameraLoading] = useState(false);
-  const [cameraError, setCameraError] = useState<string | null>(null);
-  const [shutterFlash, setShutterFlash] = useState(false);
-
-  // Multi-File & Multi-Shot selection state
+  // Multi-File selection state (Native Camera & Gallery Tray)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [filePreviews, setFilePreviews] = useState<Map<File, string>>(new Map());
   const [isDraggingOver, setIsDraggingOver] = useState(false);
@@ -158,67 +150,10 @@ export function BatchLetterScannerModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedFiles]);
 
-  // Camera stream controls
-  const stopCameraStream = useCallback(() => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-    setCameraActive(false);
-    setCameraLoading(false);
-  }, []);
-
-  const startCameraStream = useCallback(async () => {
-    stopCameraStream();
-    setCameraLoading(true);
-    setCameraError(null);
-
-    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
-      setCameraError("Kamera in-app tidak didukung pada browser ini. Silakan gunakan tab Unggah / Galeri.");
-      setCameraLoading(false);
-      return;
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: "environment" },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-        },
-        audio: false,
-      });
-
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play?.().catch?.(() => {});
-      }
-      setCameraActive(true);
-      setCameraLoading(false);
-    } catch (err: unknown) {
-      console.warn("[Batch Scanner] Camera access error:", err);
-      let errorMsg = "Gagal mengakses kamera. Pastikan izin kamera telah diberikan.";
-      if (err instanceof Error) {
-        if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
-          errorMsg = "Izin akses kamera ditolak. Berikan izin kamera di pengaturan browser Anda.";
-        } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
-          errorMsg = "Perangkat kamera tidak ditemukan.";
-        }
-      }
-      setCameraError(errorMsg);
-      setCameraActive(false);
-      setCameraLoading(false);
-    }
-  }, [stopCameraStream]);
-
   // Reset state on modal open
   useEffect(() => {
     if (isOpen) {
-      setActiveScannerTab("camera");
+      setActiveScannerTab("picker");
       setViewMode("picker");
       setSelectedFiles([]);
       filePreviews.forEach((url) => {
@@ -243,18 +178,6 @@ export function BatchLetterScannerModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
-  // Camera stream activation lifecycle
-  useEffect(() => {
-    if (isOpen && activeScannerTab === "camera" && viewMode === "picker" && !isProcessing && items.length === 0) {
-      startCameraStream();
-    } else {
-      stopCameraStream();
-    }
-    return () => {
-      stopCameraStream();
-    };
-  }, [isOpen, activeScannerTab, viewMode, isProcessing, items.length, startCameraStream, stopCameraStream]);
-
   // Clean up object URLs on unmount
   useEffect(() => {
     return () => {
@@ -265,9 +188,8 @@ export function BatchLetterScannerModal({
           // ignore
         }
       });
-      stopCameraStream();
     };
-  }, [filePreviews, stopCameraStream]);
+  }, [filePreviews]);
 
   // Keyboard navigation (Escape key)
   useEffect(() => {
@@ -343,53 +265,6 @@ export function BatchLetterScannerModal({
   const handleRemoveFile = (index: number) => {
     setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
   };
-
-  // Continuous Shutter Capture
-  const handleShutterCapture = useCallback(() => {
-    if (!videoRef.current || !cameraActive) return;
-    if (selectedFiles.length >= MAX_BATCH_FILES) {
-      onShowToast?.(`Maksimal ${MAX_BATCH_FILES} berkas sekaligus.`, "error");
-      return;
-    }
-
-    try {
-      const video = videoRef.current;
-      const canvas = document.createElement("canvas");
-      canvas.width = video.videoWidth || 1280;
-      canvas.height = video.videoHeight || 720;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-      // Shutter flash animation
-      setShutterFlash(true);
-      setTimeout(() => setShutterFlash(false), 120);
-
-      canvas.toBlob(
-        (blob) => {
-          if (!blob) return;
-          const photoIndex = selectedFiles.length + 1;
-          const photoFile = new File([blob], `kamera_surat_${photoIndex}_${Date.now()}.jpg`, {
-            type: "image/jpeg",
-          });
-          handleAddFiles([photoFile]);
-          onShowToast?.(`Foto ${photoIndex} berhasil ditambahkan!`, "success");
-        },
-        "image/jpeg",
-        0.88
-      );
-    } catch (err) {
-      console.warn("[Batch Scanner] Shutter capture error:", err);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cameraActive, selectedFiles.length, onShowToast]);
-
-  const handleFinishAndScan = useCallback(() => {
-    stopCameraStream();
-    handleStartScan();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stopCameraStream]);
 
   // Drag & drop handlers
   const handleDragOver = (e: React.DragEvent) => {
@@ -817,34 +692,17 @@ export function BatchLetterScannerModal({
             type="button"
             onClick={() => {
               setViewMode("picker");
-              setActiveScannerTab("camera");
+              setActiveScannerTab("picker");
             }}
             disabled={isProcessing || isSubmittingSync}
             className={`pb-2.5 text-xs font-semibold transition-colors border-b-2 flex items-center gap-1.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] cursor-pointer ${
-              activeScannerTab === "camera" && viewMode === "picker"
+              activeScannerTab === "picker" && viewMode === "picker"
                 ? "border-[var(--primary)] text-[var(--primary)] font-bold"
                 : "border-transparent text-[var(--ink-muted)] hover:text-[var(--ink)]"
             }`}
           >
             <Camera className="w-3.5 h-3.5" />
-            <span>Kamera Langsung</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setViewMode("picker");
-              setActiveScannerTab("upload");
-            }}
-            disabled={isProcessing || isSubmittingSync}
-            className={`pb-2.5 text-xs font-semibold transition-colors border-b-2 flex items-center gap-1.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] cursor-pointer ${
-              activeScannerTab === "upload" && viewMode === "picker"
-                ? "border-[var(--primary)] text-[var(--primary)] font-bold"
-                : "border-transparent text-[var(--ink-muted)] hover:text-[var(--ink)]"
-            }`}
-          >
-            <Files className="w-3.5 h-3.5" />
-            <span>Unggah / Galeri</span>
+            <span>Ambil Foto &amp; Berkas</span>
             {selectedFiles.length > 0 && (
               <span className="w-4 h-4 rounded-full bg-[var(--primary)] text-white text-[10px] flex items-center justify-center font-bold">
                 {selectedFiles.length}
@@ -964,129 +822,9 @@ export function BatchLetterScannerModal({
           )}
 
           {/* ========================================================= */}
-          {/* TAB 1: KAMERA LANGSUNG (In-App Multi-Shot Viewfinder)     */}
+          {/* TAB 1: AMBIL FOTO & BERKAS (Kamera Native HP & Galeri)   */}
           {/* ========================================================= */}
-          {activeScannerTab === "camera" && viewMode === "picker" && (
-            <div className="space-y-4">
-              {/* Viewfinder Frame */}
-              <div className="relative w-full aspect-[4/3] sm:aspect-[16/10] max-h-[48dvh] rounded-2xl bg-black overflow-hidden shadow-inner flex items-center justify-center border border-[var(--border)]">
-                {cameraLoading && (
-                  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-black/75 text-white text-xs">
-                    <Loader2 className="w-6 h-6 animate-spin text-[var(--primary)]" />
-                    <span>Menghubungkan ke kamera...</span>
-                  </div>
-                )}
-
-                {cameraError ? (
-                  <div className="p-6 text-center text-white space-y-3">
-                    <AlertTriangle className="w-8 h-8 text-amber-400 mx-auto" />
-                    <p className="text-xs text-white/90 max-w-xs">{cameraError}</p>
-                    <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => multiCameraInputRef.current?.click()}
-                        className="touch-target min-h-[52px] px-4 py-2 rounded-xl bg-[var(--primary)] text-white text-xs font-bold cursor-pointer inline-flex items-center justify-center gap-2"
-                      >
-                        Jepret Kamera
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setActiveScannerTab("upload")}
-                        className="touch-target min-h-[52px] px-4 py-2 rounded-xl border border-white/30 text-white text-xs font-bold cursor-pointer hover:bg-white/10 inline-flex items-center justify-center gap-2"
-                      >
-                        Pilih dari Berkas / Galeri
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="w-full h-full object-cover"
-                  />
-                )}
-
-                {/* Shutter flash animation overlay */}
-                {shutterFlash && (
-                  <div className="absolute inset-0 bg-white/80 animate-out fade-out duration-150 z-20 pointer-events-none" />
-                )}
-
-                {/* Viewfinder Target Guide Overlay */}
-                {cameraActive && !cameraError && (
-                  <div className="absolute inset-4 sm:inset-8 border-2 border-dashed border-white/40 rounded-xl pointer-events-none flex items-center justify-center">
-                    <span className="text-[11px] text-white/70 bg-black/50 px-2.5 py-1 rounded-full backdrop-blur-xs">
-                      Posisikan surat izin di dalam area ini
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {/* Camera Shutter & Quick Controls */}
-              <div className="flex items-center justify-between px-2 pt-1">
-                {/* Left: Thumbnail & Count */}
-                <div className="w-28 flex items-center gap-2">
-                  {selectedFiles.length > 0 && filePreviews.get(selectedFiles[selectedFiles.length - 1]) ? (
-                    <div className="relative group">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={filePreviews.get(selectedFiles[selectedFiles.length - 1])!}
-                        alt="Thumbnail terakhir"
-                        className="w-12 h-12 object-cover rounded-xl border-2 border-[var(--primary)] shadow-md"
-                      />
-                      <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-[var(--primary)] text-white text-[10px] font-black flex items-center justify-center shadow-xs">
-                        {selectedFiles.length}
-                      </span>
-                    </div>
-                  ) : selectedFiles.length > 0 ? (
-                    <span className="text-[11px] font-bold text-[var(--primary)]">{selectedFiles.length} foto</span>
-                  ) : (
-                    <span className="text-[11px] text-[var(--ink-muted)]">0 foto</span>
-                  )}
-                </div>
-
-                {/* Center: Large Shutter Button */}
-                <div className="flex justify-center">
-                  <button
-                    type="button"
-                    disabled={!cameraActive || isProcessing || selectedFiles.length >= MAX_BATCH_FILES}
-                    onClick={handleShutterCapture}
-                    className="touch-target w-16 h-16 rounded-full border-4 border-white dark:border-neutral-800 bg-[var(--primary)] hover:bg-[var(--primary-hover)] active:scale-90 shadow-2xl flex items-center justify-center cursor-pointer transition-transform disabled:opacity-40"
-                    aria-label="Ambil foto surat"
-                    title="Jepret Kamera"
-                  >
-                    <Camera className="w-7 h-7 text-white" />
-                  </button>
-                </div>
-
-                {/* Right: Selesai / Centang Button */}
-                <div className="w-28 flex justify-end">
-                  {selectedFiles.length > 0 && (
-                    <button
-                      type="button"
-                      disabled={isProcessing}
-                      onClick={handleFinishAndScan}
-                      className="touch-target px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-emerald-600/20 cursor-pointer transition-all"
-                      aria-label={`Selesai dan proses ${selectedFiles.length} berkas`}
-                    >
-                      <Check className="w-4 h-4 stroke-[2.5]" />
-                      <span>Selesai ({selectedFiles.length})</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <p className="text-center text-[11px] text-[var(--ink-muted)]">
-                Tekan tombol shutter untuk foto berkali-kali. Tekan <b>✓ Selesai</b> untuk memproses seluruh foto.
-              </p>
-            </div>
-          )}
-
-          {/* ========================================================= */}
-          {/* TAB 2: UNGGAH / GALERI                                   */}
-          {/* ========================================================= */}
-          {activeScannerTab === "upload" && viewMode === "picker" && (
+          {activeScannerTab === "picker" && viewMode === "picker" && (
             <div className="space-y-4">
               <div
                 onDragOver={handleDragOver}
@@ -1099,33 +837,33 @@ export function BatchLetterScannerModal({
                 }`}
               >
                 <div className="w-14 h-14 rounded-2xl bg-[var(--surface)] text-[var(--primary)] border border-[var(--border)] flex items-center justify-center mx-auto mb-3 shadow-xs">
-                  <Upload className="w-7 h-7" />
+                  <Camera className="w-7 h-7" />
                 </div>
                 <h3 className="text-sm sm:text-base font-bold text-[var(--ink)]">
-                  Unggah Berkas atau Foto Surat Izin
+                  Unggah atau Ambil Foto Surat Izin
                 </h3>
                 <p className="text-xs text-[var(--ink-muted)] mt-1 max-w-sm mx-auto leading-relaxed">
-                  Pilih satu atau lebih foto dari galeri HP, atau dokumen PDF surat izin dokter.
+                  Ambil foto langsung menggunakan kamera HP, atau pilih berkas foto / dokumen PDF dari galeri.
                 </p>
 
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-5">
                   <button
                     type="button"
                     disabled={isProcessing}
-                    onClick={() => multiFileInputRef.current?.click()}
+                    onClick={() => multiCameraInputRef.current?.click()}
                     className="touch-target w-full sm:w-auto min-h-[52px] px-5 py-2.5 rounded-xl bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] active:scale-98 text-xs sm:text-sm font-bold shadow-xs inline-flex items-center justify-center gap-2 cursor-pointer transition-all"
                   >
-                    <Files className="w-4 h-4 text-white" />
-                    <span>Pilih dari Berkas / Galeri</span>
+                    <Camera className="w-4 h-4 text-white" />
+                    <span>Jepret Kamera</span>
                   </button>
                   <button
                     type="button"
                     disabled={isProcessing}
-                    onClick={() => multiCameraInputRef.current?.click()}
+                    onClick={() => multiFileInputRef.current?.click()}
                     className="touch-target w-full sm:w-auto min-h-[52px] px-5 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] active:scale-98 text-xs sm:text-sm font-bold text-[var(--ink)] shadow-xs inline-flex items-center justify-center gap-2 cursor-pointer transition-all"
                   >
-                    <Camera className="w-4 h-4 text-[var(--primary)]" />
-                    <span>Jepret Kamera</span>
+                    <Files className="w-4 h-4 text-[var(--primary)]" />
+                    <span>Pilih dari Berkas / Galeri</span>
                   </button>
                 </div>
               </div>
@@ -1219,10 +957,7 @@ export function BatchLetterScannerModal({
                 <button
                   type="button"
                   disabled={isProcessing || selectedFiles.length >= MAX_BATCH_FILES}
-                  onClick={() => {
-                    setActiveScannerTab("camera");
-                    startCameraStream();
-                  }}
+                  onClick={() => multiCameraInputRef.current?.click()}
                   className="touch-target min-h-[48px] px-3 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] active:scale-98 text-xs font-bold text-[var(--ink)] shadow-xs flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-40"
                 >
                   <Camera className="w-4 h-4 text-[var(--primary)]" />
@@ -1567,7 +1302,10 @@ export function BatchLetterScannerModal({
             <>
               <button
                 type="button"
-                onClick={() => setViewMode("picker")}
+                onClick={() => {
+                  setViewMode("picker");
+                  setActiveScannerTab("picker");
+                }}
                 disabled={isSubmittingSync}
                 className="touch-target min-h-[48px] px-4 py-2.5 rounded-xl border border-[var(--border)] hover:bg-[var(--canvas-subtle)] text-xs sm:text-sm font-bold text-[var(--ink)] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
               >
