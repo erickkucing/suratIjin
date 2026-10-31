@@ -86,7 +86,7 @@ jobs:
   deploy:
     name: Deploy to Server
     needs: test-and-build
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && secrets.SERVER_HOST != ''
     runs-on: ubuntu-latest
     steps:
       - name: Execute Remote Deploy via SSH

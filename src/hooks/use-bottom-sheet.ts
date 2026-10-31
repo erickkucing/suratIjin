@@ -143,7 +143,7 @@ export function useBottomSheetGesture({
   }, [isDragging, isExpanded, offsetY, threshold, onCollapse, onClose]);
 
   const sheetStyle: React.CSSProperties = {
-    transform: offsetY > 0 ? `translateY(${offsetY}px)` : undefined,
+    transform: offsetY > 0 ? `translate3d(0, ${offsetY}px, 0)` : undefined,
     transition: isDragging ? "none" : "transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1)",
     willChange: "transform",
   };
