@@ -393,21 +393,34 @@
   }
 }
 
-.modal-bottom-sheet form,
-.modal-bottom-sheet > .overflow-y-auto,
-.modal-bottom-sheet form.overflow-y-auto {
-  min-height: 0;
-  flex: 1 1 0%;
+/* Box 1: Rigid Outer Viewport Frame (Strictly Immovable & Non-Scrollable) */
+.modal-viewport-frame {
   width: 100% !important;
   max-width: 100% !important;
-  overflow-x: clip !important;
+  overflow: hidden !important;
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+  position: relative !important;
   box-sizing: border-box !important;
+}
+
+/* Box 2: Inner Vertical Scroll Surface (Only Vertical Scrolling Allowed) */
+.modal-scroll-surface {
+  width: 100% !important;
+  max-width: 100% !important;
+  height: 100% !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
   touch-action: pan-y !important;
+  overscroll-behavior-y: contain !important;
   overscroll-behavior-x: none !important;
-  -webkit-overflow-scrolling: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  box-sizing: border-box !important;
 }
 
 @media (max-width: 639px) {
+  .modal-scroll-surface > *,
+  .modal-scroll-surface .grid > *,
   .modal-bottom-sheet form > *,
   .modal-bottom-sheet .grid > * {
     max-width: 100% !important;

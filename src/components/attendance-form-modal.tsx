@@ -107,6 +107,7 @@ export function AttendanceFormModal({
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const comboRef = useRef<HTMLDivElement>(null);
+  const formScrollRef = useRef<HTMLFormElement>(null);
   const [isComboOpen, setIsComboOpen] = useState(false);
   const [showSourceSheet, setShowSourceSheet] = useState(false);
   const [studentError, setStudentError] = useState(false);
@@ -198,6 +199,43 @@ export function AttendanceFormModal({
       }
     };
   }, [filePreviewUrl]);
+
+  // Active touch lock: block horizontal swipe at compositor level to eliminate WebKit horizontal panning
+  useEffect(() => {
+    const el = formScrollRef.current;
+    if (!el || !isOpen) return;
+
+    let startX = 0;
+    let startY = 0;
+
+    const handleNativeTouchStart = (e: TouchEvent) => {
+      if (e.touches.length > 0) {
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+      }
+    };
+
+    const handleNativeTouchMove = (e: TouchEvent) => {
+      if (e.touches.length > 0) {
+        const dx = Math.abs(e.touches[0].clientX - startX);
+        const dy = Math.abs(e.touches[0].clientY - startY);
+        // If gesture is horizontal (dx > dy and dx > 6px), block browser horizontal scroll/pan
+        if (dx > dy && dx > 6) {
+          if (e.cancelable) {
+            e.preventDefault();
+          }
+        }
+      }
+    };
+
+    el.addEventListener("touchstart", handleNativeTouchStart, { passive: true });
+    el.addEventListener("touchmove", handleNativeTouchMove, { passive: false });
+
+    return () => {
+      el.removeEventListener("touchstart", handleNativeTouchStart);
+      el.removeEventListener("touchmove", handleNativeTouchMove);
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -689,27 +727,33 @@ export function AttendanceFormModal({
           </div>
         </div>
 
-        {/* Form Body */}
-        <form
-          onSubmit={handleSubmit}
-          onScroll={(e) => {
-            if (e.currentTarget.scrollLeft !== 0) {
-              e.currentTarget.scrollLeft = 0;
-            }
-            if (!isExpanded && e.currentTarget.scrollTop > 18) {
-              setIsExpanded(true);
-            }
-          }}
-          style={{
-            overflowX: "clip",
-            touchAction: "pan-y",
-            overscrollBehaviorX: "none",
-            width: "100%",
-            maxWidth: "100%",
-            WebkitOverflowScrolling: "auto",
-          }}
-          className="w-full max-w-full min-w-0 p-4 sm:p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:pb-6 space-y-4 sm:space-y-5 overflow-y-auto min-h-0 flex-1 box-border"
-        >
+        {/* Box 1: Rigid Outer Viewport Frame (Strictly Immovable & Non-Scrollable) */}
+        <div className="modal-viewport-frame relative w-full max-w-full min-w-0 flex-1 min-h-0 overflow-hidden box-border">
+          {/* Box 2: Scrollable Form Body (Strictly Vertical Scroll Only) */}
+          <form
+            ref={formScrollRef}
+            onSubmit={handleSubmit}
+            onScroll={(e) => {
+              if (e.currentTarget.scrollLeft !== 0) {
+                e.currentTarget.scrollLeft = 0;
+              }
+              if (!isExpanded && e.currentTarget.scrollTop > 18) {
+                setIsExpanded(true);
+              }
+            }}
+            style={{
+              width: "100%",
+              maxWidth: "100%",
+              height: "100%",
+              overflowY: "auto",
+              overflowX: "hidden",
+              touchAction: "pan-y",
+              overscrollBehaviorY: "contain",
+              overscrollBehaviorX: "none",
+              WebkitOverflowScrolling: "touch",
+            }}
+            className="modal-scroll-surface w-full h-full max-w-full min-w-0 p-4 sm:p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:pb-6 space-y-4 sm:space-y-5 overflow-y-auto overflow-x-hidden min-h-0 box-border"
+          >
           {/* Hidden file inputs accessible by camera and gallery buttons */}
           <input
             ref={cameraInputRef}
@@ -1340,6 +1384,7 @@ export function AttendanceFormModal({
             </button>
           </div>
         </form>
+        </div>
       </div>
 
       {/* Mobile Bottom Sheet untuk Pilihan Kamera vs Galeri */}
