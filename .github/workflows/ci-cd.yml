@@ -45,6 +45,12 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
+      - name: Start Services for Unit Tests
+        run: |
+          sudo systemctl start redis-server || true
+          sudo systemctl start mysql || true
+          sudo mysql -e "CREATE DATABASE IF NOT EXISTS db_suratizin; CREATE USER IF NOT EXISTS 'surat_user'@'localhost' IDENTIFIED BY 'surat_pass_2026'; GRANT ALL PRIVILEGES ON db_suratizin.* TO 'surat_user'@'localhost'; FLUSH PRIVILEGES;" 2>/dev/null || true
+
       - name: Run ESLint
         run: npm run lint
 
