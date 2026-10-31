@@ -20,7 +20,8 @@
     "setup:tunnel": "scripts/setup-cloudflare-tunnel.sh",
     "test:unit": "vitest run",
     "test:ocr": "services/ocr-service/venv/bin/python services/ocr-service/test_letter_parser.py 2>/dev/null || python3 services/ocr-service/test_letter_parser.py",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:e2e:ai": "playwright test e2e/08-ai-and-ocr-extreme.spec.ts --timeout=120000"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",

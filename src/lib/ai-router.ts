@@ -294,6 +294,7 @@ Output WAJIB berupa JSON murni tanpa markdown, tanpa penjelasan di luar JSON:
         model: config.model,
         messages,
         temperature: 0.1,
+        stream: false,
       }),
       signal: controller.signal,
     });
@@ -478,6 +479,7 @@ Aturan Ketat:
         model: config.model,
         messages,
         temperature: 0.1,
+        stream: false,
       }),
       signal: controller.signal,
     });
@@ -724,6 +726,7 @@ Jika tidak ditemukan lembar surat izin sama sekali pada foto meja, kembalikan ar
         model: config.model,
         messages,
         temperature: 0.1,
+        stream: false,
       }),
       signal: controller.signal,
     });
@@ -1216,6 +1219,7 @@ Silakan susun narasi analitik profesional sesuai instruksi dan kembalikan JSON m
         model: config.model,
         messages,
         temperature: 0.2,
+        stream: false,
       }),
       signal: controller.signal,
     });
