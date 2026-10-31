@@ -86,10 +86,21 @@ jobs:
   deploy:
     name: Deploy to Server
     needs: test-and-build
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && secrets.SERVER_HOST != ''
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     steps:
+      - name: Check Deployment Secrets
+        id: check-secrets
+        run: |
+          if [ -z "${{ secrets.SERVER_HOST }}" ]; then
+            echo "has_secret=false" >> $GITHUB_OUTPUT
+            echo "Notice: SERVER_HOST secret is not configured in repository. Skipping remote SSH deploy."
+          else
+            echo "has_secret=true" >> $GITHUB_OUTPUT
+          fi
+
       - name: Execute Remote Deploy via SSH
+        if: steps.check-secrets.outputs.has_secret == 'true'
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.SERVER_HOST }}
