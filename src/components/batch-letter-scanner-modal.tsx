@@ -17,6 +17,7 @@ import {
   Sparkles,
   ArrowLeft,
   AlertTriangle,
+  RefreshCw,
 } from "lucide-react";
 import { Student } from "@/db/schema";
 import { processFileBeforeUpload } from "@/lib/client-image-compress";
@@ -43,6 +44,89 @@ export interface EditableBatchLetterItem extends BatchLetterItem {
   isSelected: boolean;
   userModified: boolean;
   needsReview: boolean;
+}
+
+export interface FileUploadState {
+  id: string;
+  file: File;
+  previewUrl: string;
+  status: "pending" | "compressing" | "uploading" | "done" | "error";
+  progress: number;
+  uploadedPath: string | null;
+  tempFileId: string | null;
+  errorMessage: string | null;
+}
+
+function uploadFileWithProgress(
+  formData: FormData,
+  onProgress: (pct: number) => void
+): Promise<{ filePath: string; tempFileId: string; mimeType?: string }> {
+  return new Promise((resolve, reject) => {
+    if (
+      typeof XMLHttpRequest !== "undefined" &&
+      typeof window !== "undefined" &&
+      process.env.NODE_ENV !== "test"
+    ) {
+      try {
+        const xhr = new XMLHttpRequest();
+        if (xhr.upload) {
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable && e.total > 0) {
+              onProgress(Math.round((e.loaded / e.total) * 100));
+            }
+          };
+        }
+        xhr.onload = () => {
+          try {
+            const data = JSON.parse(xhr.responseText);
+            if (xhr.status >= 200 && xhr.status < 300 && data.success) {
+              resolve(data);
+            } else {
+              reject(new Error(data.error || `Upload gagal (${xhr.status})`));
+            }
+          } catch {
+            reject(new Error(`Respon server tidak valid (${xhr.status})`));
+          }
+        };
+        xhr.onerror = () => {
+          fetch("/api/upload", {
+            method: "POST",
+            body: formData,
+          })
+            .then(async (res) => {
+              const data = await res.json().catch(() => null);
+              if (res.ok && data?.success) {
+                onProgress(100);
+                resolve(data);
+              } else {
+                reject(new Error(data?.error || "Upload gagal"));
+              }
+            })
+            .catch((err) => reject(err));
+        };
+        xhr.open("POST", "/api/upload");
+        xhr.send(formData);
+        return;
+      } catch {
+        // Fallback to fetch
+      }
+    }
+
+    fetch("/api/upload", {
+      method: "POST",
+      body: formData,
+    })
+      .then(async (res) => {
+        const data = await res.json().catch(() => null);
+        if (res.ok && data?.success) {
+          onProgress(100);
+          resolve(data);
+        } else {
+          reject(new Error(data?.error || "Upload gagal"));
+        }
+      })
+      .catch((err) => reject(err));
+  });
 }
 
 export interface BatchLetterScannerModalProps {
@@ -80,9 +164,11 @@ export function BatchLetterScannerModal({
   const [activeScannerTab, setActiveScannerTab] = useState<"picker" | "results">("picker");
   const [viewMode, setViewMode] = useState<"picker" | "review">("picker");
 
-  // Multi-File selection state (Native Camera & Gallery Tray)
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [filePreviews, setFilePreviews] = useState<Map<File, string>>(new Map());
+  // Multi-File per-file upload state
+  const [fileStates, setFileStates] = useState<FileUploadState[]>([]);
+  const fileStatesRef = useRef<FileUploadState[]>([]);
+  const uploadPromises = useRef<Map<string, Promise<{ filePath: string; tempFileId: string } | null>>>(new Map());
+  const hasSyncedSuccessfully = useRef(false);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
 
   // Review Drawer state
@@ -105,65 +191,61 @@ export function BatchLetterScannerModal({
   const multiFileInputRef = useRef<HTMLInputElement>(null);
   const multiCameraInputRef = useRef<HTMLInputElement>(null);
 
+  // Auto-cleanup helper for uncommitted temp uploads
+  const cleanupUploadedFiles = useCallback(async () => {
+    if (hasSyncedSuccessfully.current) return;
+    const currentFiles = fileStatesRef.current.length > 0 ? fileStatesRef.current : fileStates;
+    const pathsToClean = currentFiles
+      .filter((fs) => fs.uploadedPath)
+      .map((fs) => fs.uploadedPath!);
+
+    if (pathsToClean.length > 0) {
+      try {
+        await fetch("/api/upload/cleanup", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ filePaths: pathsToClean }),
+          keepalive: true,
+        });
+      } catch {
+        // Fallback to server background cleanup
+      }
+    }
+  }, [fileStates]);
+
+  const handleCloseModal = useCallback(() => {
+    if (isProcessing || isSubmittingSync) return;
+    cleanupUploadedFiles();
+    onClose();
+  }, [isProcessing, isSubmittingSync, cleanupUploadedFiles, onClose]);
+
   // Mobile Bottom Sheet Gesture Integration
   const { sheetRef, sheetStyle, touchHandlers } = useBottomSheetGesture({
     isOpen,
     onClose: () => {
-      if (!isProcessing && !isSubmittingSync) {
-        onClose();
-      }
+      handleCloseModal();
     },
     isExpanded,
     onExpand: () => setIsExpanded(true),
     onCollapse: () => setIsExpanded(false),
   });
 
-  // Keep thumbnail previews in sync with selectedFiles
-  useEffect(() => {
-    const nextMap = new Map<File, string>();
-    selectedFiles.forEach((file) => {
-      if (file.type.startsWith("image/")) {
-        const existing = filePreviews.get(file);
-        if (existing) {
-          nextMap.set(file, existing);
-        } else {
-          try {
-            nextMap.set(file, URL.createObjectURL(file));
-          } catch {
-            // ignore
-          }
-        }
-      }
-    });
-
-    filePreviews.forEach((url, file) => {
-      if (!nextMap.has(file)) {
-        try {
-          URL.revokeObjectURL(url);
-        } catch {
-          // ignore
-        }
-      }
-    });
-
-    setFilePreviews(nextMap);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedFiles]);
-
   // Reset state on modal open
   useEffect(() => {
     if (isOpen) {
       setActiveScannerTab("picker");
       setViewMode("picker");
-      setSelectedFiles([]);
-      filePreviews.forEach((url) => {
-        try {
-          URL.revokeObjectURL(url);
-        } catch {
-          // ignore
+      hasSyncedSuccessfully.current = false;
+      uploadPromises.current.clear();
+      fileStatesRef.current = [];
+      fileStates.forEach((fs) => {
+        if (fs.previewUrl) {
+          try {
+            URL.revokeObjectURL(fs.previewUrl);
+          } catch {}
         }
       });
-      setFilePreviews(new Map());
+      setFileStates([]);
       setItems([]);
       setIsProcessing(false);
       setProgressPercent(0);
@@ -178,18 +260,76 @@ export function BatchLetterScannerModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
-  // Clean up object URLs on unmount
+  // Trigger cleanup when isOpen turns from true to false externally
+  const prevIsOpenRef = useRef(isOpen);
+  useEffect(() => {
+    if (!isOpen && prevIsOpenRef.current) {
+      cleanupUploadedFiles();
+    }
+    prevIsOpenRef.current = isOpen;
+  }, [isOpen, cleanupUploadedFiles]);
+
+  // Clean up on component unmount
   useEffect(() => {
     return () => {
-      filePreviews.forEach((url) => {
-        try {
-          URL.revokeObjectURL(url);
-        } catch {
-          // ignore
+      if (!hasSyncedSuccessfully.current) {
+        const currentFiles = fileStatesRef.current;
+        const pathsToClean = currentFiles
+          .filter((fs) => fs.uploadedPath)
+          .map((fs) => fs.uploadedPath!);
+        if (pathsToClean.length > 0) {
+          fetch("/api/upload/cleanup", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ filePaths: pathsToClean }),
+            keepalive: true,
+          }).catch(() => {});
+        }
+      }
+      const filesToRevoke = fileStatesRef.current;
+      filesToRevoke.forEach((fs) => {
+        if (fs.previewUrl) {
+          try {
+            URL.revokeObjectURL(fs.previewUrl);
+          } catch {}
         }
       });
     };
-  }, [filePreviews]);
+  }, []);
+
+  // Browser navigation / tab closing cleanup via sendBeacon
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (!hasSyncedSuccessfully.current) {
+        const currentFiles = fileStatesRef.current;
+        const pathsToClean = currentFiles
+          .filter((fs) => fs.uploadedPath)
+          .map((fs) => fs.uploadedPath!);
+        if (pathsToClean.length > 0) {
+          const payload = JSON.stringify({ filePaths: pathsToClean });
+          if (typeof navigator !== "undefined" && navigator.sendBeacon) {
+            navigator.sendBeacon(
+              "/api/upload/cleanup",
+              new Blob([payload], { type: "application/json" })
+            );
+          } else {
+            fetch("/api/upload/cleanup", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: payload,
+              keepalive: true,
+            }).catch(() => {});
+          }
+        }
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    window.addEventListener("pagehide", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      window.removeEventListener("pagehide", handleBeforeUnload);
+    };
+  }, []);
 
   // Keyboard navigation (Escape key)
   useEffect(() => {
@@ -199,9 +339,7 @@ export function BatchLetterScannerModal({
           setActiveLightboxUrl(null);
           return;
         }
-        if (!isProcessing && !isSubmittingSync) {
-          onClose();
-        }
+        handleCloseModal();
       }
     };
     if (isOpen) {
@@ -212,7 +350,7 @@ export function BatchLetterScannerModal({
       window.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = "";
     };
-  }, [isOpen, isProcessing, isSubmittingSync, activeLightboxUrl, onClose]);
+  }, [isOpen, activeLightboxUrl, handleCloseModal]);
 
   // File validation helper
   const validateFile = (file: File): string | null => {
@@ -227,24 +365,129 @@ export function BatchLetterScannerModal({
     return null;
   };
 
+  // Auto-Upload worker function per-file
+  const startAutoUpload = async (
+    fileStateId: string,
+    file: File
+  ): Promise<{ filePath: string; tempFileId: string } | null> => {
+    setFileStates((prev) => {
+      const updated = prev.map((fs) =>
+        fs.id === fileStateId ? { ...fs, status: "compressing" as const, progress: 5 } : fs
+      );
+      fileStatesRef.current = updated;
+      return updated;
+    });
+
+    try {
+      const isPdf =
+        file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+      let fileToUpload: File = file;
+
+      if (!isPdf) {
+        const compResult = await processFileBeforeUpload(
+          file,
+          (filePct) => {
+            setFileStates((prev) => {
+              const updated = prev.map((fs) => {
+                if (fs.id !== fileStateId) return fs;
+                const overall = Math.min(40, Math.round(5 + (filePct / 100) * 35));
+                return { ...fs, progress: overall };
+              });
+              fileStatesRef.current = updated;
+              return updated;
+            });
+          },
+          { maxWidthOrHeight: 1600, quality: 0.82 }
+        );
+        fileToUpload = compResult.file;
+      }
+
+      setFileStates((prev) => {
+        const updated = prev.map((fs) =>
+          fs.id === fileStateId ? { ...fs, status: "uploading" as const, progress: isPdf ? 5 : 40 } : fs
+        );
+        fileStatesRef.current = updated;
+        return updated;
+      });
+
+      const formData = new FormData();
+      formData.append("classId", String(classId));
+      formData.append("mode", "letter_temp");
+      formData.append("file", fileToUpload);
+
+      const uploadRes = await uploadFileWithProgress(formData, (uploadPct) => {
+        setFileStates((prev) => {
+          const updated = prev.map((fs) => {
+            if (fs.id !== fileStateId) return fs;
+            const overall = isPdf
+              ? Math.min(99, Math.round(5 + (uploadPct / 100) * 94))
+              : Math.min(99, Math.round(40 + (uploadPct / 100) * 59));
+            return { ...fs, progress: overall };
+          });
+          fileStatesRef.current = updated;
+          return updated;
+        });
+      });
+
+      setFileStates((prev) => {
+        const updated = prev.map((fs) =>
+          fs.id === fileStateId
+            ? {
+                ...fs,
+                status: "done" as const,
+                progress: 100,
+                uploadedPath: uploadRes.filePath,
+                tempFileId: uploadRes.tempFileId,
+                errorMessage: null,
+              }
+            : fs
+        );
+        fileStatesRef.current = updated;
+        return updated;
+      });
+
+      return { filePath: uploadRes.filePath, tempFileId: uploadRes.tempFileId };
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : "Upload gagal";
+      setFileStates((prev) => {
+        const updated = prev.map((fs) =>
+          fs.id === fileStateId
+            ? { ...fs, status: "error" as const, errorMessage: errorMsg }
+            : fs
+        );
+        fileStatesRef.current = updated;
+        return updated;
+      });
+      return null;
+    }
+  };
+
   // Multi-File handlers
   const handleAddFiles = (newFiles: FileList | File[]) => {
     setErrorMessage(null);
-    const validToAdd: File[] = [];
+    const filesArray = Array.from(newFiles);
+    const validToAdd: Array<{ id: string; file: File; previewUrl: string }> = [];
     const errors: string[] = [];
 
-    const fileListArray = Array.from(newFiles);
+    const currentFiles = fileStatesRef.current.length > 0 ? fileStatesRef.current : fileStates;
 
-    for (const f of fileListArray) {
+    for (const f of filesArray) {
       const err = validateFile(f);
       if (err) {
         errors.push(err);
       } else {
-        const alreadyExists = selectedFiles.some(
-          (existing) => existing.name === f.name && existing.size === f.size
+        const alreadyExists = currentFiles.some(
+          (existing) => existing.file.name === f.name && existing.file.size === f.size
         );
         if (!alreadyExists) {
-          validToAdd.push(f);
+          let previewUrl = "";
+          try {
+            previewUrl = URL.createObjectURL(f);
+          } catch {
+            previewUrl = "";
+          }
+          const id = `f_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+          validToAdd.push({ id, file: f, previewUrl });
         }
       }
     }
@@ -253,17 +496,107 @@ export function BatchLetterScannerModal({
       setErrorMessage(errors[0]);
     }
 
-    const combined = [...selectedFiles, ...validToAdd];
-    if (combined.length > MAX_BATCH_FILES) {
+    if (validToAdd.length === 0) return;
+
+    const currentCount = currentFiles.length;
+    const availableSlots = MAX_BATCH_FILES - currentCount;
+    if (availableSlots <= 0) {
+      setErrorMessage(`Maksimal ${MAX_BATCH_FILES} berkas per pemindaian batch.`);
+      return;
+    }
+
+    const allowedToAdd = validToAdd.slice(0, availableSlots);
+    if (validToAdd.length > availableSlots) {
       setErrorMessage(`Maksimal ${MAX_BATCH_FILES} berkas per pemindaian batch. Beberapa berkas dipotong.`);
-      setSelectedFiles(combined.slice(0, MAX_BATCH_FILES));
-    } else {
-      setSelectedFiles(combined);
+    }
+
+    const newStates: FileUploadState[] = allowedToAdd.map((item) => ({
+      id: item.id,
+      file: item.file,
+      previewUrl: item.previewUrl,
+      status: "pending",
+      progress: 0,
+      uploadedPath: null,
+      tempFileId: null,
+      errorMessage: null,
+    }));
+
+    setFileStates((prev) => {
+      const updated = [...prev, ...newStates];
+      fileStatesRef.current = updated;
+      return updated;
+    });
+
+    allowedToAdd.forEach((item) => {
+      const p = startAutoUpload(item.id, item.file);
+      uploadPromises.current.set(item.id, p);
+    });
+  };
+
+  const handleRetryUpload = (id: string) => {
+    const currentFiles = fileStatesRef.current.length > 0 ? fileStatesRef.current : fileStates;
+    const target = currentFiles.find((fs) => fs.id === id);
+    if (!target) return;
+    const p = startAutoUpload(id, target.file);
+    uploadPromises.current.set(id, p);
+  };
+
+  const handleRemoveFile = async (id: string) => {
+    uploadPromises.current.delete(id);
+    const currentFiles = fileStatesRef.current.length > 0 ? fileStatesRef.current : fileStates;
+    const target = currentFiles.find((fs) => fs.id === id);
+    if (!target) return;
+
+    if (target.previewUrl) {
+      try {
+        URL.revokeObjectURL(target.previewUrl);
+      } catch {}
+    }
+
+    setFileStates((prev) => {
+      const updated = prev.filter((fs) => fs.id !== id);
+      fileStatesRef.current = updated;
+      return updated;
+    });
+
+    if (target.uploadedPath && !hasSyncedSuccessfully.current) {
+      try {
+        await fetch("/api/upload/cleanup", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ filePaths: [target.uploadedPath] }),
+        });
+      } catch {}
     }
   };
 
-  const handleRemoveFile = (index: number) => {
-    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
+  const handleRemoveAllFiles = async () => {
+    uploadPromises.current.clear();
+    const currentFiles = fileStatesRef.current.length > 0 ? fileStatesRef.current : fileStates;
+    const pathsToClean = currentFiles
+      .filter((fs) => fs.uploadedPath)
+      .map((fs) => fs.uploadedPath!);
+
+    currentFiles.forEach((fs) => {
+      if (fs.previewUrl) {
+        try {
+          URL.revokeObjectURL(fs.previewUrl);
+        } catch {}
+      }
+    });
+
+    setFileStates([]);
+    fileStatesRef.current = [];
+
+    if (pathsToClean.length > 0 && !hasSyncedSuccessfully.current) {
+      try {
+        await fetch("/api/upload/cleanup", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ filePaths: pathsToClean }),
+        });
+      } catch {}
+    }
   };
 
   // Drag & drop handlers
@@ -286,21 +619,22 @@ export function BatchLetterScannerModal({
   };
 
   // -------------------------------------------------------------
-  // CORE SCANNING & HYBRID AUTO-APPLY ENGINE
+  // CORE SCANNING & HYBRID AUTO-APPLY ENGINE (SSE STREAM CONSUMER)
   // -------------------------------------------------------------
   const handleStartScan = async () => {
     setErrorMessage(null);
-    const filesToProcess = selectedFiles;
 
-    if (filesToProcess.length === 0) {
+    const currentFiles = fileStatesRef.current.length > 0 ? fileStatesRef.current : fileStates;
+    if (currentFiles.length === 0) {
       setErrorMessage("Pilih atau ambil minimal 1 foto/berkas surat sebelum memulai pemindaian.");
       return;
     }
 
+    const anyUploading = currentFiles.some(
+      (fs) => fs.status === "pending" || fs.status === "compressing" || fs.status === "uploading"
+    );
+
     setIsProcessing(true);
-    setProgressPercent(0);
-    setProgressStage("compressing");
-    setProgressDetail("Mempersiapkan berkas untuk optimasi...");
     setElapsedSeconds(0);
 
     const startTime = Date.now();
@@ -309,85 +643,190 @@ export function BatchLetterScannerModal({
     }, 500);
 
     try {
-      // ---------------------------------------------------------
-      // STAGE 1: Client Compression (0% - 30%)
-      // ---------------------------------------------------------
-      const compressedFiles: File[] = [];
-      const totalFiles = filesToProcess.length;
+      if (anyUploading || uploadPromises.current.size > 0) {
+        setProgressStage("uploading");
+        setProgressDetail("Menyelesaikan unggah berkas ke server...");
+        setProgressPercent(30);
+        await Promise.allSettled(Array.from(uploadPromises.current.values()));
+      }
 
-      for (let i = 0; i < totalFiles; i++) {
-        const file = filesToProcess[i];
-        const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+      setProgressPercent(0);
+      setProgressStage("processing_ocr");
+      setProgressDetail("Menghubungkan ke pemindai OCR...");
 
-        if (isPdf) {
-          compressedFiles.push(file);
-          const stagePct = Math.round(((i + 1) / totalFiles) * 30);
-          setProgressPercent(stagePct);
-          setProgressDetail(`Memverifikasi dokumen PDF (${i + 1}/${totalFiles})...`);
+      const latestFiles = fileStatesRef.current.length > 0 ? fileStatesRef.current : currentFiles;
+      const doneStates = latestFiles.filter((fs) => fs.status === "done" && fs.uploadedPath);
+      let ocrResultData: any = null;
+
+      if (doneStates.length === latestFiles.length && doneStates.length > 0) {
+        const filePaths = doneStates.map((fs) => fs.uploadedPath!);
+        const res = await fetch("/api/ocr/letter/batch", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "text/event-stream",
+          },
+          body: JSON.stringify({
+            classId,
+            filePaths,
+            mode: "from_paths",
+          }),
+        });
+
+        const contentType = res.headers?.get?.("content-type") || "";
+
+        if (res.body && typeof res.body.getReader === "function" && contentType.includes("text/event-stream")) {
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+          const collectedItems: BatchLetterItem[] = [];
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const chunks = buffer.split("\n\n");
+            buffer = chunks.pop() || "";
+
+            for (const chunk of chunks) {
+              const lines = chunk.split("\n");
+              for (const line of lines) {
+                if (!line.startsWith("data: ")) continue;
+                const raw = line.slice(6).trim();
+                if (!raw) continue;
+
+                let event: any = null;
+                try {
+                  event = JSON.parse(raw);
+                } catch {
+                  continue;
+                }
+
+                if (event.type === "progress") {
+                  const stageFactor = event.stage === "ai_refine" ? 0.7 : 0.3;
+                  const pct = Math.min(
+                    95,
+                    Math.round(((event.fileIndex + stageFactor) / event.total) * 100)
+                  );
+                  setProgressPercent(pct);
+                  setProgressDetail(event.detail || "Memproses OCR...");
+                } else if (event.type === "file_done") {
+                  collectedItems.push(event.item);
+                  const pct = Math.min(
+                    95,
+                    Math.round(((event.fileIndex + 1) / event.total) * 100)
+                  );
+                  setProgressPercent(pct);
+                  setProgressDetail(`Berkas ${event.fileIndex + 1}/${event.total} selesai.`);
+                } else if (event.type === "complete") {
+                  ocrResultData = {
+                    success: event.success ?? true,
+                    mode: "multi_file",
+                    totalDetected: event.totalDetected ?? event.items?.length ?? collectedItems.length,
+                    allHighConfidence: event.allHighConfidence ?? false,
+                    items: event.items || collectedItems,
+                    processingTimeSeconds: event.processingTimeSeconds ?? 0,
+                  };
+                  setProgressPercent(100);
+                  setProgressDetail("Pemindaian selesai!");
+                } else if (event.type === "error") {
+                  throw new Error(event.error || "Gagal memproses berkas OCR.");
+                }
+              }
+            }
+          }
+
+          if (!ocrResultData) {
+            if (collectedItems.length > 0) {
+              const allHigh = collectedItems.every(
+                (i) => i.studentId !== null && Boolean(i.studentName) && Boolean(i.startDate) && i.matchConfidence >= 0.85
+              );
+              ocrResultData = {
+                success: true,
+                mode: "multi_file",
+                totalDetected: collectedItems.length,
+                allHighConfidence: allHigh,
+                items: collectedItems,
+                processingTimeSeconds: 0,
+              };
+            } else {
+              throw new Error("Tidak ada data respon dari stream pemindaian OCR.");
+            }
+          }
         } else {
-          setProgressDetail(`Mengompresi resolusi gambar (${i + 1}/${totalFiles})...`);
-          const compResult = await processFileBeforeUpload(
-            file,
-            (filePct) => {
-              const base = (i / totalFiles) * 30;
-              const slice = (filePct / 100) * (30 / totalFiles);
-              setProgressPercent(Math.min(30, Math.round(base + slice)));
-            },
-            { maxWidthOrHeight: 1600, quality: 0.82 }
-          );
-          compressedFiles.push(compResult.file);
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            throw new Error(data.error || "Gagal memproses pemindaian batch surat.");
+          }
+          ocrResultData = data;
+          setProgressPercent(100);
+        }
+      } else {
+        const formData = new FormData();
+        formData.append("classId", String(classId));
+        formData.append("mode", "multi_file");
+        latestFiles.forEach((fs) => formData.append("files", fs.file));
+
+        const res = await fetch("/api/ocr/letter/batch", {
+          method: "POST",
+          body: formData,
+        });
+
+        const contentType = res.headers?.get?.("content-type") || "";
+        if (res.body && typeof res.body.getReader === "function" && contentType.includes("text/event-stream")) {
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+          const collectedItems: BatchLetterItem[] = [];
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const chunks = buffer.split("\n\n");
+            buffer = chunks.pop() || "";
+
+            for (const chunk of chunks) {
+              const lines = chunk.split("\n");
+              for (const line of lines) {
+                if (!line.startsWith("data: ")) continue;
+                const raw = line.slice(6).trim();
+                if (!raw) continue;
+                try {
+                  const event = JSON.parse(raw);
+                  if (event.type === "complete") {
+                    ocrResultData = event;
+                  } else if (event.type === "file_done") {
+                    collectedItems.push(event.item);
+                  }
+                } catch {}
+              }
+            }
+          }
+
+          if (!ocrResultData && collectedItems.length > 0) {
+            ocrResultData = {
+              success: true,
+              mode: "multi_file",
+              totalDetected: collectedItems.length,
+              allHighConfidence: false,
+              items: collectedItems,
+              processingTimeSeconds: 0,
+            };
+          }
+        } else {
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            throw new Error(data.error || "Gagal memproses pemindaian batch surat.");
+          }
+          ocrResultData = data;
+          setProgressPercent(100);
         }
       }
 
-      setProgressPercent(30);
-
-      // ---------------------------------------------------------
-      // STAGE 2: Upload to Server (30% - 60%)
-      // ---------------------------------------------------------
-      setProgressStage("uploading");
-      setProgressDetail("Mengunggah berkas terkompresi ke server aman...");
-
-      const formData = new FormData();
-      formData.append("classId", String(classId));
-      formData.append("mode", "multi_file");
-      compressedFiles.forEach((f) => formData.append("files", f));
-
-      const uploadTicker = setInterval(() => {
-        setProgressPercent((p) => (p < 58 ? p + 3 : p));
-      }, 150);
-
-      const ocrFetchPromise = fetch("/api/ocr/letter/batch", {
-        method: "POST",
-        body: formData,
-      });
-
-      // ---------------------------------------------------------
-      // STAGE 3: Batch OCR Processing (60% - 100%)
-      // ---------------------------------------------------------
-      setTimeout(() => {
-        clearInterval(uploadTicker);
-        setProgressStage("processing_ocr");
-        setProgressPercent(60);
-        setProgressDetail("Mengekstrak teks surat & menyelaraskan nama siswa (AI Vision & OCR)...");
-      }, 700);
-
-      const ocrTicker = setInterval(() => {
-        setProgressPercent((p) => (p >= 60 && p < 95 ? p + 1 : p));
-      }, 350);
-
-      const ocrRes = await ocrFetchPromise;
-      clearInterval(uploadTicker);
-      clearInterval(ocrTicker);
-
-      const ocrData = await ocrRes.json();
-      if (!ocrRes.ok || !ocrData.success) {
-        throw new Error(ocrData.error || "Gagal memproses pemindaian batch surat.");
-      }
-
-      setProgressPercent(100);
-
-      // Edge case: no items detected
-      if (!ocrData.items || ocrData.items.length === 0) {
+      if (!ocrResultData || !ocrResultData.items || ocrResultData.items.length === 0) {
         setIsProcessing(false);
         setProgressStage("idle");
         setErrorMessage(
@@ -396,16 +835,14 @@ export function BatchLetterScannerModal({
         return;
       }
 
-      // ---------------------------------------------------------
-      // HYBRID AUTO-APPLY FLOW
-      // ---------------------------------------------------------
-      if (ocrData.allHighConfidence) {
+      // Hybrid auto-apply logic
+      if (ocrResultData.allHighConfidence) {
         setProgressStage("auto_applying");
         setProgressDetail("Semua surat valid (≥85%). Menyimpan otomatis ke presensi...");
 
         const syncPayload = {
           classId,
-          items: ocrData.items.map((item: BatchLetterItem) => ({
+          items: ocrResultData.items.map((item: BatchLetterItem) => ({
             tempFileId: item.tempFileId,
             studentId: item.studentId!,
             status: item.status,
@@ -430,8 +867,8 @@ export function BatchLetterScannerModal({
             throw new Error(syncData.error || "Gagal menyinkronkan data presensi otomatis.");
           }
 
-          // SUCCESS: Auto-close modal, trigger toast, and refresh dashboard
           clearInterval(timerInterval);
+          hasSyncedSuccessfully.current = true;
           setIsProcessing(false);
           setProgressStage("idle");
           onClose();
@@ -446,13 +883,12 @@ export function BatchLetterScannerModal({
           return;
         } catch (syncErr: unknown) {
           console.warn("Auto-apply sync failed, fallback to Review Drawer:", syncErr);
-          // Fallback resilience: do NOT drop items, transition to Review Drawer
           setErrorMessage(
             `Sinkronisasi otomatis gagal: ${
               syncErr instanceof Error ? syncErr.message : "Kesalahan server"
             }. Silakan tinjau dan klik Simpan & Sinkronkan manual.`
           );
-          const reviewItems: EditableBatchLetterItem[] = ocrData.items.map(
+          const reviewItems: EditableBatchLetterItem[] = ocrResultData.items.map(
             (item: BatchLetterItem, idx: number) => ({
               ...item,
               id: `item-${Date.now()}-${idx}`,
@@ -468,10 +904,8 @@ export function BatchLetterScannerModal({
         }
       }
 
-      // ---------------------------------------------------------
-      // CONDITIONAL REVIEW DRAWER (Confidence < 85% or Ambiguous)
-      // ---------------------------------------------------------
-      const reviewItems: EditableBatchLetterItem[] = ocrData.items.map(
+      // Conditional Review Drawer
+      const reviewItems: EditableBatchLetterItem[] = ocrResultData.items.map(
         (item: BatchLetterItem, idx: number) => {
           const needsReview =
             !item.studentId || item.matchConfidence < 0.85 || !item.startDate;
@@ -601,6 +1035,7 @@ export function BatchLetterScannerModal({
         throw new Error(data.error || "Gagal menyinkronkan data presensi.");
       }
 
+      hasSyncedSuccessfully.current = true;
       onClose();
       onShowToast(
         `Berhasil: ${data.updatedCount ?? 0} catatan diperbarui, ${data.createdCount ?? 0} dibuat baru`,
@@ -672,8 +1107,8 @@ export function BatchLetterScannerModal({
               </h2>
               <p className="text-xs text-[var(--ink-muted)] truncate">
                 {viewMode === "picker"
-                  ? selectedFiles.length > 0
-                    ? `${selectedFiles.length} berkas foto terpilih`
+                  ? fileStates.length > 0
+                    ? `${fileStates.length} berkas foto terpilih`
                     : "Kamera Multi-Foto & Pemindaian OCR"
                   : `${selectedCount} surat terpilih untuk disinkronkan`}
               </p>
@@ -682,7 +1117,7 @@ export function BatchLetterScannerModal({
 
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleCloseModal}
             disabled={isProcessing || isSubmittingSync}
             className="touch-target p-2 rounded-xl text-[var(--ink-muted)] hover:text-[var(--ink)] hover:bg-[var(--surface)] active:scale-95 transition-all cursor-pointer disabled:opacity-40 shrink-0 ml-2"
             aria-label="Tutup modal"
@@ -708,9 +1143,9 @@ export function BatchLetterScannerModal({
           >
             <Camera className="w-3.5 h-3.5" />
             <span>Ambil Foto &amp; Berkas</span>
-            {selectedFiles.length > 0 && (
+            {fileStates.length > 0 && (
               <span className="w-4 h-4 rounded-full bg-[var(--primary)] text-white text-[10px] flex items-center justify-center font-bold">
-                {selectedFiles.length}
+                {fileStates.length}
               </span>
             )}
           </button>
@@ -799,10 +1234,10 @@ export function BatchLetterScannerModal({
               <div className="flex items-center justify-between text-xs font-bold text-[var(--ink)]">
                 <span className="flex items-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin text-[var(--primary)]" />
-                  {progressStage === "compressing" && "Tahap 1: Kompresi Klien (0–30%)"}
-                  {progressStage === "uploading" && "Tahap 2: Pengunggahan Berkas (30–60%)"}
-                  {progressStage === "processing_ocr" && "Tahap 3: Pemindaian OCR (60–100%)"}
+                  {progressStage === "processing_ocr" && "Pemindaian OCR & AI Vision"}
                   {progressStage === "auto_applying" && "Auto-Apply: Sinkronisasi Presensi..."}
+                  {progressStage === "compressing" && "Mengompresi Berkas..."}
+                  {progressStage === "uploading" && "Mengunggah Berkas..."}
                 </span>
                 <span className="tabular-nums font-mono text-[var(--primary)] text-sm">
                   {progressPercent}%
@@ -878,15 +1313,15 @@ export function BatchLetterScannerModal({
           {/* ========================================================= */}
           {/* SHARED PHOTO COLLECTION TRAY (Muncul saat foto dipilih)   */}
           {/* ========================================================= */}
-          {viewMode === "picker" && selectedFiles.length > 0 && (
+          {viewMode === "picker" && fileStates.length > 0 && (
             <div className="space-y-3.5 pt-1 border-t border-[var(--border)]">
               <div className="flex items-center justify-between text-xs font-bold text-[var(--ink)] px-1">
                 <span>
-                  Kumpulan Foto &amp; Berkas ({selectedFiles.length}/{MAX_BATCH_FILES})
+                  Kumpulan Foto &amp; Berkas ({fileStates.length}/{MAX_BATCH_FILES})
                 </span>
                 <button
                   type="button"
-                  onClick={() => setSelectedFiles([])}
+                  onClick={handleRemoveAllFiles}
                   disabled={isProcessing}
                   className="text-[var(--status-alpa-fg)] hover:underline cursor-pointer"
                 >
@@ -896,23 +1331,22 @@ export function BatchLetterScannerModal({
 
               {/* Thumbnail Collection Grid */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-60 overflow-y-auto pr-1">
-                {selectedFiles.map((file, idx) => {
+                {fileStates.map((fs, idx) => {
                   const isPdf =
-                    file.type === "application/pdf" ||
-                    file.name.toLowerCase().endsWith(".pdf");
-                  const preview = filePreviews.get(file);
-                  const sizeMb = (file.size / (1024 * 1024)).toFixed(2);
+                    fs.file.type === "application/pdf" ||
+                    fs.file.name.toLowerCase().endsWith(".pdf");
+                  const sizeMb = (fs.file.size / (1024 * 1024)).toFixed(2);
 
                   return (
                     <div
-                      key={`${file.name}-${idx}`}
+                      key={fs.id}
                       className="relative rounded-xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden shadow-xs flex flex-col group"
                     >
                       <div className="relative aspect-4/3 bg-[var(--canvas-subtle)] flex items-center justify-center overflow-hidden">
-                        {preview ? (
+                        {fs.previewUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
-                            src={preview}
+                            src={fs.previewUrl}
                             alt={`Foto ${idx + 1}`}
                             className="w-full h-full object-cover"
                           />
@@ -929,15 +1363,55 @@ export function BatchLetterScannerModal({
                           </div>
                         )}
 
-                        <span className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded-md bg-black/60 backdrop-blur-xs text-white text-[10px] font-bold">
+                        {/* Circular Progress Ring Overlay per thumbnail */}
+                        {(fs.status === "pending" || fs.status === "compressing" || fs.status === "uploading") && (
+                          <div className="absolute inset-0 z-10 bg-black/60 backdrop-blur-xs flex flex-col items-center justify-center p-2 text-white animate-in fade-in select-none">
+                            <div className="relative w-12 h-12 flex items-center justify-center">
+                              <svg className="w-12 h-12 -rotate-90 transform" viewBox="0 0 36 36">
+                                <circle
+                                  cx="18"
+                                  cy="18"
+                                  r="15"
+                                  fill="none"
+                                  stroke="rgba(255, 255, 255, 0.25)"
+                                  strokeWidth="3"
+                                />
+                                <circle
+                                  cx="18"
+                                  cy="18"
+                                  r="15"
+                                  fill="none"
+                                  stroke="var(--primary)"
+                                  strokeWidth="3"
+                                  strokeDasharray="94.25"
+                                  strokeDashoffset={94.25 - (fs.progress / 100) * 94.25}
+                                  strokeLinecap="round"
+                                  className="transition-all duration-200"
+                                />
+                              </svg>
+                              <span className="absolute text-[11px] font-bold font-mono text-white">
+                                {fs.progress}%
+                              </span>
+                            </div>
+                            <span className="text-[10px] font-semibold mt-1 text-center text-white/95 truncate max-w-[95%]">
+                              {fs.status === "pending"
+                                ? "Menyiapkan..."
+                                : fs.status === "compressing"
+                                ? "Mengompresi..."
+                                : `Mengunggah... ${fs.progress}%`}
+                            </span>
+                          </div>
+                        )}
+
+                        <span className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded-md bg-black/60 backdrop-blur-xs text-white text-[10px] font-bold z-20">
                           #{idx + 1}
                         </span>
 
                         <button
                           type="button"
                           disabled={isProcessing}
-                          onClick={() => handleRemoveFile(idx)}
-                          className="touch-target absolute top-1.5 right-1.5 p-1.5 rounded-lg bg-black/60 hover:bg-red-600 text-white shadow-xs transition-colors cursor-pointer"
+                          onClick={() => handleRemoveFile(fs.id)}
+                          className="touch-target absolute top-1.5 right-1.5 p-1.5 rounded-lg bg-black/60 hover:bg-red-600 text-white shadow-xs transition-colors cursor-pointer z-20"
                           aria-label={`Hapus foto ${idx + 1}`}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -946,11 +1420,31 @@ export function BatchLetterScannerModal({
 
                       <div className="p-2 min-w-0">
                         <p className="text-xs font-semibold text-[var(--ink)] truncate">
-                          {file.name}
+                          {fs.file.name}
                         </p>
-                        <p className="text-[10px] text-[var(--ink-muted)]">
-                          {sizeMb} MB • {isPdf ? "PDF" : "Foto"}
-                        </p>
+                        <div className="flex items-center justify-between text-[10px] text-[var(--ink-muted)] mt-0.5">
+                          <span>
+                            {sizeMb} MB • {isPdf ? "PDF" : "Foto"}
+                          </span>
+                          {fs.status === "done" && (
+                            <span className="text-[var(--status-success-fg)] font-bold flex items-center gap-0.5">
+                              <CheckCircle2 className="w-3 h-3 text-[var(--status-success-fg)]" /> Selesai ✓
+                            </span>
+                          )}
+                          {fs.status === "error" && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRetryUpload(fs.id);
+                              }}
+                              className="text-[var(--status-alpa-fg)] hover:underline font-bold text-[10px] flex items-center gap-0.5 cursor-pointer"
+                              title={fs.errorMessage || "Gagal mengunggah. Klik untuk coba lagi."}
+                            >
+                              <RefreshCw className="w-2.5 h-2.5" /> Coba Lagi ↻
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   );
@@ -961,7 +1455,7 @@ export function BatchLetterScannerModal({
               <div className="grid grid-cols-2 gap-2 pt-1">
                 <button
                   type="button"
-                  disabled={isProcessing || selectedFiles.length >= MAX_BATCH_FILES}
+                  disabled={isProcessing || fileStates.length >= MAX_BATCH_FILES}
                   onClick={() => multiCameraInputRef.current?.click()}
                   className="touch-target min-h-[48px] px-3 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] active:scale-98 text-xs font-bold text-[var(--ink)] shadow-xs flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-40"
                 >
@@ -970,7 +1464,7 @@ export function BatchLetterScannerModal({
                 </button>
                 <button
                   type="button"
-                  disabled={isProcessing || selectedFiles.length >= MAX_BATCH_FILES}
+                  disabled={isProcessing || fileStates.length >= MAX_BATCH_FILES}
                   onClick={() => multiFileInputRef.current?.click()}
                   className="touch-target min-h-[48px] px-3 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] active:scale-98 text-xs font-bold text-[var(--ink)] shadow-xs flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-40"
                 >
@@ -980,25 +1474,38 @@ export function BatchLetterScannerModal({
               </div>
 
               {/* Prominent Submit Checkmark Button */}
-              <button
-                type="button"
-                onClick={handleStartScan}
-                disabled={isProcessing || selectedFiles.length === 0}
-                className="touch-target w-full min-h-[52px] px-5 py-3 rounded-2xl bg-[var(--primary)] hover:bg-[var(--primary-hover)] active:scale-98 text-white font-bold text-sm sm:text-base shadow-lg shadow-[var(--primary)]/25 transition-all flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-50 mt-2"
-                aria-label={`Proses dan pindai ${selectedFiles.length} berkas`}
-              >
-                {isProcessing ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    <span>Memproses ({progressPercent}%)...</span>
-                  </>
-                ) : (
-                  <>
-                    <Check className="w-5 h-5 stroke-[2.5]" />
-                    <span>✓ Proses &amp; Pindai ({selectedFiles.length} Berkas)</span>
-                  </>
-                )}
-              </button>
+              {(() => {
+                const isAnyUploading = fileStates.some(
+                  (fs) => fs.status === "pending" || fs.status === "compressing" || fs.status === "uploading"
+                );
+                const completedCount = fileStates.filter((fs) => fs.status === "done").length;
+                return (
+                  <button
+                    type="button"
+                    onClick={handleStartScan}
+                    disabled={isProcessing || fileStates.length === 0}
+                    className="touch-target w-full min-h-[52px] px-5 py-3 rounded-2xl bg-[var(--primary)] hover:bg-[var(--primary-hover)] active:scale-98 text-white font-bold text-sm sm:text-base shadow-lg shadow-[var(--primary)]/25 transition-all flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-50 mt-2"
+                    aria-label={`Proses dan pindai ${fileStates.length} berkas`}
+                  >
+                    {isProcessing ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        <span>Memproses ({progressPercent}%)...</span>
+                      </>
+                    ) : isAnyUploading ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        <span>Mengunggah Berkas ({completedCount}/{fileStates.length})...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-5 h-5 stroke-[2.5]" />
+                        <span>✓ Proses &amp; Pindai ({fileStates.length} Berkas)</span>
+                      </>
+                    )}
+                  </button>
+                );
+              })()}
             </div>
           )}
 

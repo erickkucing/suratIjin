@@ -66,15 +66,17 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const classIdStr = formData.get("classId") as string;
     const file = formData.get("file") as File | null;
+    const uploadMode = (formData.get("mode") as string) || "permanent";
 
     if (!classIdStr || !file) {
       return NextResponse.json({ error: "Data file atau kelas tidak lengkap." }, { status: 400 });
     }
 
+    const maxAllowedSize = uploadMode === "letter_temp" ? 15 * 1024 * 1024 : MAX_FILE_SIZE;
     // Hardened file size check before reading arrayBuffer
-    if (file.size > MAX_FILE_SIZE) {
+    if (file.size > maxAllowedSize) {
       return NextResponse.json(
-        { error: "Ukuran file terlalu besar. Maksimal 10 MB." },
+        { error: `Ukuran file terlalu besar. Maksimal ${uploadMode === "letter_temp" ? 15 : 10} MB.` },
         { status: 413 }
       );
     }
@@ -112,6 +114,38 @@ export async function POST(request: NextRequest) {
     }
 
     const storageBase = process.env.STORAGE_PATH || "./storage/uploads";
+
+    if (uploadMode === "letter_temp") {
+      const tempFileId = `letter_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
+      const tempDir = path.resolve(storageBase, String(classId), "temp");
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+      }
+
+      let fileName: string;
+      let mimeType: string;
+
+      if (isPdf) {
+        fileName = `${tempFileId}.pdf`;
+        fs.writeFileSync(path.resolve(tempDir, fileName), buffer);
+        mimeType = "application/pdf";
+      } else {
+        fileName = `${tempFileId}.webp`;
+        await sharp(buffer)
+          .rotate()
+          .webp({ quality: 82 })
+          .toFile(path.resolve(tempDir, fileName));
+        mimeType = "image/webp";
+      }
+
+      const relPath = `${classId}/temp/${fileName}`;
+      return NextResponse.json({
+        success: true,
+        filePath: relPath,
+        mimeType,
+        tempFileId,
+      });
+    }
 
     // File upload deduplication via SHA-256 hash (TTL: 30 days = 2592000s)
     const fileHash = crypto.createHash("sha256").update(buffer).digest("hex");

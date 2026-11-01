@@ -460,4 +460,102 @@ describe("Batch OCR Letter API Route (/api/ocr/letter/batch)", () => {
     expect(body.allHighConfidence).toBe(false);
     expect(body.items[0].studentId).toBeNull();
   });
+
+  describe("from_paths mode & SSE streaming", () => {
+    it("should process letters from pre-uploaded temporary disk paths via SSE streaming", async () => {
+      const adminUser = await db.query.users.findFirst({ where: eq(users.role, "superadmin") });
+      if (!adminUser) throw new Error("Superadmin not found");
+      const testClass = await db.query.classes.findFirst();
+      if (!testClass) throw new Error("Class not found");
+
+      const storageBase = path.resolve(process.env.STORAGE_PATH || "./storage/uploads");
+      const tempDir = path.resolve(storageBase, String(testClass.id), "temp");
+      fs.mkdirSync(tempDir, { recursive: true });
+
+      const tempFileName = `letter_test_${Date.now()}.png`;
+      const tempDiskPath = path.resolve(tempDir, tempFileName);
+      fs.writeFileSync(tempDiskPath, samplePngBuffer);
+
+      const relPath = `${testClass.id}/temp/${tempFileName}`;
+
+      const token = await createSessionToken({
+        id: adminUser.id,
+        username: adminUser.username,
+        displayName: adminUser.displayName,
+        role: adminUser.role,
+      });
+
+      const req = new Request("http://localhost:3000/api/ocr/letter/batch", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          cookie: `${SESSION_COOKIE_NAME}=${token}`,
+        },
+        body: JSON.stringify({
+          classId: testClass.id,
+          filePaths: [relPath],
+          mode: "from_paths",
+        }),
+      });
+
+      const res = await POST(req as any);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toContain("text/event-stream");
+
+      // Read SSE stream
+      const reader = res.body?.getReader();
+      expect(reader).toBeDefined();
+
+      const decoder = new TextDecoder();
+      let streamText = "";
+      while (true) {
+        const { done, value } = await reader!.read();
+        if (done) break;
+        streamText += decoder.decode(value);
+      }
+
+      expect(streamText).toContain("data: ");
+      expect(streamText).toContain('"type":"progress"');
+      expect(streamText).toContain('"type":"file_done"');
+      expect(streamText).toContain('"type":"complete"');
+
+      // Cleanup temp test file
+      if (fs.existsSync(tempDiskPath)) {
+        fs.unlinkSync(tempDiskPath);
+      }
+    });
+
+    it("should reject from_paths when path is outside class temp directory", async () => {
+      const adminUser = await db.query.users.findFirst({ where: eq(users.role, "superadmin") });
+      if (!adminUser) throw new Error("Superadmin not found");
+      const testClass = await db.query.classes.findFirst();
+      if (!testClass) throw new Error("Class not found");
+
+      const token = await createSessionToken({
+        id: adminUser.id,
+        username: adminUser.username,
+        displayName: adminUser.displayName,
+        role: adminUser.role,
+      });
+
+      const req = new Request("http://localhost:3000/api/ocr/letter/batch", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          cookie: `${SESSION_COOKIE_NAME}=${token}`,
+        },
+        body: JSON.stringify({
+          classId: testClass.id,
+          filePaths: ["../../../etc/passwd", "system/logo.png"],
+          mode: "from_paths",
+        }),
+      });
+
+      const res = await POST(req as any);
+      expect(res.status).toBe(403);
+      const body = await res.json();
+      expect(body.success).toBe(false);
+      expect(body.error).toContain("Jalur berkas tidak sah");
+    });
+  });
 });

@@ -371,14 +371,20 @@ export async function deleteTempLetterFile(
 ): Promise<boolean> {
   try {
     const storageBase = path.resolve(process.env.STORAGE_PATH || "./storage/uploads");
-    const cleanTempId = tempFileId.replace(/\.webp$/i, "").replace(/[^a-zA-Z0-9_-]/g, "");
-    const tempDiskPath = path.resolve(storageBase, String(classId), "temp", `${cleanTempId}.webp`);
+    const cleanTempId = tempFileId.replace(/\.(webp|pdf)$/i, "").replace(/[^a-zA-Z0-9_-]/g, "");
+    const webpPath = path.resolve(storageBase, String(classId), "temp", `${cleanTempId}.webp`);
+    const pdfPath = path.resolve(storageBase, String(classId), "temp", `${cleanTempId}.pdf`);
 
-    if (fs.existsSync(tempDiskPath)) {
-      fs.unlinkSync(tempDiskPath);
-      return true;
+    let deleted = false;
+    if (fs.existsSync(webpPath)) {
+      fs.unlinkSync(webpPath);
+      deleted = true;
     }
-    return false;
+    if (fs.existsSync(pdfPath)) {
+      fs.unlinkSync(pdfPath);
+      deleted = true;
+    }
+    return deleted;
   } catch (err) {
     console.warn(`[Temp Storage] Gagal menghapus berkas sementara ${tempFileId}:`, err);
     return false;
