@@ -14,6 +14,7 @@ import {
   FileCheck2,
   FileX2,
   FileDown,
+  Calendar,
 } from "lucide-react";
 import { DashboardData, AttendanceRecordWithStudent } from "@/db/queries";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -273,7 +274,7 @@ export function PortalClient({
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[var(--canvas)] text-[var(--ink)] pb-12 w-full max-w-full overflow-x-hidden">
+    <div className="min-h-screen flex flex-col bg-[var(--canvas)] text-[var(--ink)] pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] w-full max-w-full overflow-x-hidden">
       <header className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-[var(--border)] bg-[var(--surface)] shadow-xs">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -355,7 +356,7 @@ export function PortalClient({
               }}
             />
             <StatCard
-              title="Surat Belum"
+              title="Belum Ada Surat"
               count={dynamicMetrics.summary.totalSuratBelum}
               description="Menunggu kelengkapan bukti"
               accentColor="warning"
@@ -371,8 +372,9 @@ export function PortalClient({
           </div>
         </section>
 
-        <section className="card-paper p-4 rounded-2xl">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-center">
+        <section className="card-paper p-3.5 sm:p-4 rounded-2xl">
+          <div className="space-y-2.5 sm:space-y-0 sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:gap-3 sm:items-center">
+            {/* Input 1: Search */}
             <div className="relative flex items-center">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--ink-muted)] pointer-events-none" />
               <input
@@ -381,38 +383,50 @@ export function PortalClient({
                 value={filterStudent}
                 onChange={(e) => setFilterStudent(e.target.value)}
                 placeholder="Cari nama putra/putri Anda..."
-                className="w-full h-9 pl-9 pr-3 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] placeholder:text-[var(--ink-subtle)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                className="w-full h-10 sm:h-9 pl-9 pr-3 text-xs rounded-xl sm:rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] placeholder:text-[var(--ink-subtle)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
               />
             </div>
 
-            <div>
-              <input
-                type="date"
-                aria-label="Dari tanggal"
-                value={filterDateStart}
-                onChange={(e) => setFilterDateStart(e.target.value)}
-                title="Dari Tanggal"
-                className="w-full h-9 px-3 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
-              />
+            {/* Input 2 & 3: Date Range (2 Kolom Berdampingan di Mobile) */}
+            <div className="grid grid-cols-2 gap-2 sm:contents">
+              <div className="relative flex items-center">
+                <div className="absolute left-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1 pointer-events-none text-[var(--ink-muted)]">
+                  <Calendar className="w-3.5 h-3.5 shrink-0" />
+                  <span className="text-[10px] font-bold uppercase tracking-wider">Dari</span>
+                </div>
+                <input
+                  type="date"
+                  aria-label="Dari tanggal"
+                  value={filterDateStart}
+                  onChange={(e) => setFilterDateStart(e.target.value)}
+                  title="Dari Tanggal"
+                  className="w-full h-10 sm:h-9 pl-14 pr-2 text-xs rounded-xl sm:rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] [color-scheme:light_dark]"
+                />
+              </div>
+
+              <div className="relative flex items-center">
+                <div className="absolute left-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1 pointer-events-none text-[var(--ink-muted)]">
+                  <Calendar className="w-3.5 h-3.5 shrink-0" />
+                  <span className="text-[10px] font-bold uppercase tracking-wider">Sampai</span>
+                </div>
+                <input
+                  type="date"
+                  aria-label="Sampai tanggal"
+                  value={filterDateEnd}
+                  onChange={(e) => setFilterDateEnd(e.target.value)}
+                  title="Sampai Tanggal"
+                  className="w-full h-10 sm:h-9 pl-16 pr-2 text-xs rounded-xl sm:rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] [color-scheme:light_dark]"
+                />
+              </div>
             </div>
 
-            <div>
-              <input
-                type="date"
-                aria-label="Sampai tanggal"
-                value={filterDateEnd}
-                onChange={(e) => setFilterDateEnd(e.target.value)}
-                title="Sampai Tanggal"
-                className="w-full h-9 px-3 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
-              />
-            </div>
-
+            {/* Input 4: Status Select + Reset Button */}
             <div className="flex items-center gap-2">
               <select
                 aria-label="Filter status kehadiran"
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
-                className="flex-1 h-9 px-3 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                className="flex-1 h-10 sm:h-9 px-3 text-xs rounded-xl sm:rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
               >
                 <option value="Semua">Semua Status</option>
                 <option value="Izin">Izin</option>
@@ -430,7 +444,7 @@ export function PortalClient({
                     setFilterStatus("Semua");
                     setFilterLetterStatus("Semua");
                   }}
-                  className="h-9 px-3 text-xs font-semibold rounded-lg border border-[var(--border)] bg-[var(--canvas-subtle)] text-[var(--ink-muted)] hover:text-[var(--ink)] shrink-0 transition-colors"
+                  className="h-10 sm:h-9 px-3 text-xs font-bold rounded-xl sm:rounded-lg border border-[var(--border)] bg-[var(--canvas-subtle)] text-[var(--ink-muted)] hover:text-[var(--ink)] shrink-0 transition-colors cursor-pointer"
                 >
                   Reset
                 </button>
@@ -440,34 +454,53 @@ export function PortalClient({
         </section>
 
         <section className="card-paper rounded-2xl overflow-hidden">
-          <div className="p-4 border-b border-[var(--border)] flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[var(--canvas-subtle)]">
-            <div>
-              <h3 id="portal-table-heading" className="text-sm font-bold font-heading text-[var(--ink)]">
-                {viewMode === "harian"
-                  ? `Rekap Ketidakhadiran Siswa (${displayedRecords.length} Data)`
-                  : `Rekap Per Siswa (${displayedStudentRecap.length} Siswa Aktif)`}
-              </h3>
-              <span className="text-xs text-[var(--ink-muted)]">
-                {allowsLetterPhoto
-                  ? "Foto surat dapat ditinjau"
-                  : "Privasi foto surat dilindungi oleh Wali Kelas"}
-              </span>
+          <div className="p-3.5 sm:p-4 border-b border-[var(--border)] space-y-3 sm:space-y-0 sm:flex sm:items-center sm:justify-between sm:gap-3 bg-[var(--canvas-subtle)]">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <h3 id="portal-table-heading" className="text-sm font-bold font-heading text-[var(--ink)] truncate">
+                  {viewMode === "harian"
+                    ? `Rekap Ketidakhadiran Siswa (${displayedRecords.length} Data)`
+                    : `Rekap Per Siswa (${displayedStudentRecap.length} Siswa Aktif)`}
+                </h3>
+                <span className="text-[11px] sm:text-xs text-[var(--ink-muted)] block truncate">
+                  {allowsLetterPhoto
+                    ? "Foto surat dapat ditinjau"
+                    : "Privasi foto surat dilindungi oleh Wali Kelas"}
+                </span>
+              </div>
+
+              {/* Mobile Export PDF button in top header row */}
+              <button
+                type="button"
+                onClick={handleExportPdf}
+                disabled={isExportingPdf}
+                className="sm:hidden touch-target inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-xs font-bold text-[var(--ink)] shadow-2xs transition-colors cursor-pointer disabled:opacity-50 shrink-0"
+                title="Unduh laporan kehadiran format PDF"
+              >
+                {isExportingPdf ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--primary)]" />
+                ) : (
+                  <FileDown className="w-3.5 h-3.5 text-[var(--primary)]" />
+                )}
+                <span>Export PDF</span>
+              </button>
             </div>
 
-            <div className="flex items-center gap-2 self-start sm:self-center flex-wrap">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              {/* Tab Navigation: Full-width 50%-50% split on mobile, compact on desktop */}
               <div
                 role="tablist"
                 aria-label="Mode tampilan tabel"
-                className="inline-flex p-1 rounded-xl bg-[var(--surface)] border border-[var(--border)]"
+                className="grid grid-cols-2 w-full sm:w-auto sm:inline-flex p-1 rounded-xl bg-[var(--surface)] border border-[var(--border)]"
               >
                 <button
                   type="button"
                   role="tab"
                   aria-selected={viewMode === "harian"}
                   onClick={() => setViewMode("harian")}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                  className={`touch-target px-3 py-2 sm:py-1.5 rounded-lg text-xs font-semibold text-center transition-colors ${
                     viewMode === "harian"
-                      ? "bg-[var(--primary)] text-white shadow-xs"
+                      ? "bg-[var(--primary)] text-white shadow-xs font-bold"
                       : "text-[var(--ink-muted)] hover:text-[var(--ink)]"
                   }`}
                 >
@@ -478,9 +511,9 @@ export function PortalClient({
                   role="tab"
                   aria-selected={viewMode === "rapor"}
                   onClick={() => setViewMode("rapor")}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                  className={`touch-target px-3 py-2 sm:py-1.5 rounded-lg text-xs font-semibold text-center transition-colors ${
                     viewMode === "rapor"
-                      ? "bg-[var(--primary)] text-white shadow-xs"
+                      ? "bg-[var(--primary)] text-white shadow-xs font-bold"
                       : "text-[var(--ink-muted)] hover:text-[var(--ink)]"
                   }`}
                 >
@@ -488,11 +521,12 @@ export function PortalClient({
                 </button>
               </div>
 
+              {/* Desktop Export PDF button */}
               <button
                 type="button"
                 onClick={handleExportPdf}
                 disabled={isExportingPdf}
-                className="touch-target inline-flex items-center gap-1.5 px-3 py-1.5 sm:py-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-xs font-semibold text-[var(--ink)] shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                className="hidden sm:inline-flex touch-target items-center gap-1.5 px-3 py-1.5 sm:py-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-xs font-semibold text-[var(--ink)] shadow-xs transition-colors cursor-pointer disabled:opacity-50"
                 title="Unduh laporan kehadiran format PDF"
               >
                 {isExportingPdf ? (
@@ -626,9 +660,9 @@ export function PortalClient({
                         key={r.id}
                         className={`p-3.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-2xs space-y-2.5 transition-all ${statusBorderClass}`}
                       >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="space-y-0.5">
-                            <h4 className="text-sm font-bold text-[var(--ink)] leading-snug">{r.studentName}</h4>
+                        <div className="flex items-start justify-between gap-2.5">
+                          <div className="space-y-0.5 min-w-0 flex-1">
+                            <h4 className="text-sm font-bold text-[var(--ink)] leading-snug break-words">{r.studentName}</h4>
                             <div className="flex items-center gap-2 text-[11px] text-[var(--ink-muted)] flex-wrap">
                               <span className="font-semibold text-[var(--ink)]">{r.attendanceDate}</span>
                               <span>&bull;</span>
@@ -649,7 +683,7 @@ export function PortalClient({
                         </div>
 
                         {r.description && (
-                          <p className="text-xs text-[var(--ink-muted)] bg-[var(--canvas-subtle)] p-2.5 rounded-lg leading-relaxed">
+                          <p className="text-xs text-[var(--ink-muted)] bg-[var(--canvas-subtle)] p-2.5 rounded-lg leading-relaxed break-words">
                             {r.description}
                           </p>
                         )}
@@ -786,31 +820,31 @@ export function PortalClient({
                     key={st.studentId}
                     className="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-2xs space-y-2.5"
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-sm font-bold text-[var(--ink)]">
+                    <div className="flex items-start justify-between gap-2.5">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-bold text-[var(--ink)] break-words">
                           {idx + 1}. {st.name}
                         </p>
-                        <p className="text-xs text-[var(--ink-muted)]">NIS: {st.nis || "-"}</p>
+                        <p className="text-xs text-[var(--ink-muted)] font-mono">NIS: {st.nis || "-"}</p>
                       </div>
                       {st.totalAbsences === 0 ? (
-                        <span className="px-2.5 py-0.5 rounded-full bg-[var(--status-success-bg)] text-[var(--status-success-fg)] text-xs font-bold whitespace-nowrap">
+                        <span className="px-2.5 py-0.5 rounded-full bg-[var(--status-success-bg)] text-[var(--status-success-fg)] text-xs font-bold whitespace-nowrap shrink-0">
                           100%
                         </span>
                       ) : (
-                        <span className="px-2.5 py-0.5 rounded-full bg-[var(--canvas-subtle)] text-[var(--ink)] text-xs font-bold border border-[var(--border)]">
+                        <span className="px-2.5 py-0.5 rounded-full bg-[var(--canvas-subtle)] text-[var(--ink)] text-xs font-bold border border-[var(--border)] shrink-0">
                           {st.totalAbsences} Hari
                         </span>
                       )}
                     </div>
-                    <div className="grid grid-cols-3 gap-2 pt-1 text-center text-xs">
-                      <div className="p-1.5 rounded-lg bg-[var(--status-sakit-bg)] text-[var(--status-sakit-fg)] font-medium">
+                    <div className="grid grid-cols-3 gap-1.5 sm:gap-2 pt-1 text-center text-[11px] sm:text-xs">
+                      <div className="p-1.5 rounded-lg bg-[var(--status-sakit-bg)] text-[var(--status-sakit-fg)] font-medium truncate">
                         Sakit: <strong className="font-bold">{st.sakit}</strong>
                       </div>
-                      <div className="p-1.5 rounded-lg bg-[var(--status-izin-bg)] text-[var(--status-izin-fg)] font-medium">
+                      <div className="p-1.5 rounded-lg bg-[var(--status-izin-bg)] text-[var(--status-izin-fg)] font-medium truncate">
                         Izin: <strong className="font-bold">{st.izin}</strong>
                       </div>
-                      <div className="p-1.5 rounded-lg bg-[var(--status-alpa-bg)] text-[var(--status-alpa-fg)] font-medium">
+                      <div className="p-1.5 rounded-lg bg-[var(--status-alpa-bg)] text-[var(--status-alpa-fg)] font-medium truncate">
                         Alpa: <strong className="font-bold">{st.alpa}</strong>
                       </div>
                     </div>

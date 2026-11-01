@@ -44,8 +44,8 @@ export function StatCard({
       }`}
     >
       <div className="flex items-center justify-between mb-1.5 sm:mb-2">
-        <div className="flex items-center gap-1.5">
-          <span className={`w-2 h-2 rounded-full ${dotStyles[accentColor]}`} />
+        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+          <span className={`w-2 h-2 rounded-full shrink-0 ${dotStyles[accentColor]}`} />
           <span className="text-xs font-semibold text-[var(--ink-muted)] truncate">
             {title}
           </span>
