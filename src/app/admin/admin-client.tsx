@@ -4149,7 +4149,7 @@ export function AdminClient({
                 type="button"
                 disabled={applyLoading || migrationLoading}
                 onClick={handleMigrateAndApplyAllInOne}
-                className="touch-target inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs cursor-pointer disabled:opacity-50 transition-colors"
+                className="touch-target inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white text-xs font-bold shadow-xs cursor-pointer disabled:opacity-50 transition-colors"
               >
                 {applyLoading || migrationLoading ? (
                   <Loader2 className="w-4 h-4 animate-spin" />

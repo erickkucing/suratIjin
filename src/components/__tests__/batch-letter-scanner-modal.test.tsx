@@ -164,7 +164,7 @@ describe("Milestone 2 Empirical Tests: BatchLetterScannerModal & Hybrid Approval
     fireEvent.change(fileInput, { target: { files: [file] } });
 
     // Click Start Scan
-    const scanButton = screen.getByRole("button", { name: /Mulai Pindai/i });
+    const scanButton = screen.getByRole("button", { name: /Proses dan pindai/i });
     await act(async () => {
       fireEvent.click(scanButton);
       await vi.runAllTimersAsync();
@@ -267,7 +267,7 @@ describe("Milestone 2 Empirical Tests: BatchLetterScannerModal & Hybrid Approval
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
     fireEvent.change(fileInput, { target: { files: [createDummyFile("letter.jpg", "image/jpeg")] } });
 
-    const scanButton = screen.getByRole("button", { name: /Mulai Pindai/i });
+    const scanButton = screen.getByRole("button", { name: /Proses dan pindai/i });
     await act(async () => {
       fireEvent.click(scanButton);
       await vi.runAllTimersAsync();
@@ -326,7 +326,7 @@ describe("Milestone 2 Empirical Tests: BatchLetterScannerModal & Hybrid Approval
     fireEvent.change(fileInput, { target: { files: [createDummyFile("letter.jpg", "image/jpeg")] } });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /Mulai Pindai/i }));
+      fireEvent.click(screen.getByRole("button", { name: /Proses dan pindai/i }));
       await vi.runAllTimersAsync();
     });
 
@@ -361,7 +361,7 @@ describe("Milestone 2 Empirical Tests: BatchLetterScannerModal & Hybrid Approval
     fireEvent.change(fileInput, { target: { files: [createDummyFile("blank.jpg", "image/jpeg")] } });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /Mulai Pindai/i }));
+      fireEvent.click(screen.getByRole("button", { name: /Proses dan pindai/i }));
       await vi.runAllTimersAsync();
     });
 
@@ -419,7 +419,7 @@ describe("Milestone 2 Empirical Tests: BatchLetterScannerModal & Hybrid Approval
     fireEvent.change(fileInput, { target: { files: [createDummyFile("letter.jpg", "image/jpeg")] } });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /Mulai Pindai/i }));
+      fireEvent.click(screen.getByRole("button", { name: /Proses dan pindai/i }));
       await vi.runAllTimersAsync();
     });
 
@@ -484,7 +484,7 @@ describe("Milestone 2 Empirical Tests: BatchLetterScannerModal & Hybrid Approval
     fireEvent.change(fileInput, { target: { files: [createDummyFile("letter.jpg", "image/jpeg")] } });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /Mulai Pindai/i }));
+      fireEvent.click(screen.getByRole("button", { name: /Proses dan pindai/i }));
       await vi.runAllTimersAsync();
     });
 
@@ -535,7 +535,7 @@ describe("Milestone 2 Empirical Tests: BatchLetterScannerModal & Hybrid Approval
     fireEvent.change(fileInput, { target: { files: [createDummyFile("letter.jpg", "image/jpeg")] } });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /Mulai Pindai/i }));
+      fireEvent.click(screen.getByRole("button", { name: /Proses dan pindai/i }));
       await vi.runAllTimersAsync();
     });
 
@@ -601,7 +601,7 @@ describe("Milestone 2 Empirical Tests: BatchLetterScannerModal & Hybrid Approval
     fireEvent.change(fileInput, { target: { files: [createDummyFile("letter.jpg", "image/jpeg")] } });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /Mulai Pindai/i }));
+      fireEvent.click(screen.getByRole("button", { name: /Proses dan pindai/i }));
       await vi.runAllTimersAsync();
     });
 
@@ -672,13 +672,9 @@ describe("Milestone 2 Empirical Tests: BatchLetterScannerModal & Hybrid Approval
     expect(cameraButton.className).toContain("min-h-[50px]");
     expect(galleryButton.className).toContain("min-h-[50px]");
 
-    // Primary action button
-    const scanButton = screen.getByRole("button", { name: /Mulai Pindai/i });
-    expect(scanButton.className).toContain("min-h-[48px]");
-
-    // Batal button has touch-target class
-    const cancelBtn = screen.getByRole("button", { name: "Batal" });
-    expect(cancelBtn.className).toContain("touch-target");
+    // Close header button has touch-target class
+    const closeBtn = screen.getByRole("button", { name: /Tutup modal/i });
+    expect(closeBtn.className).toContain("touch-target");
 
     // Modal dialog accessibility
     const dialog = screen.getByRole("dialog");
@@ -747,7 +743,7 @@ describe("Milestone 2 Empirical Tests: BatchLetterScannerModal & Hybrid Approval
 
     renderModal();
 
-    const button = screen.getByRole("button", { name: /Batal/i });
+    const button = screen.getByRole("button", { name: /Jepret Kamera/i });
 
     // Touch event directly on button should be ignored by useBottomSheetGesture
     await act(async () => {

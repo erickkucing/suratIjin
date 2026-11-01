@@ -629,6 +629,11 @@ export function BatchLetterScannerModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="batch-scanner-title"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !isProcessing && !isSubmittingSync) {
+          onClose();
+        }
+      }}
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
     >
       <div
@@ -674,6 +679,16 @@ export function BatchLetterScannerModal({
               </p>
             </div>
           </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isProcessing || isSubmittingSync}
+            className="touch-target p-2 rounded-xl text-[var(--ink-muted)] hover:text-[var(--ink)] hover:bg-[var(--surface)] active:scale-95 transition-all cursor-pointer disabled:opacity-40 shrink-0 ml-2"
+            aria-label="Tutup modal"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         {/* Tab Navigation (Persis Kelola Daftar Siswa) */}
@@ -964,12 +979,12 @@ export function BatchLetterScannerModal({
                 </button>
               </div>
 
-              {/* Prominent Submit Green Checkmark Button */}
+              {/* Prominent Submit Checkmark Button */}
               <button
                 type="button"
                 onClick={handleStartScan}
                 disabled={isProcessing || selectedFiles.length === 0}
-                className="touch-target w-full min-h-[52px] px-5 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white font-bold text-sm sm:text-base shadow-lg shadow-emerald-600/25 transition-all flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-50 mt-2"
+                className="touch-target w-full min-h-[52px] px-5 py-3 rounded-2xl bg-[var(--primary)] hover:bg-[var(--primary-hover)] active:scale-98 text-white font-bold text-sm sm:text-base shadow-lg shadow-[var(--primary)]/25 transition-all flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-50 mt-2"
                 aria-label={`Proses dan pindai ${selectedFiles.length} berkas`}
               >
                 {isProcessing ? (
@@ -1256,73 +1271,41 @@ export function BatchLetterScannerModal({
           )}
         </div>
 
-        {/* Modal Sticky Footer */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-t border-[var(--border)] bg-[var(--surface)] shrink-0 gap-3">
-          {viewMode === "picker" ? (
-            <>
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={isProcessing}
-                className="touch-target min-h-[48px] px-4 py-2.5 rounded-xl border border-[var(--border)] hover:bg-[var(--canvas-subtle)] text-xs sm:text-sm font-bold text-[var(--ink)] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] cursor-pointer"
-              >
-                Batal
-              </button>
+        {/* Modal Sticky Footer (Hanya pada mode review) */}
+        {viewMode === "review" && (
+          <div className="flex items-center justify-between px-5 py-3.5 border-t border-[var(--border)] bg-[var(--surface)] shrink-0 gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setViewMode("picker");
+                setActiveScannerTab("picker");
+              }}
+              disabled={isSubmittingSync}
+              className="touch-target min-h-[48px] px-4 py-2.5 rounded-xl border border-[var(--border)] hover:bg-[var(--canvas-subtle)] text-xs sm:text-sm font-bold text-[var(--ink)] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+            >
+              Kembali ke Pemindai
+            </button>
 
-              <button
-                type="button"
-                onClick={handleStartScan}
-                disabled={isProcessing || selectedFiles.length === 0}
-                className="touch-target flex-1 sm:flex-initial min-h-[48px] px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm shadow-xs disabled:opacity-40 flex items-center justify-center gap-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600 cursor-pointer"
-              >
-                {isProcessing ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Memproses ({progressPercent}%)...</span>
-                  </>
-                ) : (
-                  <>
-                    <Check className="w-4 h-4 stroke-[2.5]" />
-                    <span>Mulai Pindai ({selectedFiles.length} Berkas)</span>
-                  </>
-                )}
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={() => {
-                  setViewMode("picker");
-                  setActiveScannerTab("picker");
-                }}
-                disabled={isSubmittingSync}
-                className="touch-target min-h-[48px] px-4 py-2.5 rounded-xl border border-[var(--border)] hover:bg-[var(--canvas-subtle)] text-xs sm:text-sm font-bold text-[var(--ink)] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
-              >
-                Kembali ke Pemindai
-              </button>
-
-              <button
-                type="button"
-                onClick={handleConfirmSync}
-                disabled={isSubmittingSync || selectedCount === 0}
-                className="touch-target flex-1 sm:flex-initial min-h-[48px] px-5 py-2.5 rounded-xl bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white font-bold text-xs sm:text-sm shadow-xs disabled:opacity-40 flex items-center justify-center gap-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
-              >
-                {isSubmittingSync ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Menyinkronkan Presensi...</span>
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Simpan & Sinkronkan ({selectedCount} Surat)</span>
-                  </>
-                )}
-              </button>
-            </>
-          )}
-        </div>
+            <button
+              type="button"
+              onClick={handleConfirmSync}
+              disabled={isSubmittingSync || selectedCount === 0}
+              className="touch-target flex-1 sm:flex-initial min-h-[48px] px-5 py-2.5 rounded-xl bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white font-bold text-xs sm:text-sm shadow-xs disabled:opacity-40 flex items-center justify-center gap-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+            >
+              {isSubmittingSync ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Menyinkronkan Presensi...</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Simpan & Sinkronkan ({selectedCount} Surat)</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
 
         {/* Lightbox Zoom Pop-Up Overlay */}
         {activeLightboxUrl && (

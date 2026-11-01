@@ -310,7 +310,7 @@ describe("Mobile AI Features & Usability Integration", () => {
   });
 
   describe("BatchLetterScannerModal Photo Collection Tray & Submission", () => {
-    it("updates tray to show photo item and green submit button when files are selected", async () => {
+    it("updates tray to show photo item and theme submit button when files are selected", async () => {
       render(
         <BatchLetterScannerModal
           isOpen={true}
@@ -340,7 +340,7 @@ describe("Mobile AI Features & Usability Integration", () => {
 
       const submitBtn = screen.getByRole("button", { name: /proses dan pindai 1 berkas/i });
       expect(submitBtn).toBeDefined();
-      expect(submitBtn.className).toContain("bg-emerald-600");
+      expect(submitBtn.className).toContain("bg-[var(--primary)]");
     });
   });
 
