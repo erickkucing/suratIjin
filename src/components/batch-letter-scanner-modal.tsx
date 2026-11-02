@@ -260,6 +260,13 @@ export function BatchLetterScannerModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
+  // Auto-expand modal to full height when entering review mode for comfortable review
+  useEffect(() => {
+    if (viewMode === "review") {
+      setIsExpanded(true);
+    }
+  }, [viewMode]);
+
   // Trigger cleanup when isOpen turns from true to false externally
   const prevIsOpenRef = useRef(isOpen);
   useEffect(() => {
@@ -1554,7 +1561,7 @@ export function BatchLetterScannerModal({
                   return (
                     <div
                       key={item.id}
-                      className={`p-4 rounded-2xl border transition-all ${
+                      className={`p-3.5 sm:p-5 rounded-2xl border transition-all space-y-3.5 ${
                         item.isSelected
                           ? item.needsReview
                             ? "bg-[var(--surface)] border-[var(--status-warning-border)] shadow-xs"
@@ -1562,24 +1569,53 @@ export function BatchLetterScannerModal({
                           : "bg-[var(--canvas-subtle)]/40 border-[var(--border)] opacity-60"
                       }`}
                     >
-                      <div className="flex items-start gap-3">
-                        {/* Checkbox toggle */}
-                        <div className="pt-1">
+                      {/* 1. Header Bar: Checkbox selection with accessible touch wrapper + Number + Action badge + Delete button */}
+                      <div className="flex items-center justify-between pb-2.5 border-b border-[var(--border)] gap-2">
+                        <label className="flex items-center gap-2.5 cursor-pointer min-h-[44px] -my-2 py-2 select-none group">
                           <input
                             type="checkbox"
                             checked={item.isSelected}
                             onChange={() => handleToggleItemSelection(idx)}
-                            className="touch-target w-5 h-5 rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)] cursor-pointer"
+                            className="w-5 h-5 rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)] cursor-pointer shrink-0 transition-transform active:scale-95"
                             aria-label={`Pilih surat ${item.studentName || `#${idx + 1}`}`}
                           />
-                        </div>
+                          <span className="text-xs sm:text-sm font-bold font-heading text-[var(--ink)]">
+                            Surat #{idx + 1}
+                          </span>
+                        </label>
 
-                        {/* Thumbnail image with lightbox click */}
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                              item.actionType === "update"
+                                ? "bg-[var(--status-izin-bg)] text-[var(--status-izin-fg)] border-[var(--status-izin-border)]"
+                                : "bg-[var(--status-success-bg)] text-[var(--status-success-fg)] border-[var(--status-success-border)]"
+                            }`}
+                          >
+                            {item.actionType === "update"
+                              ? `Update ${item.existingRecordId ? `#${item.existingRecordId}` : ""}`
+                              : "Catatan Baru"}
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveReviewItem(idx)}
+                            className="p-2 -mr-1.5 rounded-lg text-[var(--ink-muted)] hover:text-[var(--status-alpa-fg)] hover:bg-[var(--canvas-subtle)] transition-colors cursor-pointer"
+                            aria-label={`Hapus surat #${idx + 1} dari antrean`}
+                            title="Hapus dari antrean"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* 2. Preview Strip: Compact thumbnail + OCR Scan metadata & Quick Zoom button */}
+                      <div className="flex items-center gap-3 p-2.5 rounded-xl bg-[var(--canvas-subtle)] border border-[var(--border)]">
                         <div
                           onClick={() => {
                             if (item.previewUrl) setActiveLightboxUrl(item.previewUrl);
                           }}
-                          className="relative w-20 h-24 rounded-xl overflow-hidden bg-black/10 border border-[var(--border)] shrink-0 cursor-pointer group"
+                          className="relative w-14 h-18 sm:w-16 sm:h-20 rounded-lg overflow-hidden bg-black/10 border border-[var(--border)] shrink-0 cursor-pointer group"
                           title="Klik untuk memperbesar pratinjau"
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1588,29 +1624,13 @@ export function BatchLetterScannerModal({
                             alt={`Surat ${item.studentName || idx + 1}`}
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                           />
-                          <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity">
-                            <ZoomIn className="w-5 h-5" />
+                          <div className="absolute inset-0 bg-black/35 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity">
+                            <ZoomIn className="w-4 h-4" />
                           </div>
                         </div>
 
-                        {/* Form Inputs for Item */}
-                        <div className="flex-1 min-w-0 space-y-3">
-                          {/* Badges row */}
+                        <div className="flex-1 min-w-0 space-y-1">
                           <div className="flex flex-wrap items-center gap-1.5">
-                            {/* Action Type Badge */}
-                            <span
-                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                                item.actionType === "update"
-                                  ? "bg-[var(--status-izin-bg)] text-[var(--status-izin-fg)] border-[var(--status-izin-border)]"
-                                  : "bg-[var(--status-success-bg)] text-[var(--status-success-fg)] border-[var(--status-success-border)]"
-                              }`}
-                            >
-                              {item.actionType === "update"
-                                ? `Update Catatan ${item.existingRecordId ? `#${item.existingRecordId}` : ""}`
-                                : "Catatan Baru"}
-                            </span>
-
-                            {/* Confidence Badge */}
                             <span
                               className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                                 isHighConfidence
@@ -1622,152 +1642,164 @@ export function BatchLetterScannerModal({
                                 ? `Keyakinan ${confidencePct}%`
                                 : `Perlu Dicek (${confidencePct}%)`}
                             </span>
-
-                            {item.candidateName && !item.studentId && (
-                              <span className="text-[11px] text-[var(--ink-muted)] truncate">
-                                Terdeteksi: &quot;{item.candidateName}&quot;
-                              </span>
-                            )}
                           </div>
 
-                          {/* Student Selector */}
-                          <div>
-                            <label className="block text-[11px] font-bold text-[var(--ink-muted)] mb-1">
-                              Nama Siswa <span className="text-red-500">*</span>
-                            </label>
-                            <select
-                              value={item.studentId || 0}
-                              onChange={(e) =>
-                                handleItemFieldChange(idx, "studentId", parseInt(e.target.value, 10) || 0)
-                              }
-                              className={`touch-target min-h-[48px] w-full px-3 py-2 rounded-xl border bg-[var(--surface)] text-xs sm:text-sm font-semibold text-[var(--ink)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] ${
-                                !item.studentId
-                                  ? "border-[var(--status-alpa-border)] bg-[var(--status-alpa-bg)]/20"
-                                  : "border-[var(--border)]"
+                          {item.candidateName && !item.studentId && (
+                            <p className="text-[11px] text-[var(--ink-muted)] truncate">
+                              Terdeteksi: &quot;{item.candidateName}&quot;
+                            </p>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (item.previewUrl) setActiveLightboxUrl(item.previewUrl);
+                            }}
+                            className="text-[11px] font-semibold text-[var(--primary)] hover:underline inline-flex items-center gap-1 cursor-pointer pt-0.5"
+                          >
+                            <ZoomIn className="w-3.5 h-3.5" />
+                            <span>Perbesar Lembar Surat</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* 3. Form Body - Full-Width on Mobile, clean spacing */}
+                      <div className="space-y-3 pt-0.5">
+                        {/* Student Selector */}
+                        <div>
+                          <label className="block text-[11px] font-bold text-[var(--ink-muted)] mb-1">
+                            Nama Siswa <span className="text-red-500">*</span>
+                          </label>
+                          <select
+                            value={item.studentId || 0}
+                            onChange={(e) =>
+                              handleItemFieldChange(idx, "studentId", parseInt(e.target.value, 10) || 0)
+                            }
+                            className={`min-h-[46px] w-full px-3 py-2 rounded-xl border bg-[var(--surface)] text-xs sm:text-sm font-semibold text-[var(--ink)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] ${
+                              !item.studentId
+                                ? "border-[var(--status-alpa-border)] bg-[var(--status-alpa-bg)]/20"
+                                : "border-[var(--border)]"
+                            }`}
+                          >
+                            <option value={0}>-- Pilih Siswa Kelas --</option>
+                            {studentsList.map((st) => (
+                              <option key={st.id} value={st.id}>
+                                {st.name} {st.nis ? `(${st.nis})` : ""}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Status Pills Segmented Control (Full Width) */}
+                        <div>
+                          <label className="block text-[11px] font-bold text-[var(--ink-muted)] mb-1">
+                            Status Ketidakhadiran
+                          </label>
+                          <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-[var(--canvas-subtle)] border border-[var(--border)]">
+                            <button
+                              type="button"
+                              onClick={() => handleItemFieldChange(idx, "status", "Izin")}
+                              className={`min-h-[40px] px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                item.status === "Izin"
+                                  ? "bg-[var(--status-izin-bg)] text-[var(--status-izin-fg)] border border-[var(--status-izin-border)] shadow-xs"
+                                  : "text-[var(--ink-muted)] hover:text-[var(--ink)]"
                               }`}
                             >
-                              <option value={0}>-- Pilih Siswa Kelas --</option>
-                              {studentsList.map((st) => (
-                                <option key={st.id} value={st.id}>
-                                  {st.name} {st.nis ? `(${st.nis})` : ""}
-                                </option>
-                              ))}
-                            </select>
+                              Izin
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleItemFieldChange(idx, "status", "Sakit")}
+                              className={`min-h-[40px] px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                item.status === "Sakit"
+                                  ? "bg-[var(--status-sakit-bg)] text-[var(--status-sakit-fg)] border border-[var(--status-sakit-border)] shadow-xs"
+                                  : "text-[var(--ink-muted)] hover:text-[var(--ink)]"
+                              }`}
+                            >
+                              Sakit
+                            </button>
                           </div>
+                        </div>
 
-                          {/* Status Pill Toggle & Dates Grid */}
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            {/* Status Pills */}
-                            <div>
-                              <label className="block text-[11px] font-bold text-[var(--ink-muted)] mb-1">
-                                Status Ketidakhadiran
-                              </label>
-                              <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-[var(--canvas-subtle)] border border-[var(--border)]">
-                                <button
-                                  type="button"
-                                  onClick={() => handleItemFieldChange(idx, "status", "Izin")}
-                                  className={`touch-target min-h-[40px] px-2 py-1 rounded-lg text-xs font-bold transition-all ${
-                                    item.status === "Izin"
-                                      ? "bg-[var(--status-izin-bg)] text-[var(--status-izin-fg)] border border-[var(--status-izin-border)] shadow-xs"
-                                      : "text-[var(--ink-muted)] hover:text-[var(--ink)]"
-                                  }`}
-                                >
-                                  Izin
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleItemFieldChange(idx, "status", "Sakit")}
-                                  className={`touch-target min-h-[40px] px-2 py-1 rounded-lg text-xs font-bold transition-all ${
-                                    item.status === "Sakit"
-                                      ? "bg-[var(--status-sakit-bg)] text-[var(--status-sakit-fg)] border border-[var(--status-sakit-border)] shadow-xs"
-                                      : "text-[var(--ink-muted)] hover:text-[var(--ink)]"
-                                  }`}
-                                >
-                                  Sakit
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* Start Date */}
-                            <div>
-                              <label className="block text-[11px] font-bold text-[var(--ink-muted)] mb-1">
-                                Tanggal Mulai <span className="text-red-500">*</span>
-                              </label>
-                              <input
-                                type="date"
-                                value={item.startDate}
-                                onChange={(e) =>
-                                  handleItemFieldChange(idx, "startDate", e.target.value)
+                        {/* Multi-day toggle switch (iOS style) */}
+                        <label className="flex items-center justify-between p-2.5 sm:p-3 rounded-xl bg-[var(--canvas-subtle)] border border-[var(--border)] cursor-pointer select-none">
+                          <div className="min-w-0 pr-2">
+                            <span className="text-xs font-bold text-[var(--ink)] block">
+                              Rentang Beberapa Hari (Multi-Day)
+                            </span>
+                            <span className="text-[10px] sm:text-[11px] text-[var(--ink-muted)] block">
+                              Aktifkan jika surat izin berlaku lebih dari 1 hari
+                            </span>
+                          </div>
+                          <div className="relative inline-flex items-center shrink-0">
+                            <input
+                              type="checkbox"
+                              checked={item.isMultiDay}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                handleItemFieldChange(idx, "isMultiDay", checked);
+                                if (!checked) {
+                                  handleItemFieldChange(idx, "endDate", null);
+                                } else if (!item.endDate) {
+                                  handleItemFieldChange(idx, "endDate", item.startDate);
                                 }
-                                className="touch-target min-h-[48px] w-full px-3 py-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-xs sm:text-sm text-[var(--ink)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
-                              />
+                              }}
+                              className="sr-only peer"
+                              aria-label="Rentang Beberapa Hari (Multi-Day)"
+                            />
+                            <div className="w-11 h-6 bg-[var(--border-strong)]/60 peer-checked:bg-[var(--primary)] rounded-full transition-colors duration-200 relative">
+                              <div className="w-5 h-5 bg-white rounded-full shadow-md absolute top-0.5 left-0.5 transition-transform duration-200 peer-checked:translate-x-5" />
                             </div>
                           </div>
+                        </label>
 
-                          {/* Multi-day date range toggle */}
-                          <div className="space-y-2">
-                            <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-bold text-[var(--ink-muted)]">
-                              <input
-                                type="checkbox"
-                                checked={item.isMultiDay}
-                                onChange={(e) => {
-                                  const checked = e.target.checked;
-                                  handleItemFieldChange(idx, "isMultiDay", checked);
-                                  if (!checked) {
-                                    handleItemFieldChange(idx, "endDate", null);
-                                  } else if (!item.endDate) {
-                                    handleItemFieldChange(idx, "endDate", item.startDate);
-                                  }
-                                }}
-                                className="touch-target w-4 h-4 rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)]"
-                              />
-                              <span>Rentang Beberapa Hari (Multi-Day)</span>
-                            </label>
-
-                            {item.isMultiDay && (
-                              <div>
-                                <label className="block text-[11px] font-bold text-[var(--ink-muted)] mb-1">
-                                  Tanggal Selesai
-                                </label>
-                                <input
-                                  type="date"
-                                  value={item.endDate || item.startDate}
-                                  onChange={(e) =>
-                                    handleItemFieldChange(idx, "endDate", e.target.value)
-                                  }
-                                  className="touch-target min-h-[48px] w-full px-3 py-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-xs sm:text-sm text-[var(--ink)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
-                                />
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Description */}
-                          <div>
-                            <label className="block text-[11px] font-bold text-[var(--ink-muted)] mb-1">
-                              Alasan / Keterangan
+                        {/* Date input grid: Single full width, or 2 columns if Multi-day active */}
+                        <div className={item.isMultiDay ? "grid grid-cols-2 gap-2.5" : "w-full"}>
+                          <div className="min-w-0">
+                            <label className="block text-[11px] font-bold text-[var(--ink-muted)] mb-1 truncate">
+                              Tanggal Mulai <span className="text-red-500">*</span>
                             </label>
                             <input
-                              type="text"
-                              value={item.description}
+                              type="date"
+                              value={item.startDate}
                               onChange={(e) =>
-                                handleItemFieldChange(idx, "description", e.target.value)
+                                handleItemFieldChange(idx, "startDate", e.target.value)
                               }
-                              placeholder="Contoh: Sakit demam berdarah / Acara keluarga"
-                              className="touch-target min-h-[44px] w-full px-3 py-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-xs sm:text-sm text-[var(--ink)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
+                              className="w-full min-h-[46px] px-2.5 sm:px-3 py-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-xs sm:text-sm text-[var(--ink)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] box-border"
                             />
                           </div>
 
-                          {/* Delete Item from review */}
-                          <div className="flex justify-end pt-1">
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveReviewItem(idx)}
-                              className="text-xs text-[var(--status-alpa-fg)] hover:underline inline-flex items-center gap-1"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                              <span>Hapus dari antrean</span>
-                            </button>
-                          </div>
+                          {item.isMultiDay && (
+                            <div className="min-w-0">
+                              <label className="block text-[11px] font-bold text-[var(--ink-muted)] mb-1 truncate">
+                                Tanggal Selesai <span className="text-red-500">*</span>
+                              </label>
+                              <input
+                                type="date"
+                                value={item.endDate || item.startDate}
+                                onChange={(e) =>
+                                  handleItemFieldChange(idx, "endDate", e.target.value)
+                                }
+                                className="w-full min-h-[46px] px-2.5 sm:px-3 py-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-xs sm:text-sm text-[var(--ink)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] box-border"
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Description */}
+                        <div>
+                          <label className="block text-[11px] font-bold text-[var(--ink-muted)] mb-1">
+                            Alasan / Keterangan
+                          </label>
+                          <input
+                            type="text"
+                            value={item.description}
+                            onChange={(e) =>
+                              handleItemFieldChange(idx, "description", e.target.value)
+                            }
+                            placeholder="Contoh: Sakit demam berdarah / Acara keluarga"
+                            className="w-full min-h-[44px] px-3 py-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-xs sm:text-sm text-[var(--ink)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] box-border"
+                          />
                         </div>
                       </div>
                     </div>
@@ -1780,7 +1812,7 @@ export function BatchLetterScannerModal({
 
         {/* Modal Sticky Footer (Hanya pada mode review) */}
         {viewMode === "review" && (
-          <div className="flex items-center justify-between px-5 py-3.5 border-t border-[var(--border)] bg-[var(--surface)] shrink-0 gap-3">
+          <div className="flex items-center justify-between px-5 pt-3.5 pb-[max(0.875rem,env(safe-area-inset-bottom))] border-t border-[var(--border)] bg-[var(--surface)] shrink-0 gap-3">
             <button
               type="button"
               onClick={() => {
@@ -1788,7 +1820,7 @@ export function BatchLetterScannerModal({
                 setActiveScannerTab("picker");
               }}
               disabled={isSubmittingSync}
-              className="touch-target min-h-[48px] px-4 py-2.5 rounded-xl border border-[var(--border)] hover:bg-[var(--canvas-subtle)] text-xs sm:text-sm font-bold text-[var(--ink)] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+              className="touch-target min-h-[48px] px-4 py-2.5 rounded-xl border border-[var(--border)] hover:bg-[var(--canvas-subtle)] text-xs sm:text-sm font-bold text-[var(--ink)] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] cursor-pointer"
             >
               Kembali ke Pemindai
             </button>
@@ -1797,7 +1829,7 @@ export function BatchLetterScannerModal({
               type="button"
               onClick={handleConfirmSync}
               disabled={isSubmittingSync || selectedCount === 0}
-              className="touch-target flex-1 sm:flex-initial min-h-[48px] px-5 py-2.5 rounded-xl bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white font-bold text-xs sm:text-sm shadow-xs disabled:opacity-40 flex items-center justify-center gap-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+              className="touch-target flex-1 sm:flex-initial min-h-[48px] px-5 py-2.5 rounded-xl bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white font-bold text-xs sm:text-sm shadow-xs disabled:opacity-40 flex items-center justify-center gap-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] cursor-pointer"
             >
               {isSubmittingSync ? (
                 <>
