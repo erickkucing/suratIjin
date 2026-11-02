@@ -18,6 +18,7 @@ import {
   ArrowLeft,
   AlertTriangle,
   RefreshCw,
+  Eye,
 } from "lucide-react";
 import { Student } from "@/db/schema";
 import { processFileBeforeUpload } from "@/lib/client-image-compress";
@@ -173,7 +174,10 @@ export function BatchLetterScannerModal({
 
   // Review Drawer state
   const [items, setItems] = useState<EditableBatchLetterItem[]>([]);
-  const [activeLightboxUrl, setActiveLightboxUrl] = useState<string | null>(null);
+  const [activeLightbox, setActiveLightbox] = useState<{
+    url: string;
+    title: string;
+  } | null>(null);
 
   // Processing & Progress state
   const [isProcessing, setIsProcessing] = useState(false);
@@ -255,7 +259,7 @@ export function BatchLetterScannerModal({
       setIsSubmittingSync(false);
       setErrorMessage(null);
       setIsExpanded(false);
-      setActiveLightboxUrl(null);
+      setActiveLightbox(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
@@ -342,8 +346,8 @@ export function BatchLetterScannerModal({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        if (activeLightboxUrl) {
-          setActiveLightboxUrl(null);
+        if (activeLightbox) {
+          setActiveLightbox(null);
           return;
         }
         handleCloseModal();
@@ -357,7 +361,7 @@ export function BatchLetterScannerModal({
       window.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = "";
     };
-  }, [isOpen, activeLightboxUrl, handleCloseModal]);
+  }, [isOpen, activeLightbox, handleCloseModal]);
 
   // File validation helper
   const validateFile = (file: File): string | null => {
@@ -1522,17 +1526,17 @@ export function BatchLetterScannerModal({
           {viewMode === "review" && (
             <div className="space-y-4">
               {/* Review Summary Bar */}
-              <div className="flex flex-wrap items-center justify-between gap-2 p-3.5 rounded-2xl bg-[var(--canvas-subtle)] border border-[var(--border)]">
-                <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2 p-3 sm:p-3.5 rounded-2xl bg-[var(--canvas-subtle)] border border-[var(--border)]">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs font-bold text-[var(--ink)]">
-                    Ringkasan Hasil:
+                    Ringkasan:
                   </span>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[var(--surface)] text-[var(--ink)] border border-[var(--border)]">
-                    Total {items.length} Surat
+                  <span className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-[var(--surface)] text-[var(--ink)] border border-[var(--border)]">
+                    {items.length} Surat
                   </span>
                   {needsReviewCount > 0 && (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[var(--status-warning-bg)] text-[var(--status-warning-fg)] border border-[var(--status-warning-border)] flex items-center gap-1">
-                      <AlertTriangle className="w-3 h-3" />
+                    <span className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20 flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3 text-amber-600 dark:text-amber-400" />
                       {needsReviewCount} Perlu Dicek
                     </span>
                   )}
@@ -1545,7 +1549,7 @@ export function BatchLetterScannerModal({
                       const allSelected = items.every((i) => i.isSelected);
                       setItems((prev) => prev.map((i) => ({ ...i, isSelected: !allSelected })));
                     }}
-                    className="text-[var(--primary)] hover:underline font-semibold"
+                    className="text-[var(--primary)] hover:underline font-semibold cursor-pointer"
                   >
                     {items.every((i) => i.isSelected) ? "Batalkan Semua" : "Pilih Semua"}
                   </button>
@@ -1557,13 +1561,14 @@ export function BatchLetterScannerModal({
                 {items.map((item, idx) => {
                   const confidencePct = Math.round(item.matchConfidence * 100);
                   const isHighConfidence = item.matchConfidence >= 0.85 && item.studentId !== null;
+                  const isMatched = item.studentId !== null && item.studentId > 0;
 
                   return (
                     <div
                       key={item.id}
-                      className={`p-3.5 sm:p-5 rounded-2xl border transition-all space-y-3.5 ${
+                      className={`p-3.5 sm:p-5 rounded-2xl border transition-all space-y-3.5 w-full max-w-full overflow-hidden ${
                         item.isSelected
-                          ? item.needsReview
+                          ? !isMatched
                             ? "bg-[var(--surface)] border-[var(--status-warning-border)] shadow-xs"
                             : "bg-[var(--surface)] border-[var(--border)] shadow-xs"
                           : "bg-[var(--canvas-subtle)]/40 border-[var(--border)] opacity-60"
@@ -1586,14 +1591,14 @@ export function BatchLetterScannerModal({
 
                         <div className="flex items-center gap-2">
                           <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
                               item.actionType === "update"
                                 ? "bg-[var(--status-izin-bg)] text-[var(--status-izin-fg)] border-[var(--status-izin-border)]"
-                                : "bg-[var(--status-success-bg)] text-[var(--status-success-fg)] border-[var(--status-success-border)]"
+                                : "bg-[var(--surface)] text-[var(--ink-muted)] border-[var(--border)]"
                             }`}
                           >
                             {item.actionType === "update"
-                              ? `Update ${item.existingRecordId ? `#${item.existingRecordId}` : ""}`
+                              ? `Update #${item.existingRecordId || ""}`
                               : "Catatan Baru"}
                           </span>
 
@@ -1609,56 +1614,84 @@ export function BatchLetterScannerModal({
                         </div>
                       </div>
 
-                      {/* 2. Preview Strip: Compact thumbnail + OCR Scan metadata & Quick Zoom button */}
-                      <div className="flex items-center gap-3 p-2.5 rounded-xl bg-[var(--canvas-subtle)] border border-[var(--border)]">
+                      {/* 2. Compact Preview Strip: Strictly Constrained 64x64px Thumbnail + OCR info + Lightbox trigger */}
+                      <div className="flex items-center gap-3 p-2.5 rounded-xl bg-[var(--canvas-subtle)] border border-[var(--border)] w-full overflow-hidden">
+                        {/* Guaranteed Fixed-Size Thumbnail Container */}
                         <div
                           onClick={() => {
-                            if (item.previewUrl) setActiveLightboxUrl(item.previewUrl);
+                            if (item.previewUrl) {
+                              setActiveLightbox({
+                                url: item.previewUrl,
+                                title: `Surat #${idx + 1}${item.studentName ? ` • ${item.studentName}` : ""}`,
+                              });
+                            }
                           }}
-                          className="relative w-14 h-18 sm:w-16 sm:h-20 rounded-lg overflow-hidden bg-black/10 border border-[var(--border)] shrink-0 cursor-pointer group"
-                          title="Klik untuk memperbesar pratinjau"
+                          className="relative w-16 h-16 min-w-[64px] min-h-[64px] max-w-[64px] max-h-[64px] rounded-xl overflow-hidden bg-black/10 border border-[var(--border)] shrink-0 cursor-pointer group shadow-2xs"
+                          title="Klik untuk membuka pratinjau surat layar penuh"
                         >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={item.previewUrl}
-                            alt={`Surat ${item.studentName || idx + 1}`}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                          />
+                          {item.previewUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={item.previewUrl}
+                              alt={`Pratinjau Surat #${idx + 1}`}
+                              width={64}
+                              height={64}
+                              className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform"
+                            />
+                          ) : (
+                            <div className="absolute inset-0 flex items-center justify-center text-[var(--ink-muted)]">
+                              <FileText className="w-6 h-6" />
+                            </div>
+                          )}
                           <div className="absolute inset-0 bg-black/35 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity">
                             <ZoomIn className="w-4 h-4" />
                           </div>
                         </div>
 
+                        {/* OCR Info & Clear Action Button */}
                         <div className="flex-1 min-w-0 space-y-1">
                           <div className="flex flex-wrap items-center gap-1.5">
                             <span
-                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold border ${
                                 isHighConfidence
-                                  ? "bg-[var(--status-success-bg)] text-[var(--status-success-fg)] border-[var(--status-success-border)]"
-                                  : "bg-[var(--status-warning-bg)] text-[var(--status-warning-fg)] border-[var(--status-warning-border)]"
+                                  ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20"
+                                  : "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20"
                               }`}
                             >
-                              {isHighConfidence
-                                ? `Keyakinan ${confidencePct}%`
-                                : `Perlu Dicek (${confidencePct}%)`}
+                              {isHighConfidence ? (
+                                <>
+                                  <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                  <span>Cocok ({confidencePct}%)</span>
+                                </>
+                              ) : (
+                                <>
+                                  <AlertTriangle className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" />
+                                  <span>Perlu Dicek ({confidencePct}%)</span>
+                                </>
+                              )}
                             </span>
                           </div>
 
-                          {item.candidateName && !item.studentId && (
+                          {item.candidateName && (
                             <p className="text-[11px] text-[var(--ink-muted)] truncate">
-                              Terdeteksi: &quot;{item.candidateName}&quot;
+                              {`Terdeteksi: "${item.candidateName}"`}
                             </p>
                           )}
 
                           <button
                             type="button"
                             onClick={() => {
-                              if (item.previewUrl) setActiveLightboxUrl(item.previewUrl);
+                              if (item.previewUrl) {
+                                setActiveLightbox({
+                                  url: item.previewUrl,
+                                  title: `Surat #${idx + 1}${item.studentName ? ` • ${item.studentName}` : ""}`,
+                                });
+                              }
                             }}
-                            className="text-[11px] font-semibold text-[var(--primary)] hover:underline inline-flex items-center gap-1 cursor-pointer pt-0.5"
+                            className="touch-target inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] text-xs font-semibold text-[var(--ink)] transition-colors shadow-2xs active:scale-95 cursor-pointer mt-0.5"
                           >
-                            <ZoomIn className="w-3.5 h-3.5" />
-                            <span>Perbesar Lembar Surat</span>
+                            <Eye className="w-3.5 h-3.5 text-[var(--ink-muted)] shrink-0" />
+                            <span>Lihat Dokumen</span>
                           </button>
                         </div>
                       </div>
@@ -1765,7 +1798,7 @@ export function BatchLetterScannerModal({
                               onChange={(e) =>
                                 handleItemFieldChange(idx, "startDate", e.target.value)
                               }
-                              className="w-full min-h-[46px] px-2.5 sm:px-3 py-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-xs sm:text-sm text-[var(--ink)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] box-border"
+                              className="w-full min-h-[46px] px-2.5 sm:px-3 py-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-xs sm:text-sm text-[var(--ink)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] box-border [color-scheme:light_dark]"
                             />
                           </div>
 
@@ -1780,7 +1813,7 @@ export function BatchLetterScannerModal({
                                 onChange={(e) =>
                                   handleItemFieldChange(idx, "endDate", e.target.value)
                                 }
-                                className="w-full min-h-[46px] px-2.5 sm:px-3 py-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-xs sm:text-sm text-[var(--ink)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] box-border"
+                                className="w-full min-h-[46px] px-2.5 sm:px-3 py-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-xs sm:text-sm text-[var(--ink)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] box-border [color-scheme:light_dark]"
                               />
                             </div>
                           )}
@@ -1847,36 +1880,51 @@ export function BatchLetterScannerModal({
         )}
 
         {/* Lightbox Zoom Pop-Up Overlay */}
-        {activeLightboxUrl && (
+        {activeLightbox && (
           <div
-            onClick={() => setActiveLightboxUrl(null)}
-            className="fixed inset-0 z-60 bg-black/85 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in"
+            role="dialog"
+            aria-modal="true"
+            aria-label={activeLightbox.title}
+            onClick={() => setActiveLightbox(null)}
+            className="fixed inset-0 z-70 bg-black/90 backdrop-blur-md flex flex-col items-center justify-between p-3 sm:p-5 animate-in fade-in select-none"
           >
+            {/* Lightbox Header Bar */}
             <div
               onClick={(e) => e.stopPropagation()}
-              className="relative max-w-2xl max-h-[90vh] bg-[var(--surface)] rounded-2xl overflow-hidden border border-[var(--border)] shadow-2xl flex flex-col"
+              className="w-full max-w-2xl flex items-center justify-between py-2 px-3 sm:px-4 rounded-xl bg-white/10 text-white backdrop-blur-md border border-white/15 shrink-0 z-10"
             >
-              <div className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--border)] bg-[var(--surface)]">
-                <span className="text-xs font-bold text-[var(--ink)]">
-                  Pratinjau Lembar Surat
+              <div className="flex items-center gap-2 min-w-0 pr-2">
+                <FileText className="w-4 h-4 text-white/80 shrink-0" />
+                <span className="text-xs sm:text-sm font-semibold truncate">
+                  {activeLightbox.title}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => setActiveLightboxUrl(null)}
-                  className="touch-target p-1.5 rounded-lg text-[var(--ink-muted)] hover:text-[var(--ink)] hover:bg-[var(--canvas-subtle)]"
-                  aria-label="Tutup pratinjau"
-                >
-                  <X className="w-5 h-5" />
-                </button>
               </div>
-              <div className="p-2 overflow-auto max-h-[80vh] flex items-center justify-center bg-black/5">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={activeLightboxUrl}
-                  alt="Dokumen Surat Zoom"
-                  className="max-w-full max-h-[75vh] object-contain rounded-lg"
-                />
-              </div>
+              <button
+                type="button"
+                onClick={() => setActiveLightbox(null)}
+                className="touch-target p-2 -mr-1 rounded-lg text-white/80 hover:text-white hover:bg-white/15 transition-colors cursor-pointer"
+                aria-label="Tutup pratinjau surat"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Lightbox Image Container */}
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="flex-1 w-full max-w-2xl flex items-center justify-center p-2 min-h-0 overflow-hidden"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={activeLightbox.url}
+                alt={activeLightbox.title}
+                className="max-w-full max-h-[78vh] object-contain rounded-xl shadow-2xl transition-transform"
+              />
+            </div>
+
+            {/* Lightbox Footer Instruction Hint */}
+            <div className="text-[11px] text-white/60 text-center pb-1">
+              Ketuk di luar gambar atau tombol silang untuk kembali
             </div>
           </div>
         )}

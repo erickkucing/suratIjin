@@ -759,4 +759,70 @@ describe("Milestone 2 Empirical Tests: BatchLetterScannerModal & Hybrid Approval
 
     expect(mockOnClose).not.toHaveBeenCalled();
   });
+
+  it("4.5 [Lightbox Pop-up & Compact Mobile Thumbnail] opens full-screen lightbox on thumbnail or 'Lihat Dokumen' click and dismisses cleanly", async () => {
+    const ocrResponse = {
+      success: true,
+      mode: "multi_file",
+      totalDetected: 1,
+      allHighConfidence: false,
+      items: [
+        {
+          tempFileId: "tmp-letter-lightbox",
+          previewUrl: "blob:http://localhost/letter-lightbox.webp",
+          studentId: 1,
+          studentName: "Adrian Moniaga",
+          candidateName: "Adrian Moniaga",
+          matchConfidence: 0.95,
+          status: "Izin",
+          startDate: "2026-11-02",
+          endDate: null,
+          isMultiDay: false,
+          description: "Surat dinas",
+          actionType: "create",
+          existingRecordId: null,
+        },
+      ],
+      processingTimeSeconds: 0.7,
+    };
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ocrResponse,
+    });
+    globalThis.fetch = fetchMock;
+
+    renderModal();
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(fileInput, { target: { files: [createDummyFile("letter.jpg", "image/jpeg")] } });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Proses dan pindai/i }));
+      await vi.runAllTimersAsync();
+    });
+
+    // 1. Verify thumbnail is strictly rendered
+    const thumbnailImg = screen.getByAltText(/Pratinjau Surat #1/i);
+    expect(thumbnailImg).toBeDefined();
+
+    // 2. Click "Lihat Dokumen" button
+    const lihatDocBtn = screen.getByRole("button", { name: /Lihat Dokumen/i });
+    await act(async () => {
+      fireEvent.click(lihatDocBtn);
+    });
+
+    // 3. Verify Lightbox dialog appears
+    const lightboxDialog = screen.getByRole("dialog", { name: /Surat #1 • Adrian Moniaga/i });
+    expect(lightboxDialog).toBeDefined();
+
+    // 4. Close lightbox via X button
+    const closeLightboxBtn = screen.getByRole("button", { name: /Tutup pratinjau surat/i });
+    await act(async () => {
+      fireEvent.click(closeLightboxBtn);
+    });
+
+    // 5. Verify lightbox closed
+    expect(screen.queryByRole("dialog", { name: /Surat #1 • Adrian Moniaga/i })).toBeNull();
+  });
 });
