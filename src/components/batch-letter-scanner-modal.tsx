@@ -1511,7 +1511,7 @@ export function BatchLetterScannerModal({
                     ) : (
                       <>
                         <Check className="w-5 h-5 stroke-[2.5]" />
-                        <span>✓ Proses &amp; Pindai ({fileStates.length} Berkas)</span>
+                        <span>Proses &amp; Pindai ({fileStates.length} Berkas)</span>
                       </>
                     )}
                   </button>
@@ -1845,7 +1845,7 @@ export function BatchLetterScannerModal({
 
         {/* Modal Sticky Footer (Hanya pada mode review) */}
         {viewMode === "review" && (
-          <div className="flex items-center justify-between px-5 pt-3.5 pb-[max(0.875rem,env(safe-area-inset-bottom))] border-t border-[var(--border)] bg-[var(--surface)] shrink-0 gap-3">
+          <div className="flex items-center justify-between px-4 sm:px-5 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] border-t border-[var(--border)] bg-[var(--surface)] shrink-0 gap-2.5 sm:gap-3">
             <button
               type="button"
               onClick={() => {
@@ -1853,26 +1853,28 @@ export function BatchLetterScannerModal({
                 setActiveScannerTab("picker");
               }}
               disabled={isSubmittingSync}
-              className="touch-target min-h-[48px] px-4 py-2.5 rounded-xl border border-[var(--border)] hover:bg-[var(--canvas-subtle)] text-xs sm:text-sm font-bold text-[var(--ink)] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] cursor-pointer"
+              aria-label="Batal dan kembali ke pemindai"
+              className="touch-target min-h-[50px] h-[50px] px-5 rounded-2xl border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--canvas-subtle)] active:scale-98 text-xs sm:text-sm font-bold text-[var(--ink)] transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] cursor-pointer shrink-0 flex items-center justify-center shadow-2xs"
             >
-              Kembali ke Pemindai
+              Batal
             </button>
 
             <button
               type="button"
               onClick={handleConfirmSync}
               disabled={isSubmittingSync || selectedCount === 0}
-              className="touch-target flex-1 sm:flex-initial min-h-[48px] px-5 py-2.5 rounded-xl bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white font-bold text-xs sm:text-sm shadow-xs disabled:opacity-40 flex items-center justify-center gap-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] cursor-pointer"
+              aria-label={`Simpan & Sinkronkan (${selectedCount} Surat)`}
+              className="touch-target flex-1 min-h-[50px] h-[50px] px-4 sm:px-5 rounded-2xl bg-[var(--primary)] hover:bg-[var(--primary-hover)] active:scale-98 text-white font-bold text-xs sm:text-sm shadow-md shadow-[var(--primary)]/20 disabled:opacity-40 flex items-center justify-center gap-2 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)] cursor-pointer whitespace-nowrap min-w-0"
             >
               {isSubmittingSync ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Menyinkronkan Presensi...</span>
+                  <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                  <span className="truncate">Menyimpan Presensi...</span>
                 </>
               ) : (
                 <>
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Simpan & Sinkronkan ({selectedCount} Surat)</span>
+                  <Check className="w-4 h-4 stroke-[2.5] shrink-0" />
+                  <span className="truncate">Simpan ({selectedCount} Surat)</span>
                 </>
               )}
             </button>
