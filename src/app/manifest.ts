@@ -76,7 +76,7 @@ export default async function manifest(): Promise<MetadataRoute.Manifest> {
     start_url: "/",
     display: "standalone",
     orientation: "any",
-    background_color: "#FDFBF7",
+    background_color: "#B54826",
     theme_color: "#B54826",
     icons,
   };

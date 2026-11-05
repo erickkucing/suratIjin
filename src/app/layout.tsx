@@ -37,7 +37,7 @@ export async function generateMetadata(): Promise<Metadata> {
     manifest: "/manifest.webmanifest",
     appleWebApp: {
       capable: true,
-      statusBarStyle: "default",
+      statusBarStyle: "black-translucent",
       title: shortName,
     },
     icons: {
@@ -99,6 +99,10 @@ export default async function RootLayout({
               html.dark, html.dark body {
                 background-color: var(--canvas, #171413);
                 color: var(--ink, #f5efea);
+              }
+              html.pwa-standalone-active,
+              html.pwa-standalone-active body {
+                background-color: #B54826 !important;
               }
               #pwa-splash {
                 display: none !important;

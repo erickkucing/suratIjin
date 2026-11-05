@@ -31,7 +31,7 @@ export function PwaSplashScreen({
       }, 300);
     };
 
-    // Langsung dismiss begitu dokumen selesai dimuat / dihidrasi
+    // Dismiss saat dokumen selesai dimuat / dihidrasi
     if (document.readyState === "complete") {
       dismiss();
     } else {
@@ -51,18 +51,22 @@ export function PwaSplashScreen({
       role="status"
       aria-live="polite"
       aria-label={`Memuat ${appName}`}
-      className="fixed inset-0 z-[99999] flex items-center justify-center bg-[var(--canvas)] select-none transition-opacity duration-300 ease-out"
+      className="fixed inset-0 z-[99999] w-full h-[100dvh] bg-[#B54826] text-white flex flex-col justify-between items-center px-6 pt-[max(3rem,env(safe-area-inset-top))] pb-[max(2.5rem,env(safe-area-inset-bottom))] select-none transition-opacity duration-300 ease-out"
     >
-      <div className="card-paper bg-[var(--surface-elevated)] border border-[var(--border)] rounded-3xl p-8 flex flex-col items-center max-w-[320px] w-[88%] shadow-sm text-center">
-        {/* Logo Container */}
-        <div className="w-20 h-20 rounded-2xl bg-white dark:bg-[var(--surface)] border border-[var(--border)] p-2.5 flex items-center justify-center mb-4 shadow-xs">
+      {/* Spacer atas untuk penyeimbang visual */}
+      <div className="w-full h-4" aria-hidden="true" />
+
+      {/* Area Tengah: Logo & Nama Aplikasi Full-Screen */}
+      <div className="flex-1 flex flex-col items-center justify-center -mt-6 text-center">
+        {/* Logo Badge Container */}
+        <div className="w-24 h-24 rounded-3xl bg-white p-3.5 flex items-center justify-center shadow-2xl shadow-black/20 mb-5">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={logoUrl || "/icons/icon-192x192.png"}
             alt={appName}
-            width={64}
-            height={64}
-            className="w-full h-full object-contain rounded-xl"
+            width={68}
+            height={68}
+            className="w-full h-full object-contain rounded-2xl"
             onError={(e) => {
               (e.currentTarget as HTMLImageElement).src = "/icons/icon-192x192.png";
             }}
@@ -70,23 +74,25 @@ export function PwaSplashScreen({
         </div>
 
         {/* Title */}
-        <h1 className="font-[family-name:var(--font-nunito)] font-extrabold text-xl text-[var(--ink)] tracking-tight leading-snug">
+        <h1 className="font-[family-name:var(--font-nunito)] font-extrabold text-2xl text-white tracking-tight leading-snug max-w-[280px]">
           {appName}
         </h1>
 
-        {/* Subtitle */}
+        {/* Subtitle / School Name */}
         {schoolName && (
-          <p className="text-xs text-[var(--ink-muted)] mt-1 font-medium line-clamp-1">
+          <p className="text-sm text-white/90 mt-2 font-medium tracking-wide line-clamp-2 max-w-[260px]">
             {schoolName}
           </p>
         )}
+      </div>
 
-        {/* Micro Indeterminate Indicator */}
+      {/* Area Bawah: Micro Indeterminate Loader */}
+      <div className="mt-auto flex flex-col items-center gap-3 text-center pb-2">
         <div
-          className="w-28 h-1 bg-[var(--canvas-subtle)] rounded-full overflow-hidden mt-6 relative"
+          className="w-36 h-1 bg-white/20 rounded-full overflow-hidden relative"
           aria-hidden="true"
         >
-          <div className="splash-loader-bar h-full bg-[var(--primary)] rounded-full absolute top-0" />
+          <div className="splash-loader-bar h-full bg-white rounded-full absolute top-0" />
         </div>
 
         <span className="sr-only">Sedang memuat aplikasi...</span>

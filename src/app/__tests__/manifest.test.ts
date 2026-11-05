@@ -22,7 +22,7 @@ describe("Web App Manifest (PWA)", () => {
     expect(result.display).toBe("standalone");
     expect(result.orientation).toBe("any");
     expect(result.theme_color).toBe("#B54826");
-    expect(result.background_color).toBe("#FDFBF7");
+    expect(result.background_color).toBe("#B54826");
 
     expect(Array.isArray(result.icons)).toBe(true);
     expect(result.icons?.length).toBeGreaterThanOrEqual(3);
