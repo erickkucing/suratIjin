@@ -3,6 +3,7 @@ import { Nunito, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { getSystemSettings } from "@/lib/system-settings";
 import { ConfirmDialogProvider } from "@/components/confirm-dialog-provider";
+import { PwaSplashScreen } from "@/components/pwa-splashscreen";
 
 const nunito = Nunito({
   subsets: ["latin"],
@@ -99,6 +100,30 @@ export default async function RootLayout({
                 background-color: var(--canvas, #171413);
                 color: var(--ink, #f5efea);
               }
+              #pwa-splash {
+                display: none !important;
+              }
+              html.pwa-standalone-active #pwa-splash {
+                display: flex !important;
+              }
+              @keyframes splash-bar-indeterminate {
+                0% { left: -40%; width: 35%; }
+                50% { left: 25%; width: 60%; }
+                100% { left: 100%; width: 40%; }
+              }
+              .splash-loader-bar {
+                animation: splash-bar-indeterminate 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+              }
+              @media (prefers-reduced-motion: reduce) {
+                #pwa-splash {
+                  transition: none !important;
+                }
+                .splash-loader-bar {
+                  animation: none !important;
+                  left: 0 !important;
+                  width: 100% !important;
+                }
+              }
             `,
           }}
         />
@@ -113,12 +138,27 @@ export default async function RootLayout({
                   document.documentElement.classList.remove('dark');
                 }
                 localStorage.removeItem('app_bg_theme');
+
+                var isTestParam = window.location.search.indexOf('splash=1') !== -1;
+                var isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+                var hasShown = sessionStorage.getItem('pwa_splash_shown');
+                if (isTestParam || (isStandalone && !hasShown)) {
+                  document.documentElement.classList.add('pwa-standalone-active');
+                  if (!isTestParam) {
+                    sessionStorage.setItem('pwa_splash_shown', '1');
+                  }
+                }
               } catch (_) {}
             `,
           }}
         />
       </head>
       <body>
+        <PwaSplashScreen
+          appName={settings.appName || "Sistem Surat Izin & Presensi Siswa"}
+          logoUrl={settings.logoUrl || "/icons/icon-192x192.png"}
+          schoolName={settings.footerText?.replace(/\.$/, "") || "Sistem Presensi Siswa"}
+        />
         <ConfirmDialogProvider>{children}</ConfirmDialogProvider>
       </body>
     </html>

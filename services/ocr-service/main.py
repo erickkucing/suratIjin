@@ -259,11 +259,14 @@ def prewarm_ocr_engine(ocr: PaddleOCR):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Pre-warm PaddleOCR in memory and run warm-up inference pass
-    print("[OCR Service] Pre-warming PaddleOCR model into memory and GPU context...")
-    t0 = time.time()
-    engine = get_ocr_engine()
-    prewarm_ocr_engine(engine)
-    print(f"[OCR Service] Model warmed up in {time.time() - t0:.2f}s")
+    if os.environ.get("DISABLE_OCR_PREWARM", "").lower() in ("1", "true", "yes"):
+        print("[OCR Service] Pre-warm disabled via DISABLE_OCR_PREWARM. Model will load on first request.")
+    else:
+        print("[OCR Service] Pre-warming PaddleOCR model into memory and GPU context...")
+        t0 = time.time()
+        engine = get_ocr_engine()
+        prewarm_ocr_engine(engine)
+        print(f"[OCR Service] Model warmed up in {time.time() - t0:.2f}s")
     yield
     print("[OCR Service] Shutting down...")
 
